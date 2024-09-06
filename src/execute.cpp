@@ -24,7 +24,7 @@
 #define bits_0_5(word) ((word) & BITMASK_LOW_5)
 #define bits_0_6(word) ((word) & BITMASK_LOW_6)
 #define bits_0_8(word) ((word) & BITMASK_LOW_8)
-#define bits_3_4(word) ((word) >> 3 & BITMASK_LOW_2)
+#define bits_3_4(word) (((word) >> 3) & BITMASK_LOW_2)
 #define bits_6_8(word) (((word) >> 6) & BITMASK_LOW_3)
 #define bits_8_12(word) (((word) >> 8) & BITMASK_LOW_4)
 #define bits_9_10(word) (((word) >> 9) & BITMASK_LOW_2)
