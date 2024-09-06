@@ -18,6 +18,7 @@
 
 #define WORD_SIZE sizeof(Word)
 
+// For `ADD` and `AND` instructions
 #define ARITH_IS_IMMEDIATE(instr) (bool)(((instr) >> 5) && 0b1)
 
 #define UNIMPLEMENTED_INSTR(instr, name) \
