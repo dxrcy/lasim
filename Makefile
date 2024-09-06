@@ -6,7 +6,7 @@ TARGET=lc3sim
 main:
 	$(CC) $(CFLAGS) src/main.cpp -o $(TARGET)
 
-run: $(TARGET)
+run: main
 	@lc3as example/example.asm >/dev/null
 	@./lc3sim example/example.obj
 

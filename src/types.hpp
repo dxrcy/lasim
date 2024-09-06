@@ -16,39 +16,13 @@ void free_memory(void);
 #define MEMORY_SIZE 0x10000L  // Total amount of allocated WORDS in memory
 #define GP_REGISTER_COUNT 8   // Amount of general purpose registers
 
-#define BITS_LOW_1 0b0000'0000'0000'0001
-#define BITS_LOW_2 0b0000'0000'0000'0011
-#define BITS_LOW_3 0b0000'0000'0000'0111
-#define BITS_LOW_4 0b0000'0000'0000'1111
-#define BITS_LOW_5 0b0000'0000'0001'1111
-#define BITS_LOW_6 0b0000'0000'0011'1111
-#define BITS_LOW_8 0b0000'0000'1111'1111
-#define BITS_LOW_9 0b0000'0001'1111'1111
-#define BITS_LOW_11 0b0000'0111'1111'1111
-
-#define BITS_HIGH_9 0b1111'1111'1000'0000
-
-#define CONDITION_NEGATIVE 0b100
-#define CONDITION_ZERO 0b010
-#define CONDITION_POSITIVE 0b001
-
 #define WORD_SIZE sizeof(Word)
-
-// For `ADD` and `AND` instructions
-#define ARITH_IS_IMMEDIATE(instr) (bool)((((instr) >> 5) & 0b1) != 0b0)
 
 #define EXIT(code)     \
     {                  \
         free_memory(); \
         exit(code);    \
     }
-
-#define to_signed_word(value, size) \
-    (sign_extend(static_cast<SignedWord>(value), size))
-
-#define low_6_bits_signed(instr) (to_signed_word((instr) & BITS_LOW_6, 6))
-#define low_9_bits_signed(instr) (to_signed_word((instr) & BITS_LOW_9, 9))
-#define low_11_bits_signed(instr) (to_signed_word((instr) & BITS_LOW_11, 11))
 
 typedef uint16_t Word;  // 2 bytes
 typedef int16_t SignedWord;
