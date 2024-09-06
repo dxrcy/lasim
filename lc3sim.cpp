@@ -23,6 +23,7 @@
 #define BITS_LOW_6 0b0000'0000'0011'1111
 #define BITS_LOW_8 0b0000'0000'1111'1111
 #define BITS_LOW_9 0b0000'0001'1111'1111
+#define BITS_LOW_11 0b0000'0111'1111'1111
 
 #define BITS_HIGH_9 0b1111'1111'1000'0000
 
@@ -44,7 +45,9 @@
 #define to_signed_word(value, size) \
     (sign_extend(static_cast<SignedWord>(value), size))
 
+#define low_6_bits_signed(instr) (to_signed_word((instr) & BITS_LOW_6, 6))
 #define low_9_bits_signed(instr) (to_signed_word((instr) & BITS_LOW_9, 9))
+#define low_11_bits_signed(instr) (to_signed_word((instr) & BITS_LOW_11, 11))
 
 typedef uint16_t Word;  // 2 bytes
 typedef int16_t SignedWord;
@@ -414,7 +417,7 @@ bool execute_next_instrution() {
             const bool is_offset = ((instr >> 11) & BITS_LOW_1) != 0;
             if (is_offset) {
                 // JSR
-                const SignedWord offset = low_9_bits_signed(instr);
+                const SignedWord offset = low_11_bits_signed(instr);
                 /* printf("JSR: PCOffset = 0x%04x\n", pc_offset); */
                 registers.program_counter += offset;
             } else {
@@ -456,7 +459,7 @@ bool execute_next_instrution() {
         case OPCODE_LDR: {
             const Register dest_reg = (instr >> 9) & BITS_LOW_3;
             const Register base_reg = (instr >> 6) & BITS_LOW_3;
-            const SignedWord offset = low_9_bits_signed(instr);
+            const SignedWord offset = low_6_bits_signed(instr);
             const Word base = registers.general_purpose[base_reg];
             const Word value = memory[base + offset];
             registers.general_purpose[dest_reg] = value;
@@ -467,7 +470,8 @@ bool execute_next_instrution() {
         case OPCODE_STR: {
             const Register src_reg = (instr >> 9) & BITS_LOW_3;
             const Register base_reg = (instr >> 6) & BITS_LOW_3;
-            const SignedWord offset = low_9_bits_signed(instr);
+            const Word offset_bits = instr & BITS_LOW_6;
+            const SignedWord offset = low_6_bits_signed(instr);
             const Word value = registers.general_purpose[src_reg];
             const Word base = registers.general_purpose[base_reg];
             memory[base + offset] = value;
@@ -570,7 +574,7 @@ bool execute_trap_instruction(const Word instr) {
     // May be invalid enum variant
     // Handled in default switch branch
     const enum TrapVector trap_vector =
-        static_cast<enum TrapVector>(instr & BITS_LOW_9);
+        static_cast<enum TrapVector>(instr & BITS_LOW_8);
 
     switch (trap_vector) {
         case TRAP_GETC: {
@@ -582,6 +586,7 @@ bool execute_trap_instruction(const Word instr) {
         }; break;
 
         case TRAP_IN: {
+            printf("Input a character> ");
             tty_nobuffer_yesecho();                     // Enable echo
             const char input = getchar() & BITS_LOW_8;  // Zero high 8 bits
             tty_restore();
