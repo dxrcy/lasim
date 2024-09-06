@@ -209,7 +209,7 @@ void dbg_print_registers() {
     printf("--------------------------\n");
 }
 
-void update_condition_codes(Word result) {
+void set_condition_codes(Word result) {
     const bool is_negative = result >> 15 == 1;
     const bool is_zero = result == 0;
     const bool is_positive = !is_negative && !is_zero;
@@ -255,14 +255,15 @@ bool execute_next_instrution() {
                 value2 = static_cast<SignedWord>(imm);
             }
 
-            printf(">ADD R%d = R%d + 0x%04hx\n", dest_reg, src_reg1, value2);
+            /* printf(">ADD R%d = R%d + 0x%04hx\n", dest_reg, src_reg1, value2);
+             */
 
             const Word result = static_cast<Word>(value1 + value2);
             registers.general_purpose[dest_reg] = result;
 
-            dbg_print_registers();
+            /* dbg_print_registers(); */
 
-            update_condition_codes(result);
+            set_condition_codes(result);
         }; break;
 
         // AND+
@@ -282,14 +283,14 @@ bool execute_next_instrution() {
                 EXIT(ERR_MALFORMED_INSTR);
             }
 
-            printf(">NOT R%d = NOT R%d\n", dest_reg, src_reg1);
+            /* printf(">NOT R%d = NOT R%d\n", dest_reg, src_reg1); */
 
             const Word result = ~registers.general_purpose[src_reg1];
             registers.general_purpose[dest_reg] = result;
 
-            dbg_print_registers();
+            /* dbg_print_registers(); */
 
-            update_condition_codes(result);
+            set_condition_codes(result);
         }; break;
 
         // BRcc
@@ -299,19 +300,19 @@ bool execute_next_instrution() {
                 break;
             }
 
-            printf("0x%04x\t0b%016b\n", instr, instr);
-            Condition3 condition = (instr >> 9) & BITS_LOW_3;
-            SignedOffset9 pc_offset = instr & BITS_LOW_9;
+            /* printf("0x%04x\t0b%016b\n", instr, instr); */
+            const Condition3 condition = (instr >> 9) & BITS_LOW_3;
+            const SignedOffset9 pc_offset = instr & BITS_LOW_9;
 
-            printf("BR: %03b & %03b = %03b -> %b\n", condition,
-                   registers.condition, condition & registers.condition,
-                   (condition & registers.condition) != 0b000);
+            /* printf("BR: %03b & %03b = %03b -> %b\n", condition, */
+            /*        registers.condition, condition & registers.condition, */
+            /*        (condition & registers.condition) != 0b000); */
 
             // If any bits of the condition codes match
             if ((condition & registers.condition) != 0b000) {
                 registers.program_counter += pc_offset;
             }
-            printf("branched to 0x%04x\n", registers.program_counter);
+            /* printf("branched to 0x%04x\n", registers.program_counter); */
         }; break;
 
         // JMP/RET
@@ -326,12 +327,19 @@ bool execute_next_instrution() {
 
         // LD+
         case OPCODE_LD: {
-            UNIMPLEMENTED_INSTR(instr, "LD");
+            const Register dest_reg = (instr >> 9) & BITS_LOW_3;
+            const SignedOffset9 offset = instr & BITS_LOW_9;
+            const Word value = memory[registers.program_counter + offset];
+            registers.general_purpose[dest_reg] = value;
+            set_condition_codes(value);
         }; break;
 
         // ST
         case OPCODE_ST: {
-            UNIMPLEMENTED_INSTR(instr, "ST");
+            const Register dest_reg = (instr >> 9) & BITS_LOW_3;
+            const SignedOffset9 offset = instr & BITS_LOW_9;
+            const Word value = registers.general_purpose[dest_reg];
+            memory[registers.program_counter + offset] = value;
         }; break;
 
         // LDI+
@@ -426,24 +434,22 @@ bool execute_trap_instruction(const Word instr) {
 
     switch (trap_vector) {
         case TRAP_GETC: {
-            tty_nobuffer_noecho();
-            char input = getchar();
+            tty_nobuffer_noecho();                      // Disable echo
+            const char input = getchar() & BITS_LOW_8;  // Zero high 8 bits
             tty_restore();
-            input &= BITS_LOW_8;  // Zero high 8 bits
             registers.general_purpose[0] = input;
         }; break;
 
         case TRAP_IN: {
-            tty_nobuffer_yesecho();
-            char input = getchar();
+            tty_nobuffer_yesecho();                     // Enable echo
+            const char input = getchar() & BITS_LOW_8;  // Zero high 8 bits
             tty_restore();
-            input &= BITS_LOW_8;  // Zero high 8 bits
             registers.general_purpose[0] = input;
         }; break;
 
         case TRAP_OUT: {
-            Word word = registers.general_purpose[0];
-            char ch = static_cast<char>(word);
+            const Word word = registers.general_purpose[0];
+            const char ch = static_cast<char>(word);
             printf("%c", ch);
         }; break;
 
@@ -468,9 +474,9 @@ bool execute_trap_instruction(const Word instr) {
             }
         }; break;
 
-        case TRAP_HALT: {
+        case TRAP_HALT:
             return true;
-        }; break;
+            break;
 
         default:
             fprintf(stderr, "Invalid trap vector 0x%02x\n", trap_vector);

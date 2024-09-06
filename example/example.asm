@@ -1,7 +1,11 @@
 .ORIG x3000
 
-    LEA R0, HW
-    PUTSP
+    LD R0, HW
+    OUT
+    ADD R1, R0, x2
+    ST R1, HW
+    LD R0, HW
+    OUT
 
     HALT
 
