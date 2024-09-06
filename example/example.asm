@@ -1,12 +1,16 @@
-    .ORIG x3000
+.ORIG x3000
+
+    BRn end
     LEA R0, HW
     PUTS
-    NOT R0, R0
-    ADD R0, R0, x10
-    ADD R1, R1, x0
+end
+    LEA R0, GW
+    PUTS
+
     HALT
 
 HW  .STRINGZ "Hello World\n"
+GW  .STRINGZ "Goodbye World\n"
 
-    .END
+.END
 

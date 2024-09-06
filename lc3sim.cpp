@@ -19,6 +19,10 @@
 #define BITS_LOW_9 0b0000'0001'1111'1111
 #define BITS_HIGH_9 0b1111'1111'1000'0000
 
+#define CONDITION_NEGATIVE 0b100
+#define CONDITION_ZERO 0b010
+#define CONDITION_POSITIVE 0b001
+
 #define WORD_SIZE sizeof(Word)
 
 // For `ADD` and `AND` instructions
@@ -47,9 +51,10 @@
 typedef uint16_t Word;  // 2 bytes
 typedef int16_t SignedWord;
 
-typedef uint8_t RegisterCode;  // 3 bits
-typedef uint8_t Immediate5;    // 5 bits
-typedef uint16_t Offset9;      // 9 bits
+typedef uint8_t Register;       // 3 bits
+typedef uint8_t Immediate5;     // 5 bits
+typedef int16_t SignedOffset9;  // 9 bits
+typedef uint8_t Condition3;     // 3 bits
 
 // 4 bits
 typedef enum Opcode {
@@ -87,9 +92,8 @@ typedef struct Registers {
     Word stack_pointer;
     Word frame_pointer;
 
-    bool condition_negative = false;
-    bool condition_zero = false;
-    bool condition_positive = false;
+    // 3 bits, NZP, N=0, Z=1, P=0
+    Condition3 condition = 0b010;
 } Registers;
 
 // Exists for program lifetime, but must still be deleted before exit
@@ -185,8 +189,11 @@ void dbg_print_registers() {
     printf("    SP  0x%04hx\n", registers.stack_pointer);
     printf("    FP  0x%04hx\n", registers.frame_pointer);
     printf("..........................\n");
-    printf("    N=%b  Z=%b  P=%b\n", registers.condition_negative,
-           registers.condition_zero, registers.condition_positive);
+    printf("    N=%b  Z=%b  P=%b\n",
+           (registers.condition >> 2),        // Negative
+           (registers.condition >> 2) & 0b1,  // Zero
+           (registers.condition >> 2) & 0b1   // Positive
+    );
     printf("..........................\n");
     for (int reg = 0; reg < GP_REGISTER_COUNT; ++reg) {
         const Word value = registers.general_purpose[reg];
@@ -199,9 +206,8 @@ void update_condition_codes(Word result) {
     const bool is_negative = result >> 15 == 1;
     const bool is_zero = result == 0;
     const bool is_positive = !is_negative && !is_zero;
-    registers.condition_negative = is_negative;
-    registers.condition_zero = is_zero;
-    registers.condition_positive = is_positive;
+    // Set low 3 bits as N,Z,P
+    registers.condition = (is_negative << 2) | (is_zero << 1) | is_positive;
 }
 
 // `true` return value indicates that program should end
@@ -218,8 +224,8 @@ bool execute_next_instrution() {
     switch (opcode) {
         // ADD+
         case OPCODE_ADD: {
-            const RegisterCode dest_reg = (instr >> 9) & BITS_LOW_3;
-            const RegisterCode src_reg1 = (instr >> 6) & BITS_LOW_3;
+            const Register dest_reg = (instr >> 9) & BITS_LOW_3;
+            const Register src_reg1 = (instr >> 6) & BITS_LOW_3;
 
             const SignedWord value1 =
                 static_cast<SignedWord>(registers.general_purpose[src_reg1]);
@@ -233,17 +239,18 @@ bool execute_next_instrution() {
                             "Expected padding 0x00 for ADD instruction\n");
                     EXIT(ERR_MALFORMED_INSTR);
                 }
-                const RegisterCode src_reg2 = instr & BITS_LOW_3;
+                const Register src_reg2 = instr & BITS_LOW_3;
                 value2 = static_cast<SignedWord>(
                     memory[registers.general_purpose[src_reg2]]);
             } else {
+                // TODO: Is this properly sign-extended ??
                 const Immediate5 imm = instr & BITS_LOW_5;
                 value2 = static_cast<SignedWord>(imm);
             }
 
             printf(">ADD R%d = R%d + 0x%04hx\n", dest_reg, src_reg1, value2);
 
-            Word result = static_cast<Word>(value1 + value2);
+            const Word result = static_cast<Word>(value1 + value2);
             registers.general_purpose[dest_reg] = result;
 
             dbg_print_registers();
@@ -258,8 +265,8 @@ bool execute_next_instrution() {
 
         // NOT+
         case OPCODE_NOT: {
-            const RegisterCode dest_reg = (instr >> 9) & BITS_LOW_3;
-            const RegisterCode src_reg1 = (instr >> 6) & BITS_LOW_3;
+            const Register dest_reg = (instr >> 9) & BITS_LOW_3;
+            const Register src_reg1 = (instr >> 6) & BITS_LOW_3;
 
             // 4 bits padding
             const uint8_t padding = instr & BITS_LOW_4;
@@ -270,17 +277,29 @@ bool execute_next_instrution() {
 
             printf(">NOT R%d = NOT R%d\n", dest_reg, src_reg1);
 
-            Word result = ~registers.general_purpose[src_reg1];
+            const Word result = ~registers.general_purpose[src_reg1];
             registers.general_purpose[dest_reg] = result;
 
             dbg_print_registers();
 
-            // TODO: Update condition codes
+            update_condition_codes(result);
         }; break;
 
-        // BR
+        // BRcc
         case OPCODE_BR: {
-            UNIMPLEMENTED_INSTR(instr, "BR");
+            printf("0x%04x\t0b%016b\n", instr, instr);
+            Condition3 condition = (instr >> 9) & BITS_LOW_3;
+            SignedOffset9 pc_offset = instr & BITS_LOW_9;
+
+            printf("BR: %03b & %03b = %03b -> %b\n", condition,
+                   registers.condition, condition & registers.condition,
+                   (condition & registers.condition) != 0b000);
+
+            // If any bits of the condition codes match
+            if ((condition & registers.condition) != 0b000) {
+                registers.program_counter += pc_offset;
+            }
+            printf("branched to 0x%04x\n", registers.program_counter);
         }; break;
 
         // JMP/RET
@@ -298,31 +317,14 @@ bool execute_next_instrution() {
             UNIMPLEMENTED_INSTR(instr, "LD");
         }; break;
 
-        // LDI+
-        case OPCODE_LDI: {
-            UNIMPLEMENTED_INSTR(instr, "LDI");
-        }; break;
-
-        // LDR+
-        case OPCODE_LDR: {
-            UNIMPLEMENTED_INSTR(instr, "LDR");
-        }; break;
-
-        // LEA+
-        case OPCODE_LEA: {
-            const RegisterCode dest_reg = (instr >> 9) & 0b111;
-            const Offset9 pc_offset = instr & BITS_LOW_9;
-            /* printf(">LEA REG%d, pc_offset:0x%04hx\n", reg, */
-            /*        pc_offset); */
-            /* print_registers(); */
-            registers.general_purpose[dest_reg] =
-                registers.program_counter + pc_offset;
-            dbg_print_registers();
-        }; break;
-
         // ST
         case OPCODE_ST: {
             UNIMPLEMENTED_INSTR(instr, "ST");
+        }; break;
+
+        // LDI+
+        case OPCODE_LDI: {
+            UNIMPLEMENTED_INSTR(instr, "LDI");
         }; break;
 
         // STI
@@ -330,9 +332,26 @@ bool execute_next_instrution() {
             UNIMPLEMENTED_INSTR(instr, "STI");
         }; break;
 
+        // LDR+
+        case OPCODE_LDR: {
+            UNIMPLEMENTED_INSTR(instr, "LDR");
+        }; break;
+
         // STR
         case OPCODE_STR: {
             UNIMPLEMENTED_INSTR(instr, "STR");
+        }; break;
+
+        // LEA+
+        case OPCODE_LEA: {
+            const Register dest_reg = (instr >> 9) & 0b111;
+            const SignedOffset9 pc_offset = instr & BITS_LOW_9;
+            /* printf(">LEA REG%d, pc_offset:0x%04hx\n", reg, */
+            /*        pc_offset); */
+            /* print_registers(); */
+            registers.general_purpose[dest_reg] =
+                registers.program_counter + pc_offset;
+            dbg_print_registers();
         }; break;
 
         // TRAP
