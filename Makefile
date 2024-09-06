@@ -3,7 +3,7 @@ CFLAGS=-Wall -Wpedantic -Wextra
 
 run: lc3sim
 	@lc3as example/example.asm >/dev/null
-	@./lc3sim example/example.asm
+	@./lc3sim example/example.obj
 
 watch:
 	@clear

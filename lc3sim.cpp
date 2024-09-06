@@ -3,9 +3,10 @@
 #include <cstdlib>
 #include <cstring>
 
-#define ERR_FILE 1
-#define ERR_MALFORMED_INSTR 2
-#define ERR_UNIMPLEMENTED 3
+#define ERR_ARGS 0x10
+#define ERR_FILE 0x20
+#define ERR_MALFORMED_INSTR 0x30
+#define ERR_UNIMPLEMENTED 0x40
 
 #define MEMORY_SIZE 0x10000L  // Total amount of allocated WORDS in memory
 #define GP_REGISTER_COUNT 8   // Amount of general purpose registers
@@ -131,11 +132,14 @@ void dbg_print_registers() {
     printf("--------------------------\n");
 }
 
-int main() {
-    const char *filename = "example/example.obj";
+int main(const int argc, const char *const *const argv) {
+    if (argc != 2 || argv[1][0] == '-') {
+        fprintf(stderr, "USAGE: lc3sim [FILE]\n");
+        exit(ERR_ARGS);
+    }
+    const char *filename = argv[1];
 
-    Word file_start;
-    Word file_end;
+    Word file_start, file_end;
     read_file_to_memory(filename, file_start, file_end);
 
     /* for (size_t i = file_start - 2; i < file_end + 2; ++i) { */
@@ -303,7 +307,7 @@ int main() {
                     }; break;
 
                     case TRAP_HALT: {
-                        goto end_program;
+                        goto end_program;  // Break from loop
                     }; break;
 
                     default:
