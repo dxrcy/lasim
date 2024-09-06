@@ -1,11 +1,6 @@
 .ORIG x3000
 
-    BRn end
-    LEA R0, HW
-    PUTS
-end
-    LEA R0, GW
-    PUTS
+    OUT
 
     HALT
 

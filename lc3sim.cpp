@@ -1,3 +1,6 @@
+#include <termios.h>
+#include <unistd.h>
+
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -102,12 +105,16 @@ typedef struct Registers {
 static Word *memory = new Word[MEMORY_SIZE];
 static Registers registers;
 
-void free_memory();
+void free_memory(void);
 Word swap_endianess(const Word word);
 void read_file_to_memory(const char *const filename, Word &start, Word &end);
-void dbg_print_registers();
+void dbg_print_registers(void);
 bool execute_trap_instruction(const Word instr);
-bool execute_next_instrution();
+bool execute_next_instrution(void);
+
+void tty_nobuffer_noecho(void);
+void tty_nobuffer_yesecho(void);
+void tty_restore(void);
 
 int main(const int argc, const char *const *const argv) {
     if (argc != 2 || argv[1][0] == '-') {
@@ -287,6 +294,11 @@ bool execute_next_instrution() {
 
         // BRcc
         case OPCODE_BR: {
+            // Skip special NOP case
+            if (instr == 0x0000) {
+                break;
+            }
+
             printf("0x%04x\t0b%016b\n", instr, instr);
             Condition3 condition = (instr >> 9) & BITS_LOW_3;
             SignedOffset9 pc_offset = instr & BITS_LOW_9;
@@ -376,6 +388,28 @@ bool execute_next_instrution() {
     return false;
 }
 
+// TODO: Move to another file
+static struct termios tty;
+void tty_get() { tcgetattr(STDIN_FILENO, &tty); }
+void tty_apply() { tcsetattr(STDIN_FILENO, TCSANOW, &tty); }
+void tty_nobuffer_noecho() {
+    tty_get();
+    tty.c_lflag &= ~ICANON;
+    tty.c_lflag &= ~ECHO;
+    tty_apply();
+}
+void tty_nobuffer_yesecho() {
+    tty_get();
+    tty.c_lflag &= ~ICANON;
+    tty.c_lflag |= ECHO;
+    tty_apply();
+}
+void tty_restore() {
+    tty.c_lflag |= ICANON;
+    tty.c_lflag |= ECHO;
+    tty_apply();
+}
+
 // `true` return value indicates that program should end
 bool execute_trap_instruction(const Word instr) {
     // 4 bits padding
@@ -392,11 +426,25 @@ bool execute_trap_instruction(const Word instr) {
 
     switch (trap_vector) {
         case TRAP_GETC: {
-            UNIMPLEMENTED_TRAP(trap_vector, "GETC");
+            tty_nobuffer_noecho();
+            char input = getchar();
+            tty_restore();
+            input &= BITS_LOW_8;  // Zero high 8 bits
+            registers.general_purpose[0] = input;
+        }; break;
+
+        case TRAP_IN: {
+            tty_nobuffer_yesecho();
+            char input = getchar();
+            tty_restore();
+            input &= BITS_LOW_8;  // Zero high 8 bits
+            registers.general_purpose[0] = input;
         }; break;
 
         case TRAP_OUT: {
-            UNIMPLEMENTED_TRAP(trap_vector, "OUT");
+            Word word = registers.general_purpose[0];
+            char ch = static_cast<char>(word);
+            printf("%c", ch);
         }; break;
 
         case TRAP_PUTS: {
@@ -411,10 +459,6 @@ bool execute_trap_instruction(const Word instr) {
                 printf("%c", ch);
             }
         } break;
-
-        case TRAP_IN: {
-            UNIMPLEMENTED_TRAP(trap_vector, "IN");
-        }; break;
 
         case TRAP_PUTSP: {
             UNIMPLEMENTED_TRAP(trap_vector, "PUTSP");
