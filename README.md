@@ -19,6 +19,11 @@ lc3as example/example.asm
 ./lc3sim example/example.obj
 ```
 
+# More Examples
+
+More LC-3 programs can be found
+[here](https://github.com/Nguyen-Nhat-Tuan-Minh/LC_3-Assembly-Program).
+
 # C++ Subset
 
 - References
