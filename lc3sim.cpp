@@ -41,30 +41,16 @@
         exit(code);    \
     }
 
-/*
-#define UNIMPLEMENTED_INSTR(instr, name)                                  \
-    {                                                                     \
-        fprintf(stderr, "Unimplemented instruction: 0b%04x: %s\n", instr, \
-                name);                                                    \
-        EXIT(ERR_UNIMPLEMENTED);                                          \
-    }
+#define to_signed_word(value, size) \
+    (sign_extend(static_cast<SignedWord>(value), size))
 
-#define UNIMPLEMENTED_TRAP(vector, name)                                   \
-    {                                                                      \
-        fprintf(stderr, "Unimplemented trap vector: 0x%02x: %s\n", vector, \
-                name);                                                     \
-        EXIT(ERR_UNIMPLEMENTED);                                           \
-    }
-*/
+#define low_9_bits_signed(instr) (to_signed_word((instr) & BITS_LOW_9, 9))
 
 typedef uint16_t Word;  // 2 bytes
 typedef int16_t SignedWord;
 
-typedef uint8_t Register;       // 3 bits
-typedef uint8_t Immediate5;     // 5 bits
-typedef int16_t SignedOffset9;  // 9 bits
-typedef int16_t SignedOffset6;  // 6 bits
-typedef uint8_t Condition3;     // 3 bits
+typedef uint8_t Register;    // 3 bits
+typedef uint8_t Condition3;  // 3 bits
 
 // 4 bits
 typedef enum Opcode {
@@ -117,9 +103,9 @@ void free_memory(void);
 Word swap_endianess(const Word word);
 void read_file_to_memory(const char *const filename, Word &start, Word &end);
 void dbg_print_registers(void);
-void set_condition_codes(Word result);
+void set_condition_codes(const Word result);
 void print_char(const char ch);
-static char *binary_string_word(Word word);
+static char *const binary_string_word(const Word word);
 bool execute_trap_instruction(const Word instr);
 bool execute_next_instrution(void);
 
@@ -222,7 +208,7 @@ void dbg_print_registers() {
     printf("--------------------------\n");
 }
 
-void set_condition_codes(Word result) {
+void set_condition_codes(const Word result) {
     const bool is_negative = result >> 15 == 1;
     const bool is_zero = result == 0;
     const bool is_positive = !is_negative && !is_zero;
@@ -238,13 +224,22 @@ void print_char(const char ch) {
 }
 
 // Since %b printf format specifier is not ISO-compliant
-static char *binary_string_word(Word word) {
+static char *const binary_string_word(const Word word) {
     static char str[5];
     for (int i = 0; i < 4; ++i) {
         str[i] = '0' + ((word >> (3 - i)) & 0b1);
     }
     str[4] = '\0';
     return str;
+}
+
+SignedWord sign_extend(SignedWord value, const size_t size) {
+    // If previous-highest bit is set
+    if (value >> (size - 1) & 0b1) {
+        // Set all bits higher than previous sign bit to 1
+        return value | (~0 << size);
+    }
+    return value;
 }
 
 // `true` return value indicates that program should end
@@ -269,6 +264,8 @@ bool execute_next_instrution() {
     // Handled in default switch branch
     const Opcode opcode = static_cast<Opcode>(instr >> 12);
 
+    // TODO: Check all operands for whether they need to be sign-extended !!!!
+
     switch (opcode) {
         // ADD*
         case OPCODE_ADD: {
@@ -291,9 +288,7 @@ bool execute_next_instrution() {
                 value_b = static_cast<SignedWord>(
                     registers.general_purpose[src_reg_b]);
             } else {
-                // TODO: Is this properly sign-extended ??
-                const Immediate5 imm = instr & BITS_LOW_5;
-                value_b = static_cast<SignedWord>(imm);
+                value_b = to_signed_word(instr & BITS_LOW_5, 5);
             }
 
             const Word result = static_cast<Word>(value_a + value_b);
@@ -327,8 +322,7 @@ bool execute_next_instrution() {
                 const Register src_reg_b = instr & BITS_LOW_3;
                 value_b = memory[registers.general_purpose[src_reg_b]];
             } else {
-                const Immediate5 imm = instr & BITS_LOW_5;
-                value_b = imm;
+                value_b = static_cast<SignedWord>(instr & BITS_LOW_5);
             }
 
             /* printf(">AND R%d = R%d & 0x%04hx\n", dest_reg, src_reg_a,
@@ -372,19 +366,22 @@ bool execute_next_instrution() {
                 break;
             }
 
+            // TODO: This might never branch if given CC=0b000 ????
+
             /* printf("0x%04x\t0b%016b\n", instr, instr); */
             const Condition3 condition = (instr >> 9) & BITS_LOW_3;
-            const SignedOffset9 pc_offset = instr & BITS_LOW_9;
+            const SignedWord offset = low_9_bits_signed(instr);
 
             /* printf("BR: %03b & %03b = %03b -> %b\n", condition, */
             /*        registers.condition, condition & registers.condition, */
             /*        (condition & registers.condition) != 0b000); */
+            /* printf("PCOffset: 0x%04x  %d\n", offset, offset); */
 
             // If any bits of the condition codes match
             if ((condition & registers.condition) != 0b000) {
-                registers.program_counter += pc_offset;
+                registers.program_counter += offset;
+                /* printf("branched to 0x%04x\n", registers.program_counter); */
             }
-            /* printf("branched to 0x%04x\n", registers.program_counter); */
         }; break;
 
         // JMP/RET
@@ -417,9 +414,9 @@ bool execute_next_instrution() {
             const bool is_offset = ((instr >> 11) & BITS_LOW_1) != 0;
             if (is_offset) {
                 // JSR
-                const SignedOffset9 pc_offset = instr & BITS_LOW_9;
+                const SignedWord offset = low_9_bits_signed(instr);
                 /* printf("JSR: PCOffset = 0x%04x\n", pc_offset); */
-                registers.program_counter += pc_offset;
+                registers.program_counter += offset;
             } else {
                 // JSRR
                 // 2 bits padding
@@ -439,7 +436,7 @@ bool execute_next_instrution() {
         // LD*
         case OPCODE_LD: {
             const Register dest_reg = (instr >> 9) & BITS_LOW_3;
-            const SignedOffset9 offset = instr & BITS_LOW_9;
+            const SignedWord offset = low_9_bits_signed(instr);
             const Word value = memory[registers.program_counter + offset];
             registers.general_purpose[dest_reg] = value;
             set_condition_codes(value);
@@ -448,8 +445,9 @@ bool execute_next_instrution() {
 
         // ST
         case OPCODE_ST: {
+            /* printf("STORE\n"); */
             const Register src_reg = (instr >> 9) & BITS_LOW_3;
-            const SignedOffset9 offset = instr & BITS_LOW_9;
+            const SignedWord offset = low_9_bits_signed(instr);
             const Word value = registers.general_purpose[src_reg];
             memory[registers.program_counter + offset] = value;
         }; break;
@@ -458,7 +456,7 @@ bool execute_next_instrution() {
         case OPCODE_LDR: {
             const Register dest_reg = (instr >> 9) & BITS_LOW_3;
             const Register base_reg = (instr >> 6) & BITS_LOW_3;
-            const SignedOffset6 offset = instr & BITS_LOW_6;
+            const SignedWord offset = low_9_bits_signed(instr);
             const Word base = registers.general_purpose[base_reg];
             const Word value = memory[base + offset];
             registers.general_purpose[dest_reg] = value;
@@ -469,7 +467,7 @@ bool execute_next_instrution() {
         case OPCODE_STR: {
             const Register src_reg = (instr >> 9) & BITS_LOW_3;
             const Register base_reg = (instr >> 6) & BITS_LOW_3;
-            const SignedOffset6 offset = instr & BITS_LOW_6;
+            const SignedWord offset = low_9_bits_signed(instr);
             const Word value = registers.general_purpose[src_reg];
             const Word base = registers.general_purpose[base_reg];
             memory[base + offset] = value;
@@ -478,7 +476,7 @@ bool execute_next_instrution() {
         // LDI+
         case OPCODE_LDI: {
             const Register dest_reg = (instr >> 9) & BITS_LOW_3;
-            const SignedOffset9 offset = instr & BITS_LOW_9;
+            const SignedWord offset = low_9_bits_signed(instr);
             const Word pointer = memory[registers.program_counter + offset];
             const Word value = memory[pointer];
             registers.general_purpose[dest_reg] = value;
@@ -488,7 +486,7 @@ bool execute_next_instrution() {
         // STI
         case OPCODE_STI: {
             const Register src_reg = (instr >> 9) & BITS_LOW_3;
-            const SignedOffset9 offset = instr & BITS_LOW_9;
+            const SignedWord offset = low_9_bits_signed(instr);
             const Word pointer = registers.general_purpose[src_reg];
             const Word value = memory[pointer];
             memory[registers.program_counter + offset] = value;
@@ -497,12 +495,12 @@ bool execute_next_instrution() {
         // LEA*
         case OPCODE_LEA: {
             const Register dest_reg = (instr >> 9) & 0b111;
-            const SignedOffset9 pc_offset = instr & BITS_LOW_9;
+            const SignedWord offset = low_9_bits_signed(instr);
             /* printf(">LEA REG%d, pc_offset:0x%04hx\n", reg, */
             /*        pc_offset); */
             /* print_registers(); */
             registers.general_purpose[dest_reg] =
-                registers.program_counter + pc_offset;
+                registers.program_counter + offset;
             /* dbg_print_registers(); */
         }; break;
 
