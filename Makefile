@@ -1,16 +1,18 @@
 CC=g++
 CFLAGS=-Wall -Wpedantic -Wextra
 
-run: lc3sim
+TARGET=lc3sim
+
+main:
+	$(CC) $(CFLAGS) src/main.cpp -o $(TARGET)
+
+run: $(TARGET)
 	@lc3as example/example.asm >/dev/null
 	@./lc3sim example/example.obj
 
 watch:
 	@clear
 	@$(MAKE) --no-print-directory run
-	@reflex --decoration=none -r '.*\.(cpp|h)|.*\.asm' -- zsh -c \
+	@reflex --decoration=none -r 'src/.*|.*\.asm' -s -- zsh -c \
 		'clear; sleep 0.2; $(MAKE) --no-print-directory run'
-
-lc3sim: lc3sim.cpp
-	$(CC) $(CFLAGS) -o lc3sim lc3sim.cpp
 

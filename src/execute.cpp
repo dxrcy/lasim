@@ -1,100 +1,19 @@
-#include <termios.h>
-#include <unistd.h>
+#ifndef EXECUTE_CPP
+#define EXECUTE_CPP
 
-#include <cstdint>
 #include <cstdio>
-#include <cstdlib>
-#include <cstring>
 
-#define ERR_ARGS 0x10
-#define ERR_FILE 0x20
-#define ERR_MALFORMED_INSTR 0x30
-#define ERR_UNIMPLEMENTED 0x40
-#define ERR_BAD_ADDRESS 0x50
+#include "tty.cpp"
+#include "types.hpp"
 
-#define MEMORY_SIZE 0x10000L  // Total amount of allocated WORDS in memory
-#define GP_REGISTER_COUNT 8   // Amount of general purpose registers
-
-#define BITS_LOW_1 0b0000'0000'0000'0001
-#define BITS_LOW_2 0b0000'0000'0000'0011
-#define BITS_LOW_3 0b0000'0000'0000'0111
-#define BITS_LOW_4 0b0000'0000'0000'1111
-#define BITS_LOW_5 0b0000'0000'0001'1111
-#define BITS_LOW_6 0b0000'0000'0011'1111
-#define BITS_LOW_8 0b0000'0000'1111'1111
-#define BITS_LOW_9 0b0000'0001'1111'1111
-#define BITS_LOW_11 0b0000'0111'1111'1111
-
-#define BITS_HIGH_9 0b1111'1111'1000'0000
-
-#define CONDITION_NEGATIVE 0b100
-#define CONDITION_ZERO 0b010
-#define CONDITION_POSITIVE 0b001
-
-#define WORD_SIZE sizeof(Word)
-
-// For `ADD` and `AND` instructions
-#define ARITH_IS_IMMEDIATE(instr) (bool)((((instr) >> 5) & 0b1) != 0b0)
-
-#define EXIT(code)     \
-    {                  \
-        free_memory(); \
-        exit(code);    \
-    }
-
-#define to_signed_word(value, size) \
-    (sign_extend(static_cast<SignedWord>(value), size))
-
-#define low_6_bits_signed(instr) (to_signed_word((instr) & BITS_LOW_6, 6))
-#define low_9_bits_signed(instr) (to_signed_word((instr) & BITS_LOW_9, 9))
-#define low_11_bits_signed(instr) (to_signed_word((instr) & BITS_LOW_11, 11))
-
-typedef uint16_t Word;  // 2 bytes
-typedef int16_t SignedWord;
-
-typedef uint8_t Register;    // 3 bits
-typedef uint8_t Condition3;  // 3 bits
-
-// 4 bits
-typedef enum Opcode {
-    OPCODE_ADD = 0b0001,
-    OPCODE_AND = 0b0101,
-    OPCODE_BR = 0b0000,
-    OPCODE_JMP_RET = 0b1100,
-    OPCODE_JSR_JSRR = 0b0100,
-    OPCODE_LD = 0b0010,
-    OPCODE_LDI = 0b1010,
-    OPCODE_LDR = 0b0110,
-    OPCODE_LEA = 0b1110,
-    OPCODE_NOT = 0b1001,
-    OPCODE_RTI = 0b1000,
-    OPCODE_ST = 0b0011,
-    OPCODE_STI = 0b1011,
-    OPCODE_STR = 0b0111,
-    OPCODE_TRAP = 0b1111,
-    OPCODE_RESERVED = 0b1101,
-} Opcode;
-
-// 8 bits
-enum TrapVector {
-    TRAP_GETC = 0x20,
-    TRAP_OUT = 0x21,
-    TRAP_PUTS = 0x22,
-    TRAP_IN = 0x23,
-    TRAP_PUTSP = 0x24,
-    TRAP_HALT = 0x25,
-};
-
-typedef struct Registers {
-    Word general_purpose[GP_REGISTER_COUNT] = {0};
-
-    Word program_counter;
-    Word stack_pointer;
-    Word frame_pointer;
-
-    // 3 bits, NZP, N=0, Z=1, P=0
-    Condition3 condition = 0b010;
-} Registers;
+void _dbg_print_registers(void);
+SignedWord sign_extend(SignedWord value, const size_t size);
+void set_condition_codes(const Word result);
+void print_char(const char ch);
+static char *binary_string_word(const Word word);
+void execute(const Word file_start, const Word file_end);
+bool execute_next_instrution(void);
+bool execute_trap_instruction(const Word instr);
 
 // Exists for program lifetime, but must still be deleted before exit
 // Use `EXIT` macro to automatically free before exiting
@@ -102,34 +21,7 @@ typedef struct Registers {
 static Word *memory = new Word[MEMORY_SIZE];
 static Registers registers;
 
-void free_memory(void);
-Word swap_endianess(const Word word);
-void read_file_to_memory(const char *const filename, Word &start, Word &end);
-void dbg_print_registers(void);
-void set_condition_codes(const Word result);
-void print_char(const char ch);
-static char *const binary_string_word(const Word word);
-bool execute_trap_instruction(const Word instr);
-bool execute_next_instrution(void);
-
-void tty_nobuffer_noecho(void);
-void tty_nobuffer_yesecho(void);
-void tty_restore(void);
-
-int main(const int argc, const char *const *const argv) {
-    if (argc != 2 || argv[1][0] == '-') {
-        fprintf(stderr, "USAGE: lc3sim [FILE]\n");
-        EXIT(ERR_ARGS);
-    }
-    const char *filename = argv[1];
-
-    Word file_start, file_end;
-    read_file_to_memory(filename, file_start, file_end);
-
-    /* for (size_t i = file_start - 2; i < file_end + 2; ++i) { */
-    /*     printf("FILE: 0x%04lx: 0x%04hx\n", i, memory[i]); */
-    /* } */
-
+void execute(const Word file_start, const Word file_end) {
     // GP and condition registers are already initialized to 0
     registers.program_counter = file_start;
     registers.stack_pointer = file_end;
@@ -144,105 +36,6 @@ int main(const int argc, const char *const *const argv) {
     }
 
     free_memory();
-    return 0;
-}
-
-// Does not need to be called when using `EXIT` macro
-void free_memory() {
-    delete[] memory;
-    memory = nullptr;
-}
-
-// Swap high and low bytes of a word
-Word swap_endianess(const Word word) { return (word << 8) | (word >> 8); }
-
-void read_file_to_memory(const char *const filename, Word &start, Word &end) {
-    FILE *const file = fopen(filename, "rb");
-
-    if (file == nullptr) {
-        fprintf(stderr, "Could not open file %s\n", filename);
-        EXIT(ERR_FILE);
-    }
-
-    // TODO: Handle failure
-    Word origin;
-    fread(reinterpret_cast<char *>(&origin), WORD_SIZE, 1, file);
-    start = swap_endianess(origin);
-
-    /* printf("origin: 0x%04x\n", start); */
-
-    // TODO: Handle failure
-    char *memory_at_file = reinterpret_cast<char *>(memory + start);
-    size_t max_file_bytes = (MEMORY_SIZE - start) * WORD_SIZE;
-    size_t words_read = fread(memory_at_file, WORD_SIZE, max_file_bytes, file);
-
-    end = start + words_read;
-
-    // Mark undefined bytes for debugging
-    memset(memory, 0xdd, start * WORD_SIZE);                      // Before file
-    memset(memory + end, 0xee, (MEMORY_SIZE - end) * WORD_SIZE);  // After file
-
-    // TODO: Make this better !!
-    for (size_t i = start; i < end; ++i) {
-        memory[i] = swap_endianess(memory[i]);
-    }
-
-    /* printf("words read: %ld\n", words_read); */
-
-    fclose(file);
-}
-
-void dbg_print_registers() {
-    printf("--------------------------\n");
-    printf("    PC  0x%04hx\n", registers.program_counter);
-    printf("    SP  0x%04hx\n", registers.stack_pointer);
-    printf("    FP  0x%04hx\n", registers.frame_pointer);
-    printf("..........................\n");
-    printf("    N=%x  Z=%x  P=%x\n",
-           (registers.condition >> 2),        // Negative
-           (registers.condition >> 2) & 0b1,  // Zero
-           (registers.condition >> 2) & 0b1   // Positive
-    );
-    printf("..........................\n");
-    for (int reg = 0; reg < GP_REGISTER_COUNT; ++reg) {
-        const Word value = registers.general_purpose[reg];
-        printf("    R%d  0x%04hx  %3d\n", reg, value, value);
-    }
-    printf("--------------------------\n");
-}
-
-void set_condition_codes(const Word result) {
-    const bool is_negative = result >> 15 == 1;
-    const bool is_zero = result == 0;
-    const bool is_positive = !is_negative && !is_zero;
-    // Set low 3 bits as N,Z,P
-    registers.condition = (is_negative << 2) | (is_zero << 1) | is_positive;
-}
-
-void print_char(const char ch) {
-    if (ch == '\r') {
-        printf("\n");
-    }
-    printf("%c", ch);
-}
-
-// Since %b printf format specifier is not ISO-compliant
-static char *const binary_string_word(const Word word) {
-    static char str[5];
-    for (int i = 0; i < 4; ++i) {
-        str[i] = '0' + ((word >> (3 - i)) & 0b1);
-    }
-    str[4] = '\0';
-    return str;
-}
-
-SignedWord sign_extend(SignedWord value, const size_t size) {
-    // If previous-highest bit is set
-    if (value >> (size - 1) & 0b1) {
-        // Set all bits higher than previous sign bit to 1
-        return value | (~0 << size);
-    }
-    return value;
 }
 
 // `true` return value indicates that program should end
@@ -470,7 +263,6 @@ bool execute_next_instrution() {
         case OPCODE_STR: {
             const Register src_reg = (instr >> 9) & BITS_LOW_3;
             const Register base_reg = (instr >> 6) & BITS_LOW_3;
-            const Word offset_bits = instr & BITS_LOW_6;
             const SignedWord offset = low_6_bits_signed(instr);
             const Word value = registers.general_purpose[src_reg];
             const Word base = registers.general_purpose[base_reg];
@@ -538,28 +330,6 @@ bool execute_next_instrution() {
     }
 
     return false;
-}
-
-// TODO: Move to another file
-static struct termios tty;
-void tty_get() { tcgetattr(STDIN_FILENO, &tty); }
-void tty_apply() { tcsetattr(STDIN_FILENO, TCSANOW, &tty); }
-void tty_nobuffer_noecho() {
-    tty_get();
-    tty.c_lflag &= ~ICANON;
-    tty.c_lflag &= ~ECHO;
-    tty_apply();
-}
-void tty_nobuffer_yesecho() {
-    tty_get();
-    tty.c_lflag &= ~ICANON;
-    tty.c_lflag |= ECHO;
-    tty_apply();
-}
-void tty_restore() {
-    tty.c_lflag |= ICANON;
-    tty.c_lflag |= ECHO;
-    tty_apply();
 }
 
 // `true` return value indicates that program should end
@@ -631,3 +401,64 @@ bool execute_trap_instruction(const Word instr) {
 
     return false;
 }
+
+// Does not need to be called when using `EXIT` macro
+void free_memory() {
+    delete[] memory;
+    memory = nullptr;
+}
+
+void _dbg_print_registers() {
+    printf("--------------------------\n");
+    printf("    PC  0x%04hx\n", registers.program_counter);
+    printf("    SP  0x%04hx\n", registers.stack_pointer);
+    printf("    FP  0x%04hx\n", registers.frame_pointer);
+    printf("..........................\n");
+    printf("    N=%x  Z=%x  P=%x\n",
+           (registers.condition >> 2),        // Negative
+           (registers.condition >> 2) & 0b1,  // Zero
+           (registers.condition >> 2) & 0b1   // Positive
+    );
+    printf("..........................\n");
+    for (int reg = 0; reg < GP_REGISTER_COUNT; ++reg) {
+        const Word value = registers.general_purpose[reg];
+        printf("    R%d  0x%04hx  %3d\n", reg, value, value);
+    }
+    printf("--------------------------\n");
+}
+
+SignedWord sign_extend(SignedWord value, const size_t size) {
+    // If previous-highest bit is set
+    if (value >> (size - 1) & 0b1) {
+        // Set all bits higher than previous sign bit to 1
+        return value | (~0U << size);
+    }
+    return value;
+}
+
+void set_condition_codes(const Word result) {
+    const bool is_negative = result >> 15 == 1;
+    const bool is_zero = result == 0;
+    const bool is_positive = !is_negative && !is_zero;
+    // Set low 3 bits as N,Z,P
+    registers.condition = (is_negative << 2) | (is_zero << 1) | is_positive;
+}
+
+void print_char(const char ch) {
+    if (ch == '\r') {
+        printf("\n");
+    }
+    printf("%c", ch);
+}
+
+// Since %b printf format specifier is not ISO-compliant
+static char *binary_string_word(const Word word) {
+    static char str[5];
+    for (int i = 0; i < 4; ++i) {
+        str[i] = '0' + ((word >> (3 - i)) & 0b1);
+    }
+    str[4] = '\0';
+    return str;
+}
+
+#endif
