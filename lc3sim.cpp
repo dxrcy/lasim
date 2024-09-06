@@ -16,16 +16,52 @@
 #define BITS_LOW_9 0x01ff
 #define BITS_HIGH_9 0xff80
 
+#define WORD_SIZE sizeof(Word)
+
 #define ARITH_IS_IMMEDIATE(instr) (bool)(((instr) >> 5) && 0b1)
 
-#define WORD_SIZE sizeof(Word)
+#define UNIMPLEMENTED_INSTR(instr, name) \
+    { fprintf(stderr, "Unimplemented instruction: 0b%04x: %s\n", instr, name); }
+#define UNIMPLEMENTED_TRAP(vector, name)                                   \
+    {                                                                      \
+        fprintf(stderr, "Unimplemented trap vector: 0x%02x: %s\n", vector, \
+                name);                                                     \
+    }
 
 typedef uint16_t Word;
 
-typedef uint8_t Opcode;        // 4 bits
 typedef uint8_t RegisterCode;  // 3 bits
 typedef uint8_t Immediate5;    // 5 bits
 typedef uint16_t Offset9;      // 9 bits
+
+// 4 bits
+typedef enum Opcode {
+    OPCODE_ADD = 0b0001,
+    OPCODE_AND = 0b0101,
+    OPCODE_BR = 0b0000,
+    OPCODE_JMP_RET = 0b1100,
+    OPCODE_JSR_JSRR_RTI = 0b0100,
+    OPCODE_LD = 0b0010,
+    OPCODE_LDI = 0b1010,
+    OPCODE_LDR = 0b0110,
+    OPCODE_LEA = 0b1110,
+    OPCODE_NOT = 0b1001,
+    OPCODE_ST = 0b0011,
+    OPCODE_STI = 0b1011,
+    OPCODE_STR = 0b0111,
+    OPCODE_TRAP = 0b1111,
+    OPCODE_RESERVED = 0b1101,
+} Opcode;
+
+// 8 bits
+enum TrapVector {
+    TRAP_GETC = 0x20,
+    TRAP_OUT = 0x21,
+    TRAP_PUTS = 0x22,
+    TRAP_IN = 0x23,
+    TRAP_PUTSP = 0x24,
+    TRAP_HALT = 0x25,
+};
 
 typedef struct Registers {
     Word general_purpose[GP_REGISTER_COUNT] = {0};
@@ -35,6 +71,7 @@ typedef struct Registers {
 } Registers;
 
 // Exists for program lifetime, but must still be deleted before exit
+// Dynamically allocated due to large size
 static Word *memory = new Word[MEMORY_SIZE];
 
 static Registers registers;
@@ -115,11 +152,13 @@ int main() {
 
         /* printf("INSTR: 0x%04x  %16b\n", instr, instr); */
 
-        Opcode opcode = instr >> 12;
+        // May be invalid enum variant
+        // Handled in default switch branch
+        Opcode opcode = static_cast<Opcode>(instr >> 12);
 
         switch (opcode) {
             // ADD+
-            case 0b0001: {
+            case OPCODE_ADD: {
                 RegisterCode dest_reg = (instr >> 9) & BITS_LOW_3;
                 RegisterCode src_reg1 = (instr >> 6) & BITS_LOW_3;
                 Word value;
@@ -147,8 +186,43 @@ int main() {
                 // TODO: Update condition codes
             }; break;
 
+            // AND+
+            case OPCODE_AND: {
+                UNIMPLEMENTED_INSTR(instr, "AND");
+            }; break;
+
+            // BR
+            case OPCODE_BR: {
+                UNIMPLEMENTED_INSTR(instr, "BR");
+            }; break;
+
+            // JMP/RET
+            case OPCODE_JMP_RET: {
+                UNIMPLEMENTED_INSTR(instr, "JMP/RET");
+            }; break;
+
+            // JSR/JSRR/RTI
+            case OPCODE_JSR_JSRR_RTI: {
+                UNIMPLEMENTED_INSTR(instr, "JSR/JSRR/RTI");
+            }; break;
+
+            // LD+
+            case OPCODE_LD: {
+                UNIMPLEMENTED_INSTR(instr, "LD");
+            }; break;
+
+            // LDI+
+            case OPCODE_LDI: {
+                UNIMPLEMENTED_INSTR(instr, "LDI");
+            }; break;
+
+            // LDR+
+            case OPCODE_LDR: {
+                UNIMPLEMENTED_INSTR(instr, "LDR");
+            }; break;
+
             // LEA+
-            case 0b1110: {
+            case OPCODE_LEA: {
                 RegisterCode dest_reg = (instr >> 9) & 0b111;
                 Offset9 pc_offset = instr & BITS_LOW_9;
                 /* printf(">LEA REG%d, pc_offset:0x%04hx\n", reg, */
@@ -159,8 +233,28 @@ int main() {
                 dbg_print_registers();
             }; break;
 
+            // NOT+
+            case OPCODE_NOT: {
+                UNIMPLEMENTED_INSTR(instr, "NOT");
+            }; break;
+
+            // ST
+            case OPCODE_ST: {
+                UNIMPLEMENTED_INSTR(instr, "ST");
+            }; break;
+
+            // STI
+            case OPCODE_STI: {
+                UNIMPLEMENTED_INSTR(instr, "STI");
+            }; break;
+
+            // STR
+            case OPCODE_STR: {
+                UNIMPLEMENTED_INSTR(instr, "STR");
+            }; break;
+
             // TRAP
-            case 0b1111: {
+            case OPCODE_TRAP: {
                 // 4 bits padding
                 uint8_t padding = (instr >> 8) & (0x0f);
                 if (padding != 0x0) {
@@ -170,11 +264,22 @@ int main() {
                     free_memory();
                     exit(ERR_MALFORMED_INSTR);
                 }
-                uint8_t trap_vector = instr & BITS_LOW_9;
+
+                // May be invalid enum variant
+                // Handled in default switch branch
+                enum TrapVector trap_vector =
+                    static_cast<enum TrapVector>(instr & BITS_LOW_9);
 
                 switch (trap_vector) {
-                    // PUTS
-                    case 0x22: {
+                    case TRAP_GETC: {
+                        UNIMPLEMENTED_TRAP(trap_vector, "GETC");
+                    }; break;
+
+                    case TRAP_OUT: {
+                        UNIMPLEMENTED_TRAP(trap_vector, "OUT");
+                    }; break;
+
+                    case TRAP_PUTS: {
                         Word *str = &memory[registers.general_purpose[0]];
                         for (Word ch; (ch = str[0]) != 0x0000; ++str) {
                             if (ch & BITS_HIGH_9) {
@@ -188,8 +293,15 @@ int main() {
                         }
                     } break;
 
-                    // HALT
-                    case 0x25: {
+                    case TRAP_IN: {
+                        UNIMPLEMENTED_TRAP(trap_vector, "IN");
+                    }; break;
+
+                    case TRAP_PUTSP: {
+                        UNIMPLEMENTED_TRAP(trap_vector, "PUTSP");
+                    }; break;
+
+                    case TRAP_HALT: {
                         goto end_program;
                     }; break;
 
@@ -201,6 +313,14 @@ int main() {
                 }
             } break;
 
+            // (reserved)
+            case OPCODE_RESERVED:
+                fprintf(stderr, "Invalid reserved opcode: 0x%04x\n", opcode);
+                free_memory();
+                exit(ERR_MALFORMED_INSTR);
+                break;
+
+            // Invalid enum variant
             default:
                 fprintf(stderr, "Invalid opcode: 0x%04x\n", opcode);
                 free_memory();
