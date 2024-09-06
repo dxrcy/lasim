@@ -11,7 +11,9 @@
 #define MEMORY_SIZE 0x10000L  // Total amount of allocated WORDS in memory
 #define GP_REGISTER_COUNT 8   // Amount of general purpose registers
 
+#define BITS_LOW_2 0b0000'0000'0000'0011
 #define BITS_LOW_3 0b0000'0000'0000'0111
+#define BITS_LOW_4 0b0000'0000'0000'1111
 #define BITS_LOW_5 0b0000'0000'0001'1111
 #define BITS_LOW_8 0b0000'0000'1111'1111
 #define BITS_LOW_9 0b0000'0001'1111'1111
@@ -43,6 +45,7 @@
     }
 
 typedef uint16_t Word;  // 2 bytes
+typedef int16_t SignedWord;
 
 typedef uint8_t RegisterCode;  // 3 bits
 typedef uint8_t Immediate5;    // 5 bits
@@ -79,10 +82,14 @@ enum TrapVector {
 
 typedef struct Registers {
     Word general_purpose[GP_REGISTER_COUNT] = {0};
+
     Word program_counter;
     Word stack_pointer;
     Word frame_pointer;
-    // TODO: Condition codes
+
+    bool condition_negative = false;
+    bool condition_zero = false;
+    bool condition_positive = false;
 } Registers;
 
 // Exists for program lifetime, but must still be deleted before exit
@@ -112,7 +119,7 @@ int main(const int argc, const char *const *const argv) {
     /*     printf("FILE: 0x%04lx: 0x%04hx\n", i, memory[i]); */
     /* } */
 
-    // GP registers are already initialized to 0
+    // GP and condition registers are already initialized to 0
     registers.program_counter = file_start;
     registers.stack_pointer = file_end;
     registers.frame_pointer = file_end;
@@ -178,11 +185,23 @@ void dbg_print_registers() {
     printf("    SP  0x%04hx\n", registers.stack_pointer);
     printf("    FP  0x%04hx\n", registers.frame_pointer);
     printf("..........................\n");
+    printf("    N=%b  Z=%b  P=%b\n", registers.condition_negative,
+           registers.condition_zero, registers.condition_positive);
+    printf("..........................\n");
     for (int reg = 0; reg < GP_REGISTER_COUNT; ++reg) {
         const Word value = registers.general_purpose[reg];
         printf("    R%d  0x%04hx  %3d\n", reg, value, value);
     }
     printf("--------------------------\n");
+}
+
+void update_condition_codes(Word result) {
+    const bool is_negative = result >> 15 == 1;
+    const bool is_zero = result == 0;
+    const bool is_positive = !is_negative && !is_zero;
+    registers.condition_negative = is_negative;
+    registers.condition_zero = is_zero;
+    registers.condition_positive = is_positive;
 }
 
 // `true` return value indicates that program should end
@@ -201,32 +220,62 @@ bool execute_next_instrution() {
         case OPCODE_ADD: {
             const RegisterCode dest_reg = (instr >> 9) & BITS_LOW_3;
             const RegisterCode src_reg1 = (instr >> 6) & BITS_LOW_3;
-            Word value;
+
+            const SignedWord value1 =
+                static_cast<SignedWord>(registers.general_purpose[src_reg1]);
+            SignedWord value2;
+
             if (!ARITH_IS_IMMEDIATE(instr)) {
                 // 2 bits padding
-                const uint8_t padding = (instr >> 3) & (0b11);
+                const uint8_t padding = (instr >> 3) & BITS_LOW_2;
                 if (padding != 0b00) {
                     fprintf(stderr,
-                            "Expected padding 0x00 for ADD instruction "
-                            "0b0001\n");
+                            "Expected padding 0x00 for ADD instruction\n");
                     EXIT(ERR_MALFORMED_INSTR);
                 }
                 const RegisterCode src_reg2 = instr & BITS_LOW_3;
-                value = memory[registers.general_purpose[src_reg2]];
+                value2 = static_cast<SignedWord>(
+                    memory[registers.general_purpose[src_reg2]]);
             } else {
                 const Immediate5 imm = instr & BITS_LOW_5;
-                value = static_cast<Word>(imm);
+                value2 = static_cast<SignedWord>(imm);
             }
-            printf(">ADD R%d = R%d + 0x%04hx\n", dest_reg, src_reg1, value);
-            registers.general_purpose[dest_reg] =
-                registers.general_purpose[src_reg1] + value;
+
+            printf(">ADD R%d = R%d + 0x%04hx\n", dest_reg, src_reg1, value2);
+
+            Word result = static_cast<Word>(value1 + value2);
+            registers.general_purpose[dest_reg] = result;
+
             dbg_print_registers();
-            // TODO: Update condition codes
+
+            update_condition_codes(result);
         }; break;
 
         // AND+
         case OPCODE_AND: {
             UNIMPLEMENTED_INSTR(instr, "AND");
+        }; break;
+
+        // NOT+
+        case OPCODE_NOT: {
+            const RegisterCode dest_reg = (instr >> 9) & BITS_LOW_3;
+            const RegisterCode src_reg1 = (instr >> 6) & BITS_LOW_3;
+
+            // 4 bits padding
+            const uint8_t padding = instr & BITS_LOW_4;
+            if (padding != 0b1111) {
+                fprintf(stderr, "Expected padding 0xf for NOT instruction\n");
+                EXIT(ERR_MALFORMED_INSTR);
+            }
+
+            printf(">NOT R%d = NOT R%d\n", dest_reg, src_reg1);
+
+            Word result = ~registers.general_purpose[src_reg1];
+            registers.general_purpose[dest_reg] = result;
+
+            dbg_print_registers();
+
+            // TODO: Update condition codes
         }; break;
 
         // BR
@@ -271,11 +320,6 @@ bool execute_next_instrution() {
             dbg_print_registers();
         }; break;
 
-        // NOT+
-        case OPCODE_NOT: {
-            UNIMPLEMENTED_INSTR(instr, "NOT");
-        }; break;
-
         // ST
         case OPCODE_ST: {
             UNIMPLEMENTED_INSTR(instr, "ST");
@@ -316,9 +360,9 @@ bool execute_next_instrution() {
 // `true` return value indicates that program should end
 bool execute_trap_instruction(const Word instr) {
     // 4 bits padding
-    const uint8_t padding = (instr >> 8) & (0x0f);
-    if (padding != 0x0) {
-        fprintf(stderr, "Expected padding 0x00 for TRAP instruction 0b1111\n");
+    const uint8_t padding = (instr >> 8) & BITS_LOW_4;
+    if (padding != 0b0000) {
+        fprintf(stderr, "Expected padding 0x00 for TRAP instruction\n");
         EXIT(ERR_MALFORMED_INSTR);
     }
 
