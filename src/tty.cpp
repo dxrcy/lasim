@@ -1,8 +1,8 @@
 #ifndef TTY_CPP
 #define TTY_CPP
 
-#include <termios.h>
-#include <unistd.h>
+#include <termios.h>  // termios, etc
+#include <unistd.h>   // STDIN_FILENO
 
 static struct termios tty;
 

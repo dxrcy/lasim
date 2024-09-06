@@ -5,8 +5,9 @@
 int main(const int argc, const char *const *const argv) {
     if (argc != 2 || argv[1][0] == '-') {
         fprintf(stderr, "USAGE: lc3sim [FILE]\n");
-        EXIT(ERR_ARGS);
+        exit(ERR_CLI_ARGUMENTS);
     }
+
     const char *filename = argv[1];
 
     Word file_start, file_end;

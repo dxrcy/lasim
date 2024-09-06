@@ -1,8 +1,9 @@
 #ifndef EXECUTE_CPP
 #define EXECUTE_CPP
 
-#include <cstdio>
+#include <cstdio>  // printf, fprintf
 
+#include "globals.cpp"
 #include "tty.cpp"
 #include "types.hpp"
 
@@ -50,12 +51,6 @@ void execute(const Word file_start, const Word file_end);
 bool execute_next_instrution(void);
 bool execute_trap_instruction(const Word instr);
 
-// Exists for program lifetime, but must still be deleted before exit
-// Use `EXIT` macro to automatically free before exiting
-// Dynamically allocated due to large size
-static Word *memory = new Word[MEMORY_SIZE];
-static Registers registers;
-
 void execute(const Word file_start, const Word file_end) {
     // GP and condition registers are already initialized to 0
     registers.program_counter = file_start;
@@ -83,12 +78,12 @@ bool execute_next_instrution() {
 
     if (instr == 0xdddd) {
         fprintf(stderr, "Cannot execute non-user memory (before origin)\n");
-        EXIT(ERR_BAD_ADDRESS);
+        exit(ERR_BAD_ADDRESS);
     }
     if (instr == 0xeeee) {
         fprintf(stderr,
                 "Cannot execute non-executable memory (after end of file)\n");
-        EXIT(ERR_BAD_ADDRESS);
+        exit(ERR_BAD_ADDRESS);
     }
 
     // May be invalid enum variant
@@ -113,7 +108,7 @@ bool execute_next_instrution() {
                 if (padding != 0b00) {
                     fprintf(stderr,
                             "Expected padding 0b00 for ADD instruction\n");
-                    EXIT(ERR_MALFORMED_INSTR);
+                    exit(ERR_MALFORMED_PADDING);
                 }
                 const Register src_reg_b = bits_0_2(instr);
                 value_b = static_cast<SignedWord>(
@@ -148,7 +143,7 @@ bool execute_next_instrution() {
                 if (padding != 0b00) {
                     fprintf(stderr,
                             "Expected padding 0b00 for AND instruction\n");
-                    EXIT(ERR_MALFORMED_INSTR);
+                    exit(ERR_MALFORMED_PADDING);
                 }
                 const Register src_reg_b = bits_0_2(instr);
                 value_b = memory[registers.general_purpose[src_reg_b]];
@@ -178,7 +173,7 @@ bool execute_next_instrution() {
             if (padding != BITMASK_LOW_5) {
                 fprintf(stderr,
                         "Expected padding 0x11111 for NOT instruction\n");
-                EXIT(ERR_MALFORMED_INSTR);
+                exit(ERR_MALFORMED_PADDING);
             }
 
             /* printf(">NOT R%d = NOT R%d\n", dest_reg, src_reg1); */
@@ -201,7 +196,7 @@ bool execute_next_instrution() {
             // TODO: This might never branch if given CC=0b000 ????
 
             /* printf("0x%04x\t0b%016b\n", instr, instr); */
-            const Condition3 condition = bits_9_11(instr);
+            const ConditionCode condition = bits_9_11(instr);
             const SignedWord offset = low_9_bits_signed(instr);
 
             /* printf("BR: %03b & %03b = %03b -> %b\n", condition, */
@@ -223,7 +218,7 @@ bool execute_next_instrution() {
             if (padding_1 != 0b000) {
                 fprintf(stderr,
                         "Expected padding 0b000 for JMP/RET instruction\n");
-                EXIT(ERR_MALFORMED_INSTR);
+                exit(ERR_MALFORMED_PADDING);
             }
             // 6 bits padding
             // After base register
@@ -231,7 +226,7 @@ bool execute_next_instrution() {
             if (padding_2 != 0b000000) {
                 fprintf(stderr,
                         "Expected padding 0b000000 for JMP/RET instruction\n");
-                EXIT(ERR_MALFORMED_INSTR);
+                exit(ERR_MALFORMED_PADDING);
             }
             const Register base_reg = bits_6_8(instr);
             const Word base = registers.general_purpose[base_reg];
@@ -256,7 +251,7 @@ bool execute_next_instrution() {
                 if (padding != 0b00) {
                     fprintf(stderr,
                             "Expected padding 0b00 for JSRR instruction\n");
-                    EXIT(ERR_MALFORMED_INSTR);
+                    exit(ERR_MALFORMED_PADDING);
                 }
                 const Register base_reg = bits_6_8(instr);
                 const Word base = registers.general_purpose[base_reg];
@@ -348,21 +343,21 @@ bool execute_next_instrution() {
             fprintf(stderr,
                     "Invalid use of RTI opcode: 0b%s in non-supervisor mode\n",
                     halfbyte_string(OPCODE_RTI));
-            EXIT(ERR_MALFORMED_INSTR);
+            exit(ERR_MALFORMED_INSTR);
             break;
 
         // (reserved)
         case OPCODE_RESERVED:
             fprintf(stderr, "Invalid reserved opcode: 0b%s\n",
                     halfbyte_string(OPCODE_RESERVED));
-            EXIT(ERR_MALFORMED_INSTR);
+            exit(ERR_MALFORMED_INSTR);
             break;
 
         // Invalid enum variant
         default:
             fprintf(stderr, "Invalid opcode: 0b%s (0x%04x)\n",
                     halfbyte_string(opcode), opcode);
-            EXIT(ERR_MALFORMED_INSTR);
+            exit(ERR_MALFORMED_INSTR);
     }
 
     return false;
@@ -374,7 +369,7 @@ bool execute_trap_instruction(const Word instr) {
     const uint8_t padding = bits_8_12(instr);
     if (padding != 0b0000) {
         fprintf(stderr, "Expected padding 0x00 for TRAP instruction\n");
-        EXIT(ERR_MALFORMED_INSTR);
+        exit(ERR_MALFORMED_PADDING);
     }
 
     // May be invalid enum variant
@@ -413,7 +408,7 @@ bool execute_trap_instruction(const Word instr) {
                     fprintf(stderr,
                             "String contains non-ASCII characters, "
                             "which are not supported.");
-                    EXIT(ERR_UNIMPLEMENTED);
+                    exit(ERR_UNIMPLEMENTED);
                 }
                 print_char(ch);
             }
@@ -433,16 +428,10 @@ bool execute_trap_instruction(const Word instr) {
 
         default:
             fprintf(stderr, "Invalid trap vector 0x%02x\n", trap_vector);
-            EXIT(ERR_MALFORMED_INSTR);
+            exit(ERR_MALFORMED_INSTR);
     }
 
     return false;
-}
-
-// Does not need to be called when using `EXIT` macro
-void free_memory() {
-    delete[] memory;
-    memory = nullptr;
 }
 
 void _dbg_print_registers() {

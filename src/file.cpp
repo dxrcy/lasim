@@ -1,10 +1,10 @@
 #ifndef FILE_CPP
 #define FILE_CPP
 
-#include <cstdio>
-#include <cstring>
+#include <cstdio>   // FILE, fprintf, etc
+#include <cstring>  // memset
 
-#include "execute.cpp"
+#include "globals.cpp"
 #include "types.hpp"
 
 // Swap high and low bytes of a word
@@ -15,7 +15,7 @@ void read_file_to_memory(const char *const filename, Word &start, Word &end) {
 
     if (file == nullptr) {
         fprintf(stderr, "Could not open file %s\n", filename);
-        EXIT(ERR_FILE);
+        exit(ERR_FILE_READ);
     }
 
     // TODO: Handle failure

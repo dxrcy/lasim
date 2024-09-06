@@ -1,34 +1,26 @@
-#ifndef TYPES_CPP
-#define TYPES_CPP
+#ifndef TYPES_H
+#define TYPES_H
 
 #include <cstdint>
 #include <cstdlib>
 
-// Defined in execute.cpp
-void free_memory(void);
-
-#define ERR_ARGS 0x10
-#define ERR_FILE 0x20
+#define ERR_CLI_ARGUMENTS 0x10
+#define ERR_FILE_READ 0x20
 #define ERR_MALFORMED_INSTR 0x30
-#define ERR_UNIMPLEMENTED 0x40
-#define ERR_BAD_ADDRESS 0x50
+#define ERR_MALFORMED_PADDING 0x31
+#define ERR_BAD_ADDRESS 0x40
+#define ERR_UNIMPLEMENTED 0x70
 
 #define MEMORY_SIZE 0x10000L  // Total amount of allocated WORDS in memory
 #define GP_REGISTER_COUNT 8   // Amount of general purpose registers
 
 #define WORD_SIZE sizeof(Word)
 
-#define EXIT(code)     \
-    {                  \
-        free_memory(); \
-        exit(code);    \
-    }
+typedef uint16_t Word;       // 2 bytes
+typedef int16_t SignedWord;  // 2 bytes
 
-typedef uint16_t Word;  // 2 bytes
-typedef int16_t SignedWord;
-
-typedef uint8_t Register;    // 3 bits
-typedef uint8_t Condition3;  // 3 bits
+typedef uint8_t Register;       // 3 bits
+typedef uint8_t ConditionCode;  // 3 bits
 
 // 4 bits
 typedef enum Opcode {
@@ -68,7 +60,7 @@ typedef struct Registers {
     Word frame_pointer;
 
     // 3 bits, NZP, N=0, Z=1, P=0
-    Condition3 condition = 0b010;
+    ConditionCode condition = 0b010;
 } Registers;
 
 #endif
