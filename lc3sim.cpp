@@ -27,12 +27,22 @@ typedef uint8_t RegisterCode;  // 3 bits
 typedef uint8_t Immediate5;    // 5 bits
 typedef uint16_t Offset9;      // 9 bits
 
-static Word memory[MEMORY_SIZE];
+typedef struct Registers {
+    Word general_purpose[GP_REGISTER_COUNT] = {0};
+    Word program_counter;
+    Word stack_pointer;
+    Word frame_pointer;
+} Registers;
 
-static Word registers[GP_REGISTER_COUNT] = {0};
-static Word program_counter;
-static Word stack_pointer;
-static Word frame_pointer;
+// Exists for program lifetime, but must still be deleted before exit
+static Word *memory = new Word[MEMORY_SIZE];
+
+static Registers registers;
+
+void free_memory() {
+    delete[] memory;
+    memory = nullptr;
+}
 
 Word swap_endianess(Word word) { return (word << 8) | (word >> 8); }
 
@@ -70,14 +80,14 @@ void read_file_to_memory(const char *filename, Word &start, Word &end) {
     fclose(file);
 }
 
-void print_registers() {
+void dbg_print_registers() {
     printf("--------------------------\n");
-    printf("    PC  0x%04hx\n", program_counter);
-    printf("    SP  0x%04hx\n", stack_pointer);
-    printf("    FP  0x%04hx\n", frame_pointer);
+    printf("    PC  0x%04hx\n", registers.program_counter);
+    printf("    SP  0x%04hx\n", registers.stack_pointer);
+    printf("    FP  0x%04hx\n", registers.frame_pointer);
     printf("..........................\n");
     for (int reg = 0; reg < GP_REGISTER_COUNT; ++reg) {
-        Word value = registers[reg];
+        Word value = registers.general_purpose[reg];
         printf("    R%d  0x%04hx  %3d\n", reg, value, value);
     }
     printf("--------------------------\n");
@@ -94,13 +104,14 @@ int main() {
     /*     printf("FILE: 0x%04lx: 0x%04hx\n", i, memory[i]); */
     /* } */
 
-    program_counter = file_start;
-    stack_pointer = file_end;
-    frame_pointer = file_end;
+    // GP registers are already initialized to 0
+    registers.program_counter = file_start;
+    registers.stack_pointer = file_end;
+    registers.frame_pointer = file_end;
 
     while (true) {
-        Word instr = memory[program_counter];
-        ++program_counter;
+        Word instr = memory[registers.program_counter];
+        ++registers.program_counter;
 
         /* printf("INSTR: 0x%04x  %16b\n", instr, instr); */
 
@@ -120,17 +131,19 @@ int main() {
                         fprintf(stderr,
                                 "Expected padding 0x00 for ADD instruction "
                                 "0b0001\n");
+                        free_memory();
                         exit(ERR_MALFORMED_INSTR);
                     }
                     RegisterCode src_reg2 = instr & BITS_LOW_3;
-                    value = memory[registers[src_reg2]];
+                    value = memory[registers.general_purpose[src_reg2]];
                 } else {
                     Immediate5 imm = instr & BITS_LOW_5;
                     value = static_cast<Word>(imm);
                 }
                 printf(">ADD R%d = R%d + 0x%04hx\n", dest_reg, src_reg1, value);
-                registers[dest_reg] = registers[src_reg1] + value;
-                print_registers();
+                registers.general_purpose[dest_reg] =
+                    registers.general_purpose[src_reg1] + value;
+                dbg_print_registers();
                 // TODO: Update condition codes
             }; break;
 
@@ -141,8 +154,9 @@ int main() {
                 /* printf(">LEA REG%d, pc_offset:0x%04hx\n", reg, */
                 /*        pc_offset); */
                 /* print_registers(); */
-                registers[dest_reg] = program_counter + pc_offset;
-                print_registers();
+                registers.general_purpose[dest_reg] =
+                    registers.program_counter + pc_offset;
+                dbg_print_registers();
             }; break;
 
             // TRAP
@@ -153,6 +167,7 @@ int main() {
                     fprintf(
                         stderr,
                         "Expected padding 0x00 for TRAP instruction 0b1111\n");
+                    free_memory();
                     exit(ERR_MALFORMED_INSTR);
                 }
                 uint8_t trap_vector = instr & BITS_LOW_9;
@@ -160,12 +175,13 @@ int main() {
                 switch (trap_vector) {
                     // PUTS
                     case 0x22: {
-                        Word *str = &memory[registers[0]];
+                        Word *str = &memory[registers.general_purpose[0]];
                         for (Word ch; (ch = str[0]) != 0x0000; ++str) {
                             if (ch & BITS_HIGH_9) {
                                 fprintf(stderr,
                                         "String contains non-ASCII characters, "
                                         "which are not supported.");
+                                free_memory();
                                 exit(ERR_UNIMPLEMENTED);
                             }
                             printf("%c", ch);
@@ -180,16 +196,20 @@ int main() {
                     default:
                         fprintf(stderr, "Invalid trap vector 0x%02x\n",
                                 trap_vector);
+                        free_memory();
                         exit(ERR_MALFORMED_INSTR);
                 }
             } break;
 
             default:
                 fprintf(stderr, "Invalid opcode: 0x%04x\n", opcode);
+                free_memory();
                 exit(ERR_MALFORMED_INSTR);
         }
     }
-end_program:;
+end_program:
+
+    free_memory();
 
     return 0;
 }
