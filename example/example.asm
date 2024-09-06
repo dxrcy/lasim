@@ -1,11 +1,13 @@
 .ORIG x3000
 
-    OUT
+    LEA R0, HW
+    PUTSP
 
     HALT
 
-HW  .STRINGZ "Hello World\n"
-GW  .STRINGZ "Goodbye World\n"
+HW  .FILL x6261
+    .FILL x6463
+    .FILL x0000
 
 .END
 

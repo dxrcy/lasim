@@ -461,7 +461,11 @@ bool execute_trap_instruction(const Word instr) {
         } break;
 
         case TRAP_PUTSP: {
-            UNIMPLEMENTED_TRAP(trap_vector, "PUTSP");
+            const Word *const str_words = &memory[registers.general_purpose[0]];
+            const char *str = reinterpret_cast<const char *const>(str_words);
+            for (Word ch; (ch = str[0]) != 0x00; ++str) {
+                printf("%c", ch);
+            }
         }; break;
 
         case TRAP_HALT: {
