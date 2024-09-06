@@ -19,6 +19,12 @@
     OUT                 ; echo it
     ADD R0, R0, R3      ; convert ASCII to value
     ADD R2, R0, #0      ; save second number in R2
+
+    ; ADD R0, R1, #30
+    ; OUT
+    ; ADD R0, R2, #30
+    ; OUT
+
     ADD R2, R1, R2      ; add R2 <- R1+R2
 
     LD R0, CR           ; print Return

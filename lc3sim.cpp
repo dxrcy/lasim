@@ -33,7 +33,7 @@
 #define WORD_SIZE sizeof(Word)
 
 // For `ADD` and `AND` instructions
-#define ARITH_IS_IMMEDIATE(instr) (bool)(((instr) >> 5) && 0b1)
+#define ARITH_IS_IMMEDIATE(instr) (bool)((((instr) >> 5) & 0b1) != 0b0)
 
 #define EXIT(code)     \
     {                  \
@@ -119,6 +119,7 @@ void read_file_to_memory(const char *const filename, Word &start, Word &end);
 void dbg_print_registers(void);
 void set_condition_codes(Word result);
 void print_char(const char ch);
+static char *binary_string_word(Word word);
 bool execute_trap_instruction(const Word instr);
 bool execute_next_instrution(void);
 
@@ -236,14 +237,23 @@ void print_char(const char ch) {
     printf("%c", ch);
 }
 
+// Since %b printf format specifier is not ISO-compliant
+static char *binary_string_word(Word word) {
+    static char str[5];
+    for (int i = 0; i < 4; ++i) {
+        str[i] = '0' + ((word >> (3 - i)) & 0b1);
+    }
+    str[4] = '\0';
+    return str;
+}
+
 // `true` return value indicates that program should end
 bool execute_next_instrution() {
     const Word instr = memory[registers.program_counter];
     ++registers.program_counter;
 
-    /* printf("INSTR at 0x%04x: 0x%04x  %016b\n", registers.program_counter - 1,
-     */
-    /*        instr, instr); */
+    // printf("INSTR at 0x%04x: 0x%04x  %016b\n", registers.program_counter - 1,
+    //        instr, instr);
 
     if (instr == 0xdddd) {
         fprintf(stderr, "Cannot execute non-user memory (before origin)\n");
@@ -279,18 +289,18 @@ bool execute_next_instrution() {
                 }
                 const Register src_reg_b = instr & BITS_LOW_3;
                 value_b = static_cast<SignedWord>(
-                    memory[registers.general_purpose[src_reg_b]]);
+                    registers.general_purpose[src_reg_b]);
             } else {
                 // TODO: Is this properly sign-extended ??
                 const Immediate5 imm = instr & BITS_LOW_5;
                 value_b = static_cast<SignedWord>(imm);
             }
 
-            /* printf(">ADD R%d = R%d + 0x%04hx\n", dest_reg, src_reg_a,
-             * value_b);
-             */
-
             const Word result = static_cast<Word>(value_a + value_b);
+
+            // printf("\n>ADD R%d = (R%d) 0x%04hx + 0x%04hx = 0x%04hx\n",
+            // dest_reg, src_reg_a, value_a, value_b, result);
+
             registers.general_purpose[dest_reg] = result;
 
             /* dbg_print_registers(); */
@@ -433,6 +443,7 @@ bool execute_next_instrution() {
             const Word value = memory[registers.program_counter + offset];
             registers.general_purpose[dest_reg] = value;
             set_condition_codes(value);
+            /* dbg_print_registers(); */
         }; break;
 
         // ST
@@ -504,22 +515,23 @@ bool execute_next_instrution() {
 
         // RTI (supervisor-only)
         case OPCODE_RTI:
-            fprintf(
-                stderr,
-                "Invalid use of RTI opcode: 0b%04b in non-supervisor mode\n",
-                opcode);
+            fprintf(stderr,
+                    "Invalid use of RTI opcode: 0b%s in non-supervisor mode\n",
+                    binary_string_word(OPCODE_RTI));
             EXIT(ERR_MALFORMED_INSTR);
             break;
 
         // (reserved)
         case OPCODE_RESERVED:
-            fprintf(stderr, "Invalid reserved opcode: 0b%04b\n", opcode);
+            fprintf(stderr, "Invalid reserved opcode: 0b%s\n",
+                    binary_string_word(OPCODE_RESERVED));
             EXIT(ERR_MALFORMED_INSTR);
             break;
 
         // Invalid enum variant
         default:
-            fprintf(stderr, "Invalid opcode: 0x%04x\n", opcode);
+            fprintf(stderr, "Invalid opcode: 0b%s (0x%04x)\n",
+                    binary_string_word(opcode), opcode);
             EXIT(ERR_MALFORMED_INSTR);
     }
 
@@ -568,6 +580,7 @@ bool execute_trap_instruction(const Word instr) {
             const char input = getchar() & BITS_LOW_8;  // Zero high 8 bits
             tty_restore();
             registers.general_purpose[0] = input;
+            /* dbg_print_registers(); */
         }; break;
 
         case TRAP_IN: {
