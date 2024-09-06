@@ -10,16 +10,20 @@
 #define ERR_FILE 0x20
 #define ERR_MALFORMED_INSTR 0x30
 #define ERR_UNIMPLEMENTED 0x40
+#define ERR_BAD_ADDRESS 0x50
 
 #define MEMORY_SIZE 0x10000L  // Total amount of allocated WORDS in memory
 #define GP_REGISTER_COUNT 8   // Amount of general purpose registers
 
+#define BITS_LOW_1 0b0000'0000'0000'0001
 #define BITS_LOW_2 0b0000'0000'0000'0011
 #define BITS_LOW_3 0b0000'0000'0000'0111
 #define BITS_LOW_4 0b0000'0000'0000'1111
 #define BITS_LOW_5 0b0000'0000'0001'1111
+#define BITS_LOW_6 0b0000'0000'0011'1111
 #define BITS_LOW_8 0b0000'0000'1111'1111
 #define BITS_LOW_9 0b0000'0001'1111'1111
+
 #define BITS_HIGH_9 0b1111'1111'1000'0000
 
 #define CONDITION_NEGATIVE 0b100
@@ -37,6 +41,7 @@
         exit(code);    \
     }
 
+/*
 #define UNIMPLEMENTED_INSTR(instr, name)                                  \
     {                                                                     \
         fprintf(stderr, "Unimplemented instruction: 0b%04x: %s\n", instr, \
@@ -50,6 +55,7 @@
                 name);                                                     \
         EXIT(ERR_UNIMPLEMENTED);                                           \
     }
+*/
 
 typedef uint16_t Word;  // 2 bytes
 typedef int16_t SignedWord;
@@ -57,6 +63,7 @@ typedef int16_t SignedWord;
 typedef uint8_t Register;       // 3 bits
 typedef uint8_t Immediate5;     // 5 bits
 typedef int16_t SignedOffset9;  // 9 bits
+typedef int16_t SignedOffset6;  // 6 bits
 typedef uint8_t Condition3;     // 3 bits
 
 // 4 bits
@@ -65,12 +72,13 @@ typedef enum Opcode {
     OPCODE_AND = 0b0101,
     OPCODE_BR = 0b0000,
     OPCODE_JMP_RET = 0b1100,
-    OPCODE_JSR_JSRR_RTI = 0b0100,
+    OPCODE_JSR_JSRR = 0b0100,
     OPCODE_LD = 0b0010,
     OPCODE_LDI = 0b1010,
     OPCODE_LDR = 0b0110,
     OPCODE_LEA = 0b1110,
     OPCODE_NOT = 0b1001,
+    OPCODE_RTI = 0b1000,
     OPCODE_ST = 0b0011,
     OPCODE_STI = 0b1011,
     OPCODE_STR = 0b0111,
@@ -109,6 +117,8 @@ void free_memory(void);
 Word swap_endianess(const Word word);
 void read_file_to_memory(const char *const filename, Word &start, Word &end);
 void dbg_print_registers(void);
+void set_condition_codes(Word result);
+void print_char(const char ch);
 bool execute_trap_instruction(const Word instr);
 bool execute_next_instrution(void);
 
@@ -165,7 +175,9 @@ void read_file_to_memory(const char *const filename, Word &start, Word &end) {
     }
 
     // TODO: Handle failure
-    fread(reinterpret_cast<char *>(&start), WORD_SIZE, 1, file);
+    Word origin;
+    fread(reinterpret_cast<char *>(&origin), WORD_SIZE, 1, file);
+    start = swap_endianess(origin);
 
     /* printf("origin: 0x%04x\n", start); */
 
@@ -196,7 +208,7 @@ void dbg_print_registers() {
     printf("    SP  0x%04hx\n", registers.stack_pointer);
     printf("    FP  0x%04hx\n", registers.frame_pointer);
     printf("..........................\n");
-    printf("    N=%b  Z=%b  P=%b\n",
+    printf("    N=%x  Z=%x  P=%x\n",
            (registers.condition >> 2),        // Negative
            (registers.condition >> 2) & 0b1,  // Zero
            (registers.condition >> 2) & 0b1   // Positive
@@ -217,48 +229,68 @@ void set_condition_codes(Word result) {
     registers.condition = (is_negative << 2) | (is_zero << 1) | is_positive;
 }
 
+void print_char(const char ch) {
+    if (ch == '\r') {
+        printf("\n");
+    }
+    printf("%c", ch);
+}
+
 // `true` return value indicates that program should end
 bool execute_next_instrution() {
     const Word instr = memory[registers.program_counter];
     ++registers.program_counter;
 
-    /* printf("INSTR: 0x%04x  %16b\n", instr, instr); */
+    /* printf("INSTR at 0x%04x: 0x%04x  %016b\n", registers.program_counter - 1,
+     */
+    /*        instr, instr); */
+
+    if (instr == 0xdddd) {
+        fprintf(stderr, "Cannot execute non-user memory (before origin)\n");
+        EXIT(ERR_BAD_ADDRESS);
+    }
+    if (instr == 0xeeee) {
+        fprintf(stderr,
+                "Cannot execute non-executable memory (after end of file)\n");
+        EXIT(ERR_BAD_ADDRESS);
+    }
 
     // May be invalid enum variant
     // Handled in default switch branch
     const Opcode opcode = static_cast<Opcode>(instr >> 12);
 
     switch (opcode) {
-        // ADD+
+        // ADD*
         case OPCODE_ADD: {
             const Register dest_reg = (instr >> 9) & BITS_LOW_3;
-            const Register src_reg1 = (instr >> 6) & BITS_LOW_3;
+            const Register src_reg_a = (instr >> 6) & BITS_LOW_3;
 
-            const SignedWord value1 =
-                static_cast<SignedWord>(registers.general_purpose[src_reg1]);
-            SignedWord value2;
+            const SignedWord value_a =
+                static_cast<SignedWord>(registers.general_purpose[src_reg_a]);
+            SignedWord value_b;
 
             if (!ARITH_IS_IMMEDIATE(instr)) {
                 // 2 bits padding
                 const uint8_t padding = (instr >> 3) & BITS_LOW_2;
                 if (padding != 0b00) {
                     fprintf(stderr,
-                            "Expected padding 0x00 for ADD instruction\n");
+                            "Expected padding 0b00 for ADD instruction\n");
                     EXIT(ERR_MALFORMED_INSTR);
                 }
-                const Register src_reg2 = instr & BITS_LOW_3;
-                value2 = static_cast<SignedWord>(
-                    memory[registers.general_purpose[src_reg2]]);
+                const Register src_reg_b = instr & BITS_LOW_3;
+                value_b = static_cast<SignedWord>(
+                    memory[registers.general_purpose[src_reg_b]]);
             } else {
                 // TODO: Is this properly sign-extended ??
                 const Immediate5 imm = instr & BITS_LOW_5;
-                value2 = static_cast<SignedWord>(imm);
+                value_b = static_cast<SignedWord>(imm);
             }
 
-            /* printf(">ADD R%d = R%d + 0x%04hx\n", dest_reg, src_reg1, value2);
+            /* printf(">ADD R%d = R%d + 0x%04hx\n", dest_reg, src_reg_a,
+             * value_b);
              */
 
-            const Word result = static_cast<Word>(value1 + value2);
+            const Word result = static_cast<Word>(value_a + value_b);
             registers.general_purpose[dest_reg] = result;
 
             /* dbg_print_registers(); */
@@ -266,15 +298,45 @@ bool execute_next_instrution() {
             set_condition_codes(result);
         }; break;
 
-        // AND+
+        // AND*
         case OPCODE_AND: {
-            UNIMPLEMENTED_INSTR(instr, "AND");
+            const Register dest_reg = (instr >> 9) & BITS_LOW_3;
+            const Register src_reg_a = (instr >> 6) & BITS_LOW_3;
+
+            const Word value_a = registers.general_purpose[src_reg_a];
+            Word value_b;
+
+            if (!ARITH_IS_IMMEDIATE(instr)) {
+                // 2 bits padding
+                const uint8_t padding = (instr >> 3) & BITS_LOW_2;
+                if (padding != 0b00) {
+                    fprintf(stderr,
+                            "Expected padding 0b00 for AND instruction\n");
+                    EXIT(ERR_MALFORMED_INSTR);
+                }
+                const Register src_reg_b = instr & BITS_LOW_3;
+                value_b = memory[registers.general_purpose[src_reg_b]];
+            } else {
+                const Immediate5 imm = instr & BITS_LOW_5;
+                value_b = imm;
+            }
+
+            /* printf(">AND R%d = R%d & 0x%04hx\n", dest_reg, src_reg_a,
+             * value_b);
+             */
+
+            const Word result = value_a & value_b;
+            registers.general_purpose[dest_reg] = result;
+
+            /* dbg_print_registers(); */
+
+            set_condition_codes(result);
         }; break;
 
-        // NOT+
+        // NOT*
         case OPCODE_NOT: {
             const Register dest_reg = (instr >> 9) & BITS_LOW_3;
-            const Register src_reg1 = (instr >> 6) & BITS_LOW_3;
+            const Register src_reg = (instr >> 6) & BITS_LOW_3;
 
             // 4 bits padding
             const uint8_t padding = instr & BITS_LOW_4;
@@ -285,7 +347,7 @@ bool execute_next_instrution() {
 
             /* printf(">NOT R%d = NOT R%d\n", dest_reg, src_reg1); */
 
-            const Word result = ~registers.general_purpose[src_reg1];
+            const Word result = ~registers.general_purpose[src_reg];
             registers.general_purpose[dest_reg] = result;
 
             /* dbg_print_registers(); */
@@ -317,15 +379,54 @@ bool execute_next_instrution() {
 
         // JMP/RET
         case OPCODE_JMP_RET: {
-            UNIMPLEMENTED_INSTR(instr, "JMP/RET");
+            // 3 bits padding
+            const uint8_t padding_1 = (instr >> 9) & BITS_LOW_3;
+            if (padding_1 != 0b000) {
+                fprintf(stderr,
+                        "Expected padding 0b000 for JMP/RET instruction\n");
+                EXIT(ERR_MALFORMED_INSTR);
+            }
+            // 6 bits padding
+            // After base register
+            const uint8_t padding_2 = instr & BITS_LOW_6;
+            if (padding_2 != 0b000000) {
+                fprintf(stderr,
+                        "Expected padding 0b000000 for JMP/RET instruction\n");
+                EXIT(ERR_MALFORMED_INSTR);
+            }
+            const Register base_reg = (instr >> 6) & BITS_LOW_3;
+            const Word base = registers.general_purpose[base_reg];
+            registers.program_counter = base;
         }; break;
 
-        // JSR/JSRR/RTI
-        case OPCODE_JSR_JSRR_RTI: {
-            UNIMPLEMENTED_INSTR(instr, "JSR/JSRR/RTI");
+        // JSR/JSRR
+        case OPCODE_JSR_JSRR: {
+            // Save PC to R7
+            registers.general_purpose[7] = registers.program_counter;
+            // Bit 11 defines JSR or JSRR
+            const bool is_offset = ((instr >> 11) & BITS_LOW_1) != 0;
+            if (is_offset) {
+                // JSR
+                const SignedOffset9 pc_offset = instr & BITS_LOW_9;
+                /* printf("JSR: PCOffset = 0x%04x\n", pc_offset); */
+                registers.program_counter += pc_offset;
+            } else {
+                // JSRR
+                // 2 bits padding
+                const uint8_t padding = (instr >> 9) & BITS_LOW_2;
+                if (padding != 0b00) {
+                    fprintf(stderr,
+                            "Expected padding 0b00 for JSRR instruction\n");
+                    EXIT(ERR_MALFORMED_INSTR);
+                }
+                const Register base_reg = (instr >> 6) & BITS_LOW_3;
+                const Word base = registers.general_purpose[base_reg];
+                /* printf("JSRR: R%x = 0x%04x\n", base_reg, base); */
+                registers.program_counter = base;
+            }
         }; break;
 
-        // LD+
+        // LD*
         case OPCODE_LD: {
             const Register dest_reg = (instr >> 9) & BITS_LOW_3;
             const SignedOffset9 offset = instr & BITS_LOW_9;
@@ -336,33 +437,53 @@ bool execute_next_instrution() {
 
         // ST
         case OPCODE_ST: {
-            const Register dest_reg = (instr >> 9) & BITS_LOW_3;
+            const Register src_reg = (instr >> 9) & BITS_LOW_3;
             const SignedOffset9 offset = instr & BITS_LOW_9;
-            const Word value = registers.general_purpose[dest_reg];
+            const Word value = registers.general_purpose[src_reg];
             memory[registers.program_counter + offset] = value;
         }; break;
 
-        // LDI+
-        case OPCODE_LDI: {
-            UNIMPLEMENTED_INSTR(instr, "LDI");
-        }; break;
-
-        // STI
-        case OPCODE_STI: {
-            UNIMPLEMENTED_INSTR(instr, "STI");
-        }; break;
-
-        // LDR+
+        // LDR*
         case OPCODE_LDR: {
-            UNIMPLEMENTED_INSTR(instr, "LDR");
+            const Register dest_reg = (instr >> 9) & BITS_LOW_3;
+            const Register base_reg = (instr >> 6) & BITS_LOW_3;
+            const SignedOffset6 offset = instr & BITS_LOW_6;
+            const Word base = registers.general_purpose[base_reg];
+            const Word value = memory[base + offset];
+            registers.general_purpose[dest_reg] = value;
+            set_condition_codes(value);
         }; break;
 
         // STR
         case OPCODE_STR: {
-            UNIMPLEMENTED_INSTR(instr, "STR");
+            const Register src_reg = (instr >> 9) & BITS_LOW_3;
+            const Register base_reg = (instr >> 6) & BITS_LOW_3;
+            const SignedOffset6 offset = instr & BITS_LOW_6;
+            const Word value = registers.general_purpose[src_reg];
+            const Word base = registers.general_purpose[base_reg];
+            memory[base + offset] = value;
         }; break;
 
-        // LEA+
+        // LDI+
+        case OPCODE_LDI: {
+            const Register dest_reg = (instr >> 9) & BITS_LOW_3;
+            const SignedOffset9 offset = instr & BITS_LOW_9;
+            const Word pointer = memory[registers.program_counter + offset];
+            const Word value = memory[pointer];
+            registers.general_purpose[dest_reg] = value;
+            set_condition_codes(value);
+        }; break;
+
+        // STI
+        case OPCODE_STI: {
+            const Register src_reg = (instr >> 9) & BITS_LOW_3;
+            const SignedOffset9 offset = instr & BITS_LOW_9;
+            const Word pointer = registers.general_purpose[src_reg];
+            const Word value = memory[pointer];
+            memory[registers.program_counter + offset] = value;
+        }; break;
+
+        // LEA*
         case OPCODE_LEA: {
             const Register dest_reg = (instr >> 9) & 0b111;
             const SignedOffset9 pc_offset = instr & BITS_LOW_9;
@@ -371,7 +492,7 @@ bool execute_next_instrution() {
             /* print_registers(); */
             registers.general_purpose[dest_reg] =
                 registers.program_counter + pc_offset;
-            dbg_print_registers();
+            /* dbg_print_registers(); */
         }; break;
 
         // TRAP
@@ -381,9 +502,18 @@ bool execute_next_instrution() {
             }
             break;
 
+        // RTI (supervisor-only)
+        case OPCODE_RTI:
+            fprintf(
+                stderr,
+                "Invalid use of RTI opcode: 0b%04b in non-supervisor mode\n",
+                opcode);
+            EXIT(ERR_MALFORMED_INSTR);
+            break;
+
         // (reserved)
         case OPCODE_RESERVED:
-            fprintf(stderr, "Invalid reserved opcode: 0x%04x\n", opcode);
+            fprintf(stderr, "Invalid reserved opcode: 0b%04b\n", opcode);
             EXIT(ERR_MALFORMED_INSTR);
             break;
 
@@ -450,7 +580,7 @@ bool execute_trap_instruction(const Word instr) {
         case TRAP_OUT: {
             const Word word = registers.general_purpose[0];
             const char ch = static_cast<char>(word);
-            printf("%c", ch);
+            print_char(ch);
         }; break;
 
         case TRAP_PUTS: {
@@ -462,15 +592,15 @@ bool execute_trap_instruction(const Word instr) {
                             "which are not supported.");
                     EXIT(ERR_UNIMPLEMENTED);
                 }
-                printf("%c", ch);
+                print_char(ch);
             }
         } break;
 
         case TRAP_PUTSP: {
             const Word *const str_words = &memory[registers.general_purpose[0]];
-            const char *str = reinterpret_cast<const char *const>(str_words);
+            const char *str = reinterpret_cast<const char *>(str_words);
             for (Word ch; (ch = str[0]) != 0x00; ++str) {
-                printf("%c", ch);
+                print_char(ch);
             }
         }; break;
 
