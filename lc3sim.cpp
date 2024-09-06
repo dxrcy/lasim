@@ -1,23 +1,30 @@
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
-#include <fstream>
-
-using std::ifstream;
-
-#define MEMORY_SIZE 0x10000L
-#define GP_REGISTER_COUNT 8  // Amount of general purpose registers
-
-#define BITS_LOW_9 0x01ff
-#define BITS_LOW_8 0x00ff
-#define BITS_HIGH_9 0xff80
 
 #define ERR_FILE 1
 #define ERR_MALFORMED_INSTR 2
 #define ERR_UNIMPLEMENTED 3
 
+#define MEMORY_SIZE 0x10000L  // Total amount of allocated WORDS in memory
+#define GP_REGISTER_COUNT 8   // Amount of general purpose registers
+
+#define BITS_LOW_3 0b111
+#define BITS_LOW_5 0x1f
+#define BITS_LOW_8 0x00ff
+#define BITS_LOW_9 0x01ff
+#define BITS_HIGH_9 0xff80
+
+#define ARITH_IS_IMMEDIATE(instr) (bool)(((instr) >> 5) && 0b1)
+
+#define WORD_SIZE sizeof(Word)
+
 typedef uint16_t Word;
+
 typedef uint8_t Opcode;        // 4 bits
 typedef uint8_t RegisterCode;  // 3 bits
+typedef uint8_t Immediate5;    // 5 bits
 typedef uint16_t Offset9;      // 9 bits
 
 static Word memory[MEMORY_SIZE];
@@ -30,33 +37,37 @@ static Word frame_pointer;
 Word swap_endianess(Word word) { return (word << 8) | (word >> 8); }
 
 void read_file_to_memory(const char *filename, Word &start, Word &end) {
-    ifstream file(filename);
-    if (!file.is_open()) {
+    FILE *file = fopen(filename, "rb");
+
+    if (file == nullptr) {
         fprintf(stderr, "Could not open file %s\n", filename);
         exit(ERR_FILE);
     }
 
     // TODO: Handle failure
-    file.read(reinterpret_cast<char *>(&start), sizeof(Word));
+    fread(reinterpret_cast<char *>(&start), WORD_SIZE, 1, file);
 
     /* printf("origin: 0x%04x\n", start); */
 
     // TODO: Handle failure
-    file.read(reinterpret_cast<char *>(memory + start), sizeof(memory));
-    std::streamsize words_read = file.gcount() / 2;
+    char *memory_at_file = reinterpret_cast<char *>(memory + start);
+    size_t max_file_bytes = (MEMORY_SIZE - start) * WORD_SIZE;
+    size_t words_read = fread(memory_at_file, WORD_SIZE, max_file_bytes, file);
 
     end = start + words_read;
 
     // Mark undefined bytes for debugging
-    memset(memory, 0xdd, start * 2);                       // Before file
-    memset(memory + end, 0xee, sizeof(memory) - end * 2);  // After file
+    memset(memory, 0xdd, start * WORD_SIZE);                      // Before file
+    memset(memory + end, 0xee, (MEMORY_SIZE - end) * WORD_SIZE);  // After file
 
     // TODO: Make this better !!
     for (size_t i = start; i < end; ++i) {
         memory[i] = swap_endianess(memory[i]);
     }
 
-    /* printf("bytes read: %ld\n", words_read); */
+    /* printf("words read: %ld\n", words_read); */
+
+    fclose(file);
 }
 
 void print_registers() {
@@ -79,7 +90,7 @@ int main() {
     Word file_end;
     read_file_to_memory(filename, file_start, file_end);
 
-    /* for (size_t i = file_start; i < file_end; ++i) { */
+    /* for (size_t i = file_start - 2; i < file_end + 2; ++i) { */
     /*     printf("FILE: 0x%04lx: 0x%04hx\n", i, memory[i]); */
     /* } */
 
@@ -96,22 +107,49 @@ int main() {
         Opcode opcode = instr >> 12;
 
         switch (opcode) {
+            // ADD+
+            case 0b0001: {
+                RegisterCode dest_reg = (instr >> 9) & BITS_LOW_3;
+                RegisterCode src_reg1 = (instr >> 6) & BITS_LOW_3;
+                Word value;
+                bool is_immediate = ARITH_IS_IMMEDIATE(instr);
+                if (!is_immediate) {
+                    // 2 bits padding
+                    uint8_t padding = (instr >> 3) & (0b11);
+                    if (padding != 0b00) {
+                        fprintf(stderr,
+                                "Expected padding 0x00 for ADD instruction "
+                                "0b0001\n");
+                        exit(ERR_MALFORMED_INSTR);
+                    }
+                    RegisterCode src_reg2 = instr & BITS_LOW_3;
+                    value = memory[registers[src_reg2]];
+                } else {
+                    Immediate5 imm = instr & BITS_LOW_5;
+                    value = static_cast<Word>(imm);
+                }
+                printf(">ADD R%d = R%d + 0x%04hx\n", dest_reg, src_reg1, value);
+                registers[dest_reg] = registers[src_reg1] + value;
+                print_registers();
+                // TODO: Update condition codes
+            }; break;
+
             // LEA+
             case 0b1110: {
-                RegisterCode reg = (instr >> 9) & 0b111;
+                RegisterCode dest_reg = (instr >> 9) & 0b111;
                 Offset9 pc_offset = instr & BITS_LOW_9;
-                /* printf(">LEA reg:0x%04hhx, pc_offset:0x%04hx\n", reg, */
+                /* printf(">LEA REG%d, pc_offset:0x%04hx\n", reg, */
                 /*        pc_offset); */
                 /* print_registers(); */
-                registers[reg] = program_counter + pc_offset;
-                /* print_registers(); */
+                registers[dest_reg] = program_counter + pc_offset;
+                print_registers();
             }; break;
 
             // TRAP
             case 0b1111: {
                 // 4 bits padding
                 uint8_t padding = (instr >> 8) & (0x0f);
-                if (padding != 0x00) {
+                if (padding != 0x0) {
                     fprintf(
                         stderr,
                         "Expected padding 0x00 for TRAP instruction 0b1111\n");
