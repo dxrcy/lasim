@@ -11,26 +11,38 @@
 #define MEMORY_SIZE 0x10000L  // Total amount of allocated WORDS in memory
 #define GP_REGISTER_COUNT 8   // Amount of general purpose registers
 
-#define BITS_LOW_3 0b111
-#define BITS_LOW_5 0x1f
-#define BITS_LOW_8 0x00ff
-#define BITS_LOW_9 0x01ff
-#define BITS_HIGH_9 0xff80
+#define BITS_LOW_3 0b0000'0000'0000'0111
+#define BITS_LOW_5 0b0000'0000'0001'1111
+#define BITS_LOW_8 0b0000'0000'1111'1111
+#define BITS_LOW_9 0b0000'0001'1111'1111
+#define BITS_HIGH_9 0b1111'1111'1000'0000
 
 #define WORD_SIZE sizeof(Word)
 
 // For `ADD` and `AND` instructions
 #define ARITH_IS_IMMEDIATE(instr) (bool)(((instr) >> 5) && 0b1)
 
-#define UNIMPLEMENTED_INSTR(instr, name) \
-    { fprintf(stderr, "Unimplemented instruction: 0b%04x: %s\n", instr, name); }
+#define EXIT(code)     \
+    {                  \
+        free_memory(); \
+        exit(code);    \
+    }
+
+#define UNIMPLEMENTED_INSTR(instr, name)                                  \
+    {                                                                     \
+        fprintf(stderr, "Unimplemented instruction: 0b%04x: %s\n", instr, \
+                name);                                                    \
+        EXIT(ERR_UNIMPLEMENTED);                                          \
+    }
+
 #define UNIMPLEMENTED_TRAP(vector, name)                                   \
     {                                                                      \
         fprintf(stderr, "Unimplemented trap vector: 0x%02x: %s\n", vector, \
                 name);                                                     \
+        EXIT(ERR_UNIMPLEMENTED);                                           \
     }
 
-typedef uint16_t Word;
+typedef uint16_t Word;  // 2 bytes
 
 typedef uint8_t RegisterCode;  // 3 bits
 typedef uint8_t Immediate5;    // 5 bits
@@ -70,27 +82,68 @@ typedef struct Registers {
     Word program_counter;
     Word stack_pointer;
     Word frame_pointer;
+    // TODO: Condition codes
 } Registers;
 
 // Exists for program lifetime, but must still be deleted before exit
+// Use `EXIT` macro to automatically free before exiting
 // Dynamically allocated due to large size
 static Word *memory = new Word[MEMORY_SIZE];
-
 static Registers registers;
 
+void free_memory();
+Word swap_endianess(const Word word);
+void read_file_to_memory(const char *const filename, Word &start, Word &end);
+void dbg_print_registers();
+bool execute_trap_instruction(const Word instr);
+bool execute_next_instrution();
+
+int main(const int argc, const char *const *const argv) {
+    if (argc != 2 || argv[1][0] == '-') {
+        fprintf(stderr, "USAGE: lc3sim [FILE]\n");
+        EXIT(ERR_ARGS);
+    }
+    const char *filename = argv[1];
+
+    Word file_start, file_end;
+    read_file_to_memory(filename, file_start, file_end);
+
+    /* for (size_t i = file_start - 2; i < file_end + 2; ++i) { */
+    /*     printf("FILE: 0x%04lx: 0x%04hx\n", i, memory[i]); */
+    /* } */
+
+    // GP registers are already initialized to 0
+    registers.program_counter = file_start;
+    registers.stack_pointer = file_end;
+    registers.frame_pointer = file_end;
+
+    // This loop is written poorly, as I will probably refactor it later.
+    while (true) {
+        const bool should_halt = execute_next_instrution();
+        if (should_halt) {
+            break;
+        }
+    }
+
+    free_memory();
+    return 0;
+}
+
+// Does not need to be called when using `EXIT` macro
 void free_memory() {
     delete[] memory;
     memory = nullptr;
 }
 
-Word swap_endianess(Word word) { return (word << 8) | (word >> 8); }
+// Swap high and low bytes of a word
+Word swap_endianess(const Word word) { return (word << 8) | (word >> 8); }
 
-void read_file_to_memory(const char *filename, Word &start, Word &end) {
-    FILE *file = fopen(filename, "rb");
+void read_file_to_memory(const char *const filename, Word &start, Word &end) {
+    FILE *const file = fopen(filename, "rb");
 
     if (file == nullptr) {
         fprintf(stderr, "Could not open file %s\n", filename);
-        exit(ERR_FILE);
+        EXIT(ERR_FILE);
     }
 
     // TODO: Handle failure
@@ -126,103 +179,42 @@ void dbg_print_registers() {
     printf("    FP  0x%04hx\n", registers.frame_pointer);
     printf("..........................\n");
     for (int reg = 0; reg < GP_REGISTER_COUNT; ++reg) {
-        Word value = registers.general_purpose[reg];
+        const Word value = registers.general_purpose[reg];
         printf("    R%d  0x%04hx  %3d\n", reg, value, value);
     }
     printf("--------------------------\n");
 }
 
 // `true` return value indicates that program should end
-bool execute_trap_instruction(Word instr) {
-    // 4 bits padding
-    uint8_t padding = (instr >> 8) & (0x0f);
-    if (padding != 0x0) {
-        fprintf(stderr, "Expected padding 0x00 for TRAP instruction 0b1111\n");
-        free_memory();
-        exit(ERR_MALFORMED_INSTR);
-    }
-
-    // May be invalid enum variant
-    // Handled in default switch branch
-    enum TrapVector trap_vector =
-        static_cast<enum TrapVector>(instr & BITS_LOW_9);
-
-    switch (trap_vector) {
-        case TRAP_GETC: {
-            UNIMPLEMENTED_TRAP(trap_vector, "GETC");
-        }; break;
-
-        case TRAP_OUT: {
-            UNIMPLEMENTED_TRAP(trap_vector, "OUT");
-        }; break;
-
-        case TRAP_PUTS: {
-            Word *str = &memory[registers.general_purpose[0]];
-            for (Word ch; (ch = str[0]) != 0x0000; ++str) {
-                if (ch & BITS_HIGH_9) {
-                    fprintf(stderr,
-                            "String contains non-ASCII characters, "
-                            "which are not supported.");
-                    free_memory();
-                    exit(ERR_UNIMPLEMENTED);
-                }
-                printf("%c", ch);
-            }
-        } break;
-
-        case TRAP_IN: {
-            UNIMPLEMENTED_TRAP(trap_vector, "IN");
-        }; break;
-
-        case TRAP_PUTSP: {
-            UNIMPLEMENTED_TRAP(trap_vector, "PUTSP");
-        }; break;
-
-        case TRAP_HALT: {
-            return true;
-        }; break;
-
-        default:
-            fprintf(stderr, "Invalid trap vector 0x%02x\n", trap_vector);
-            free_memory();
-            exit(ERR_MALFORMED_INSTR);
-    }
-
-    return false;
-}
-
-// `true` return value indicates that program should end
 bool execute_next_instrution() {
-    Word instr = memory[registers.program_counter];
+    const Word instr = memory[registers.program_counter];
     ++registers.program_counter;
 
     /* printf("INSTR: 0x%04x  %16b\n", instr, instr); */
 
     // May be invalid enum variant
     // Handled in default switch branch
-    Opcode opcode = static_cast<Opcode>(instr >> 12);
+    const Opcode opcode = static_cast<Opcode>(instr >> 12);
 
     switch (opcode) {
         // ADD+
         case OPCODE_ADD: {
-            RegisterCode dest_reg = (instr >> 9) & BITS_LOW_3;
-            RegisterCode src_reg1 = (instr >> 6) & BITS_LOW_3;
+            const RegisterCode dest_reg = (instr >> 9) & BITS_LOW_3;
+            const RegisterCode src_reg1 = (instr >> 6) & BITS_LOW_3;
             Word value;
-            bool is_immediate = ARITH_IS_IMMEDIATE(instr);
-            if (!is_immediate) {
+            if (!ARITH_IS_IMMEDIATE(instr)) {
                 // 2 bits padding
-                uint8_t padding = (instr >> 3) & (0b11);
+                const uint8_t padding = (instr >> 3) & (0b11);
                 if (padding != 0b00) {
                     fprintf(stderr,
                             "Expected padding 0x00 for ADD instruction "
                             "0b0001\n");
-                    free_memory();
-                    exit(ERR_MALFORMED_INSTR);
+                    EXIT(ERR_MALFORMED_INSTR);
                 }
-                RegisterCode src_reg2 = instr & BITS_LOW_3;
+                const RegisterCode src_reg2 = instr & BITS_LOW_3;
                 value = memory[registers.general_purpose[src_reg2]];
             } else {
-                Immediate5 imm = instr & BITS_LOW_5;
+                const Immediate5 imm = instr & BITS_LOW_5;
                 value = static_cast<Word>(imm);
             }
             printf(">ADD R%d = R%d + 0x%04hx\n", dest_reg, src_reg1, value);
@@ -269,8 +261,8 @@ bool execute_next_instrution() {
 
         // LEA+
         case OPCODE_LEA: {
-            RegisterCode dest_reg = (instr >> 9) & 0b111;
-            Offset9 pc_offset = instr & BITS_LOW_9;
+            const RegisterCode dest_reg = (instr >> 9) & 0b111;
+            const Offset9 pc_offset = instr & BITS_LOW_9;
             /* printf(">LEA REG%d, pc_offset:0x%04hx\n", reg, */
             /*        pc_offset); */
             /* print_registers(); */
@@ -309,47 +301,70 @@ bool execute_next_instrution() {
         // (reserved)
         case OPCODE_RESERVED:
             fprintf(stderr, "Invalid reserved opcode: 0x%04x\n", opcode);
-            free_memory();
-            exit(ERR_MALFORMED_INSTR);
+            EXIT(ERR_MALFORMED_INSTR);
             break;
 
         // Invalid enum variant
         default:
             fprintf(stderr, "Invalid opcode: 0x%04x\n", opcode);
-            free_memory();
-            exit(ERR_MALFORMED_INSTR);
+            EXIT(ERR_MALFORMED_INSTR);
     }
 
     return false;
 }
 
-int main(const int argc, const char *const *const argv) {
-    if (argc != 2 || argv[1][0] == '-') {
-        fprintf(stderr, "USAGE: lc3sim [FILE]\n");
-        exit(ERR_ARGS);
-    }
-    const char *filename = argv[1];
-
-    Word file_start, file_end;
-    read_file_to_memory(filename, file_start, file_end);
-
-    /* for (size_t i = file_start - 2; i < file_end + 2; ++i) { */
-    /*     printf("FILE: 0x%04lx: 0x%04hx\n", i, memory[i]); */
-    /* } */
-
-    // GP registers are already initialized to 0
-    registers.program_counter = file_start;
-    registers.stack_pointer = file_end;
-    registers.frame_pointer = file_end;
-
-    // This loop is written poorly, as I will probably refactor it later.
-    while (true) {
-        bool should_halt = execute_next_instrution();
-        if (should_halt) {
-            break;
-        }
+// `true` return value indicates that program should end
+bool execute_trap_instruction(const Word instr) {
+    // 4 bits padding
+    const uint8_t padding = (instr >> 8) & (0x0f);
+    if (padding != 0x0) {
+        fprintf(stderr, "Expected padding 0x00 for TRAP instruction 0b1111\n");
+        EXIT(ERR_MALFORMED_INSTR);
     }
 
-    free_memory();
-    return 0;
+    // May be invalid enum variant
+    // Handled in default switch branch
+    const enum TrapVector trap_vector =
+        static_cast<enum TrapVector>(instr & BITS_LOW_9);
+
+    switch (trap_vector) {
+        case TRAP_GETC: {
+            UNIMPLEMENTED_TRAP(trap_vector, "GETC");
+        }; break;
+
+        case TRAP_OUT: {
+            UNIMPLEMENTED_TRAP(trap_vector, "OUT");
+        }; break;
+
+        case TRAP_PUTS: {
+            const Word *str = &memory[registers.general_purpose[0]];
+            for (Word ch; (ch = str[0]) != 0x0000; ++str) {
+                if (ch & BITS_HIGH_9) {
+                    fprintf(stderr,
+                            "String contains non-ASCII characters, "
+                            "which are not supported.");
+                    EXIT(ERR_UNIMPLEMENTED);
+                }
+                printf("%c", ch);
+            }
+        } break;
+
+        case TRAP_IN: {
+            UNIMPLEMENTED_TRAP(trap_vector, "IN");
+        }; break;
+
+        case TRAP_PUTSP: {
+            UNIMPLEMENTED_TRAP(trap_vector, "PUTSP");
+        }; break;
+
+        case TRAP_HALT: {
+            return true;
+        }; break;
+
+        default:
+            fprintf(stderr, "Invalid trap vector 0x%02x\n", trap_vector);
+            EXIT(ERR_MALFORMED_INSTR);
+    }
+
+    return false;
 }
