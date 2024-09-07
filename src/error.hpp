@@ -17,7 +17,7 @@ typedef enum Error {
     // Ok
     ERR_OK = 0x00,
     // CLI arguments
-    ERR_CLI_ARGUMENTS = 0x10,
+    ERR_CLI = 0x10,
     // File operations
     ERR_FILE_OPEN = 0x20,
     ERR_FILE_READ = 0x21,
