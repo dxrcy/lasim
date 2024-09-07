@@ -60,12 +60,11 @@ void execute() {
     registers.stack_pointer = memory_file_bounds.end;
     registers.frame_pointer = memory_file_bounds.end;
 
-    // This loop is written poorly, as I will probably refactor it later.
-    while (true) {
-        const bool should_halt = execute_next_instrution();
-        if (should_halt) {
-            break;
-        }
+    // Loop until `true` is returned, indicating a HALT (TRAP 0x25)
+    while (!execute_next_instrution());
+
+    if (!stdout_on_new_line) {
+        printf("\n");
     }
 
     free_memory();

@@ -10,16 +10,24 @@ An [LC-3 assembler](https://github.com/chiragsakhuja/lc3tools) must be installed
 if you wish to assemble object files.
 
 ```sh
+# Download
 git clone https://github.com/dxrcy/lc3sim lc3sim
 cd lc3sim
 
+# Compile
 make
 
-lc3as example/example.asm
-./lc3sim example/example.obj
+# Assemble and execute examples/hello_world.asm
+make example
+
+# Assemble and execute a specific file
+lc3as examples/count_bits.asm
+./lc3sim examples/count_bits.obj
 ```
 
-# More Examples
+# Examples
+
+See `/examples/`
 
 More LC-3 programs can be found
 [here](https://github.com/Nguyen-Nhat-Tuan-Minh/LC_3-Assembly-Program).

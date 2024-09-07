@@ -18,7 +18,5 @@ int main(const int argc, const char *const *const argv) {
 
     execute();
 
-    printf("\n");
-
     return 0;
 }
