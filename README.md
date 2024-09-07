@@ -55,3 +55,5 @@ This project only uses the following C++ features (to keep it simple):
 - Create assembler
 - Add debugger mode
 
+- Move all error-reporting to a function in `main.cpp`
+
