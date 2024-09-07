@@ -32,6 +32,9 @@
 #define bits_9_11(word) (((word) >> 9) & BITMASK_LOW_3)
 #define bits_12_15(word) (((word) >> 12) & BITMASK_LOW_4)
 
+#define bits_high(word) (((word) >> 8) & BITMASK_LOW_8)
+#define bits_low(word) ((word) & BITMASK_LOW_8)
+
 #define to_signed_word(value, size) \
     (sign_extend(static_cast<SignedWord>(value), size))
 
@@ -43,26 +46,27 @@
 #define CONDITION_ZERO 0b010
 #define CONDITION_POSITIVE 0b001
 
-void execute();
-bool execute_next_instrution(void);
-bool execute_trap_instruction(const Word instr);
+Error execute(void);
+Error execute_next_instrution(bool &do_halt);
+Error execute_trap_instruction(const Word instr, bool &do_halt);
 void _dbg_print_registers(void);
 Word &memory_get(Word addr);
 SignedWord sign_extend(SignedWord value, const size_t size);
 void set_condition_codes(const Word result);
-void print_char(const char ch);
-void print_on_new_line();
+Error print_char(const char ch);
+void print_on_new_line(void);
 static char *halfbyte_string(const Word word);
 
-void execute() {
+Error execute() {
     // GP and condition registers are already initialized to 0
     registers.program_counter = memory_file_bounds.start;
     registers.stack_pointer = memory_file_bounds.end;
     registers.frame_pointer = memory_file_bounds.end;
 
     // Loop until `true` is returned, indicating a HALT (TRAP 0x25)
-    while (!execute_next_instrution()) {
-        continue;
+    bool do_halt = false;
+    while (!do_halt) {
+        RETURN_IF_ERR(execute_next_instrution(do_halt));
     }
 
     if (!stdout_on_new_line) {
@@ -70,10 +74,11 @@ void execute() {
     }
 
     free_memory();
+    return ERR_OK;
 }
 
 // `true` return value indicates that program should end
-bool execute_next_instrution() {
+Error execute_next_instrution(bool &do_halt) {
     const Word instr = memory_get(registers.program_counter);
     ++registers.program_counter;
 
@@ -342,26 +347,16 @@ bool execute_next_instrution() {
         }; break;
 
         // TRAP
-        case OPCODE_TRAP:
-            if (execute_trap_instruction(instr)) {
-                return true;
-            }
-            break;
+        case OPCODE_TRAP: {
+            RETURN_IF_ERR(execute_trap_instruction(instr, do_halt));
+        }; break;
 
         // RTI (supervisor-only)
         case OPCODE_RTI:
             fprintf(stderr,
                     "Invalid use of RTI opcode: 0b%s in non-supervisor mode\n",
                     halfbyte_string(OPCODE_RTI));
-            exit(ERR_MALFORMED_INSTR);
-            break;
-
-        // (reserved)
-        case OPCODE_RESERVED:
-            /* _dbg_print_registers(); */
-            fprintf(stderr, "Invalid reserved opcode: 0b%s\n",
-                    halfbyte_string(OPCODE_RESERVED));
-            exit(ERR_MALFORMED_INSTR);
+            exit(ERR_UNAUTHORIZED_INSTR);
             break;
 
         // Invalid enum variant
@@ -371,11 +366,10 @@ bool execute_next_instrution() {
             exit(ERR_MALFORMED_INSTR);
     }
 
-    return false;
+    return ERR_OK;
 }
 
-// `true` return value indicates that program should end
-bool execute_trap_instruction(const Word instr) {
+Error execute_trap_instruction(const Word instr, bool &do_halt) {
     // 4 bits padding
     const uint8_t padding = bits_8_12(instr);
     if (padding != 0b0000) {
@@ -404,7 +398,7 @@ bool execute_trap_instruction(const Word instr) {
             const char input = getchar() & BITMASK_LOW_8;  // Zero high 8 bits
             tty_restore();
             // Echo, follow with newline if not already printed
-            print_char(input);
+            IGNORE_ERR(print_char(input));
             if (!stdout_on_new_line) {
                 printf("\n");
             }
@@ -414,44 +408,42 @@ bool execute_trap_instruction(const Word instr) {
         case TRAP_OUT: {
             const Word word = registers.general_purpose[0];
             const char ch = static_cast<char>(word);
-            print_char(ch);
+            RETURN_IF_ERR(print_char(ch));
         }; break;
 
         case TRAP_PUTS: {
             print_on_new_line();
-            const Word *str = &memory_get(registers.general_purpose[0]);
-            for (Word ch; (ch = str[0]) != 0x0000; ++str) {
-                // If a bit not between [0,7] is set
-                if (ch & ~BITMASK_LOW_7) {
-                    fprintf(stderr,
-                            "String contains non-ASCII characters, "
-                            "which are not supported.");
-                    exit(ERR_UNIMPLEMENTED);
-                }
-                print_char(ch);
+            for (Word i = registers.general_purpose[0];; ++i) {
+                const Word ch = memory_get(i);
+                if (ch == 0x0000) break;
+                RETURN_IF_ERR(print_char(ch));
             }
         } break;
 
         case TRAP_PUTSP: {
             print_on_new_line();
-            const Word *const str_words =
-                &memory_get(registers.general_purpose[0]);
-            const char *str = reinterpret_cast<const char *>(str_words);
-            for (Word ch; (ch = str[0]) != 0x00; ++str) {
-                print_char(ch);
+            for (Word i = registers.general_purpose[0];; ++i) {
+                const Word word = memory_get(i);
+                const uint8_t high = bits_high(word);
+                const uint8_t low = bits_low(word);
+                if (high == 0x0000) break;
+                RETURN_IF_ERR(print_char(high));
+                if (low == 0x0000) break;
+                RETURN_IF_ERR(print_char(low));
             }
         }; break;
 
         case TRAP_HALT:
-            return true;
+            do_halt = true;
+            return ERR_OK;
             break;
 
         default:
             fprintf(stderr, "Invalid trap vector 0x%02x\n", trap_vector);
-            exit(ERR_MALFORMED_INSTR);
+            exit(ERR_MALFORMED_TRAP);
     }
 
-    return false;
+    return ERR_OK;
 }
 
 void _dbg_print_registers() {
@@ -472,6 +464,7 @@ void _dbg_print_registers() {
     printf("--------------------------\n");
 }
 
+// TODO: Return Error
 // Check memory address, then return reference to memory value
 Word &memory_get(Word addr) {
     if (addr < memory_file_bounds.start) {
@@ -502,13 +495,21 @@ void set_condition_codes(const Word result) {
     registers.condition = (is_negative << 2) | (is_zero << 1) | is_positive;
 }
 
-void print_char(const char ch) {
+Error print_char(const char ch) {
     if (ch == '\r') {
         printf("\n");
     } else {
         printf("%c", ch);
     }
+    // If a bit not between [0,7] is set
+    if (ch & ~BITMASK_LOW_7) {
+        fprintf(stderr,
+                "String contains non-ASCII characters, "
+                "which are not supported.");
+        exit(ERR_UNIMPLEMENTED);
+    }
     stdout_on_new_line = ch == '\n' || ch == '\r';
+    return ERR_OK;
 }
 
 void print_on_new_line() {

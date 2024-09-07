@@ -19,7 +19,6 @@ run: main
 
 watch:
 	@clear
-	@$(MAKE) --no-print-directory run
 	@reflex --decoration=none -r 'src/.*|.*\.asm' -s -- zsh -c \
 		'clear; sleep 0.2; $(MAKE) --no-print-directory run'
 
