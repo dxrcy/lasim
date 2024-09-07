@@ -17,14 +17,6 @@ void tty_nobuffer_noecho() {
     tty_apply();
 }
 
-// TODO: This is no longer being used, it can be deleted
-void tty_nobuffer_yesecho() {
-    tty_get();
-    tty.c_lflag &= ~ICANON;
-    tty.c_lflag |= ECHO;
-    tty_apply();
-}
-
 void tty_restore() {
     tty.c_lflag |= ICANON;
     tty.c_lflag |= ECHO;

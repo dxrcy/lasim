@@ -4,17 +4,23 @@
 #include <cstdint>
 #include <cstdlib>
 
-#define ERR_CLI_ARGUMENTS 0x10
-#define ERR_FILE_READ 0x20
-#define ERR_MALFORMED_INSTR 0x30
-#define ERR_MALFORMED_PADDING 0x31
-#define ERR_BAD_ADDRESS 0x40
-#define ERR_UNIMPLEMENTED 0x70
-
 #define MEMORY_SIZE 0x10000L  // Total amount of allocated WORDS in memory
 #define GP_REGISTER_COUNT 8   // Amount of general purpose registers
 
 #define WORD_SIZE sizeof(Word)
+
+typedef enum Error {
+    ERR_OK = 0x00,
+    ERR_CLI_ARGUMENTS = 0x10,
+    ERR_FILE_OPEN = 0x20,
+    ERR_FILE_READ = 0x21,
+    ERR_FILE_TOO_SHORT = 0x22,
+    ERR_FILE_TOO_LONG = 0x23,
+    ERR_MALFORMED_INSTR = 0x30,
+    ERR_MALFORMED_PADDING = 0x31,
+    ERR_BAD_ADDRESS = 0x40,
+    ERR_UNIMPLEMENTED = 0x70,
+} Error;
 
 typedef uint16_t Word;       // 2 bytes
 typedef int16_t SignedWord;  // 2 bytes

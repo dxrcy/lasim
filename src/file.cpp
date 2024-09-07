@@ -10,27 +10,48 @@
 // Swap high and low bytes of a word
 #define swap_endianess(word) (((word) << 8) | ((word) >> 8))
 
-void read_file_to_memory(const char *const filename) {
+Error read_file_to_memory(const char *const filename) {
     FILE *const file = fopen(filename, "rb");
+    size_t words_read;
 
     if (file == nullptr) {
         fprintf(stderr, "Could not open file %s\n", filename);
-        exit(ERR_FILE_READ);
+        exit(ERR_FILE_OPEN);
     }
 
     // TODO: Handle failure
     Word origin;
-    fread(reinterpret_cast<char *>(&origin), WORD_SIZE, 1, file);
+    words_read = fread(reinterpret_cast<char *>(&origin), WORD_SIZE, 1, file);
+
+    if (ferror(file)) {
+        fprintf(stderr, "Could not read file %s\n", filename);
+        exit(ERR_FILE_READ);
+    }
+    if (words_read < 1) {
+        fprintf(stderr, "File is too short %s\n", filename);
+        exit(ERR_FILE_TOO_SHORT);
+    }
 
     Word start = swap_endianess(origin);
 
     /* printf("origin: 0x%04x\n", start); */
 
-    // TODO: Handle failure
     char *const memory_at_file = reinterpret_cast<char *>(memory + start);
     const size_t max_file_bytes = (MEMORY_SIZE - start) * WORD_SIZE;
-    const size_t words_read =
-        fread(memory_at_file, WORD_SIZE, max_file_bytes, file);
+    words_read = fread(memory_at_file, WORD_SIZE, max_file_bytes, file);
+
+    if (ferror(file)) {
+        fprintf(stderr, "Could not read file %s\n", filename);
+        exit(ERR_FILE_READ);
+    }
+    if (words_read < 1) {
+        fprintf(stderr, "File is too short %s\n", filename);
+        exit(ERR_FILE_TOO_SHORT);
+    }
+    if (!feof(file)) {
+        fprintf(stderr, "File is too long %s\n", filename);
+        exit(ERR_FILE_TOO_LONG);
+    }
 
     Word end = start + words_read;
 
@@ -50,6 +71,8 @@ void read_file_to_memory(const char *const filename) {
     memory_file_bounds.end = end;
 
     fclose(file);
+
+    return ERR_OK;
 }
 
 #endif
