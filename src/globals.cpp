@@ -23,4 +23,6 @@ void free_memory() {
     memory = nullptr;
 }
 
+static bool stdout_on_new_line = true;  // Count start of stream as new line
+
 #endif

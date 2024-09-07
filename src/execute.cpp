@@ -47,6 +47,7 @@ void _dbg_print_registers(void);
 SignedWord sign_extend(SignedWord value, const size_t size);
 void set_condition_codes(const Word result);
 void print_char(const char ch);
+void print_on_new_line();
 static char *halfbyte_string(const Word word);
 void execute(const Word file_start, const Word file_end);
 bool execute_next_instrution(void);
@@ -392,11 +393,16 @@ bool execute_trap_instruction(const Word instr) {
         }; break;
 
         case TRAP_IN: {
+            print_on_new_line();
             printf("Input a character> ");
-            tty_nobuffer_yesecho();                        // Enable echo
+            tty_nobuffer_noecho();
             const char input = getchar() & BITMASK_LOW_8;  // Zero high 8 bits
             tty_restore();
-            printf("\n");
+            // Echo, follow with newline if not already printed
+            print_char(input);
+            if (!stdout_on_new_line) {
+                printf("\n");
+            }
             registers.general_purpose[0] = input;
         }; break;
 
@@ -407,6 +413,7 @@ bool execute_trap_instruction(const Word instr) {
         }; break;
 
         case TRAP_PUTS: {
+            print_on_new_line();
             const Word *str = &memory[registers.general_purpose[0]];
             for (Word ch; (ch = str[0]) != 0x0000; ++str) {
                 // If a bit not between [0,7] is set
@@ -421,6 +428,7 @@ bool execute_trap_instruction(const Word instr) {
         } break;
 
         case TRAP_PUTSP: {
+            print_on_new_line();
             const Word *const str_words = &memory[registers.general_purpose[0]];
             const char *str = reinterpret_cast<const char *>(str_words);
             for (Word ch; (ch = str[0]) != 0x00; ++str) {
@@ -479,8 +487,17 @@ void set_condition_codes(const Word result) {
 void print_char(const char ch) {
     if (ch == '\r') {
         printf("\n");
+    } else {
+        printf("%c", ch);
     }
-    printf("%c", ch);
+    stdout_on_new_line = ch == '\n' || ch == '\r';
+}
+
+void print_on_new_line() {
+    if (!stdout_on_new_line) {
+        printf("\n");
+        stdout_on_new_line = true;
+    }
 }
 
 // Since %b printf format specifier is not ISO-compliant
