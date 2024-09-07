@@ -19,6 +19,7 @@
 
 #define bit_5(instr) (((instr) >> 5) & 1)
 #define bit_11(instr) (((instr) >> 11) & 1)
+#define bit_15(instr) (((instr) >> 15) & 1)
 
 #define bits_0_2(word) ((word) & BITMASK_LOW_3)
 #define bits_0_5(word) ((word) & BITMASK_LOW_5)
@@ -29,7 +30,7 @@
 #define bits_8_12(word) (((word) >> 8) & BITMASK_LOW_4)
 #define bits_9_10(word) (((word) >> 9) & BITMASK_LOW_2)
 #define bits_9_11(word) (((word) >> 9) & BITMASK_LOW_3)
-#define bits_12_15(word) ((word) >> 12)
+#define bits_12_15(word) ((word) >> 12 & BITMASK_LOW_4)
 
 #define to_signed_word(value, size) \
     (sign_extend(static_cast<SignedWord>(value), size))
@@ -124,7 +125,7 @@ bool execute_next_instrution() {
 
             registers.general_purpose[dest_reg] = result;
 
-            /* dbg_print_registers(); */
+            /* _dbg_print_registers(); */
 
             set_condition_codes(result);
         }; break;
@@ -146,16 +147,17 @@ bool execute_next_instrution() {
                     exit(ERR_MALFORMED_PADDING);
                 }
                 const Register src_reg_b = bits_0_2(instr);
-                value_b = memory[registers.general_purpose[src_reg_b]];
+                value_b = registers.general_purpose[src_reg_b];
             } else {
                 value_b = static_cast<SignedWord>(bits_0_5(instr));
             }
 
-            /* printf(">AND R%d = R%d & 0x%04hx\n", dest_reg, src_reg_a,
-             * value_b);
-             */
-
             const Word result = value_a & value_b;
+
+            /* printf(">AND R%d = (R%d) 0x%04hx & 0x%04hx = 0x%04hx\n",
+             * dest_reg, */
+            /*        src_reg_a, value_a, value_b, result); */
+
             registers.general_purpose[dest_reg] = result;
 
             /* dbg_print_registers(); */
@@ -203,6 +205,8 @@ bool execute_next_instrution() {
             /*        registers.condition, condition & registers.condition, */
             /*        (condition & registers.condition) != 0b000); */
             /* printf("PCOffset: 0x%04x  %d\n", offset, offset); */
+            /*  */
+            /* _dbg_print_registers(); */
 
             // If any bits of the condition codes match
             if ((condition & registers.condition) != 0b000) {
@@ -348,6 +352,7 @@ bool execute_next_instrution() {
 
         // (reserved)
         case OPCODE_RESERVED:
+            /* _dbg_print_registers(); */
             fprintf(stderr, "Invalid reserved opcode: 0b%s\n",
                     halfbyte_string(OPCODE_RESERVED));
             exit(ERR_MALFORMED_INSTR);
@@ -391,6 +396,7 @@ bool execute_trap_instruction(const Word instr) {
             tty_nobuffer_yesecho();                        // Enable echo
             const char input = getchar() & BITMASK_LOW_8;  // Zero high 8 bits
             tty_restore();
+            printf("\n");
             registers.general_purpose[0] = input;
         }; break;
 
@@ -442,8 +448,8 @@ void _dbg_print_registers() {
     printf("..........................\n");
     printf("    N=%x  Z=%x  P=%x\n",
            (registers.condition >> 2),        // Negative
-           (registers.condition >> 2) & 0b1,  // Zero
-           (registers.condition >> 2) & 0b1   // Positive
+           (registers.condition >> 1) & 0b1,  // Zero
+           (registers.condition) & 0b1        // Positive
     );
     printf("..........................\n");
     for (int reg = 0; reg < GP_REGISTER_COUNT; ++reg) {
@@ -463,7 +469,7 @@ SignedWord sign_extend(SignedWord value, const size_t size) {
 }
 
 void set_condition_codes(const Word result) {
-    const bool is_negative = result >> 15 == 1;
+    const bool is_negative = bit_15(result) == 0b1;
     const bool is_zero = result == 0;
     const bool is_positive = !is_negative && !is_zero;
     // Set low 3 bits as N,Z,P

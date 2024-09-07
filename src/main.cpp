@@ -19,5 +19,7 @@ int main(const int argc, const char *const *const argv) {
 
     execute(file_start, file_end);
 
+    printf("\n");
+
     return 0;
 }

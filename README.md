@@ -31,3 +31,8 @@ More LC-3 programs can be found
 - `new` / `delete`
 - Cast functions
 
+# TODO
+
+- Check bounds before memory/register access
+- Create assembler
+
