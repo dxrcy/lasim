@@ -27,7 +27,7 @@ make example
 
 # Assemble and execute a specific file
 lc3as examples/checkerboard.asm
-./lc3 examples/checkerboard.obj
+./lc3 -x examples/checkerboard.obj
 ```
 
 # Examples
