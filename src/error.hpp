@@ -27,7 +27,8 @@ typedef enum Error {
     ERR_MALFORMED_TRAP = 0x32,      // Invalid/unsupported trap vector
     ERR_UNAUTHORIZED_INSTR = 0x33,  // RTI (not in supervisor mode)
     // Runtime error
-    ERR_BAD_ADDRESS = 0x40,  // Trying to load from unallocated memory
+    ERR_ADDRESS_TOO_LOW = 0x40,   // Trying to load from memory before origin
+    ERR_ADDRESS_TOO_HIGH = 0x40,  // Trying to load from memory after file end
     // Unimplemented
     ERR_UNIMPLEMENTED = 0x70,
 } Error;

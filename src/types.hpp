@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <cstdlib>
 
-#define MEMORY_SIZE 0x10000L  // Total amount of allocated WORDS in memory
+#define MEMORY_SIZE 0x10000L  // Total amount of WORDS in ENTIRE memory
 #define GP_REGISTER_COUNT 8   // Amount of general purpose registers
 
 #define CONDITION_NEGATIVE 0b100
