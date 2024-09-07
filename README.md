@@ -16,8 +16,8 @@ Dependencies:
 
 ```sh
 # Download
-git clone https://github.com/dxrcy/lc3sim lc3sim
-cd lc3sim
+git clone https://github.com/dxrcy/lc3 lc3
+cd lc3
 
 # Compile
 make
@@ -27,7 +27,7 @@ make example
 
 # Assemble and execute a specific file
 lc3as examples/checkerboard.asm
-./lc3sim examples/checkerboard.obj
+./lc3 examples/checkerboard.obj
 ```
 
 # Examples

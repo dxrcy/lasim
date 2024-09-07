@@ -1,7 +1,7 @@
 CC=g++
 CFLAGS=-Wall -Wpedantic -Wextra
 
-TARGET=lc3sim
+TARGET=lc3
 
 .PHONY: example run watch
 
@@ -10,12 +10,12 @@ main:
 
 example: main
 	@lc3as examples/hello_world.asm >/dev/null
-	@./lc3sim examples/hello_world.obj
+	@./lc3 -x examples/hello_world.obj
 
 name=test
 run: main
 	@lc3as examples/$(name).asm >/dev/null
-	@./lc3sim examples/$(name).obj
+	@./lc3 -x examples/$(name).obj
 
 watch:
 	@clear
