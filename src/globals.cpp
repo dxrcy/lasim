@@ -15,7 +15,7 @@
 //  - Exists for program lifetime, but must still be deleted before exit
 //  - Use `exit` macro to automatically free before exiting
 //  - Dynamically allocated due to large size
-// Do not access directly in program! Use `memory_get` in `execute.cpp`
+// !! Do not access memory without checking first with `memory_check(addr)`
 static Word *memory = new Word[MEMORY_SIZE];
 
 static Registers registers;

@@ -17,7 +17,7 @@ Error read_file_to_memory(const char *const filename) {
 
     if (file == nullptr) {
         fprintf(stderr, "Could not open file %s\n", filename);
-        exit(ERR_FILE_OPEN);
+        return ERR_FILE_OPEN;
     }
 
     // TODO: Handle failure
@@ -26,11 +26,11 @@ Error read_file_to_memory(const char *const filename) {
 
     if (ferror(file)) {
         fprintf(stderr, "Could not read file %s\n", filename);
-        exit(ERR_FILE_READ);
+        return ERR_FILE_READ;
     }
     if (words_read < 1) {
         fprintf(stderr, "File is too short %s\n", filename);
-        exit(ERR_FILE_TOO_SHORT);
+        return ERR_FILE_TOO_SHORT;
     }
 
     Word start = swap_endianess(origin);
@@ -43,15 +43,15 @@ Error read_file_to_memory(const char *const filename) {
 
     if (ferror(file)) {
         fprintf(stderr, "Could not read file %s\n", filename);
-        exit(ERR_FILE_READ);
+        return ERR_FILE_READ;
     }
     if (words_read < 1) {
         fprintf(stderr, "File is too short %s\n", filename);
-        exit(ERR_FILE_TOO_SHORT);
+        return ERR_FILE_TOO_SHORT;
     }
     if (!feof(file)) {
         fprintf(stderr, "File is too long %s\n", filename);
-        exit(ERR_FILE_TOO_LONG);
+        return ERR_FILE_TOO_LONG;
     }
 
     Word end = start + words_read;

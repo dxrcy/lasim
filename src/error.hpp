@@ -4,11 +4,13 @@
 // Maybe this can print some log in debug mode ?
 #define IGNORE_ERR(result) result
 
-#define RETURN_IF_ERR(result)   \
-    {                           \
-        if (result != ERR_OK) { \
-            return result;      \
-        }                       \
+#define RETURN_IF_ERR(result)                \
+    {                                        \
+        /* `input` may be a function call */ \
+        const Error error = (result);        \
+        if (error != ERR_OK) {               \
+            return error;                    \
+        }                                    \
     }
 
 typedef enum Error {

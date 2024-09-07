@@ -10,9 +10,8 @@ int main(const int argc, const char *const *const argv) {
 
     const char *filename = argv[1];
 
-    read_file_to_memory(filename);
-
-    execute();
+    RETURN_IF_ERR(read_file_to_memory(filename));
+    RETURN_IF_ERR(execute());
 
     return 0;
 }

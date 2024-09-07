@@ -102,13 +102,13 @@ Error execute_next_instrution(bool &do_halt) {
         fprintf(stderr,
                 "DEBUG: Attempt to execute sentinal word 0xdddd."
                 " This is probably a bug\n");
-        exit(ERR_ADDRESS_TOO_LOW);
+        return ERR_ADDRESS_TOO_LOW;
     }
     if (instr == 0xeeee) {
         fprintf(stderr,
                 "DEBUG: Attempt to execute sentinal word 0xeeee."
                 " This is probably a bug\n");
-        exit(ERR_ADDRESS_TOO_HIGH);
+        return ERR_ADDRESS_TOO_HIGH;
     }
 
     // May be invalid enum variant
@@ -133,7 +133,7 @@ Error execute_next_instrution(bool &do_halt) {
                 if (padding != 0b00) {
                     fprintf(stderr,
                             "Expected padding 0b00 for ADD instruction\n");
-                    exit(ERR_MALFORMED_PADDING);
+                    return ERR_MALFORMED_PADDING;
                 }
                 const Register src_reg_b = bits_0_2(instr);
                 value_b = static_cast<SignedWord>(
@@ -168,7 +168,7 @@ Error execute_next_instrution(bool &do_halt) {
                 if (padding != 0b00) {
                     fprintf(stderr,
                             "Expected padding 0b00 for AND instruction\n");
-                    exit(ERR_MALFORMED_PADDING);
+                    return ERR_MALFORMED_PADDING;
                 }
                 const Register src_reg_b = bits_0_2(instr);
                 value_b = registers.general_purpose[src_reg_b];
@@ -199,7 +199,7 @@ Error execute_next_instrution(bool &do_halt) {
             if (padding != BITMASK_LOW_5) {
                 fprintf(stderr,
                         "Expected padding 0x11111 for NOT instruction\n");
-                exit(ERR_MALFORMED_PADDING);
+                return ERR_MALFORMED_PADDING;
             }
 
             /* printf(">NOT R%d = NOT R%d\n", dest_reg, src_reg1); */
@@ -246,7 +246,7 @@ Error execute_next_instrution(bool &do_halt) {
             if (padding_1 != 0b000) {
                 fprintf(stderr,
                         "Expected padding 0b000 for JMP/RET instruction\n");
-                exit(ERR_MALFORMED_PADDING);
+                return ERR_MALFORMED_PADDING;
             }
             // 6 bits padding
             // After base register
@@ -254,7 +254,7 @@ Error execute_next_instrution(bool &do_halt) {
             if (padding_2 != 0b000000) {
                 fprintf(stderr,
                         "Expected padding 0b000000 for JMP/RET instruction\n");
-                exit(ERR_MALFORMED_PADDING);
+                return ERR_MALFORMED_PADDING;
             }
             const Register base_reg = bits_6_8(instr);
             const Word base = registers.general_purpose[base_reg];
@@ -279,7 +279,7 @@ Error execute_next_instrution(bool &do_halt) {
                 if (padding != 0b00) {
                     fprintf(stderr,
                             "Expected padding 0b00 for JSRR instruction\n");
-                    exit(ERR_MALFORMED_PADDING);
+                    return ERR_MALFORMED_PADDING;
                 }
                 const Register base_reg = bits_6_8(instr);
                 const Word base = registers.general_purpose[base_reg];
@@ -386,14 +386,14 @@ Error execute_next_instrution(bool &do_halt) {
             fprintf(stderr,
                     "Invalid use of RTI opcode: 0b%s in non-supervisor mode\n",
                     halfbyte_string(OPCODE_RTI));
-            exit(ERR_UNAUTHORIZED_INSTR);
+            return ERR_UNAUTHORIZED_INSTR;
             break;
 
         // Invalid enum variant
         default:
             fprintf(stderr, "Invalid opcode: 0b%s (0x%04x)\n",
                     halfbyte_string(opcode), opcode);
-            exit(ERR_MALFORMED_INSTR);
+            return ERR_MALFORMED_INSTR;
     }
 
     return ERR_OK;
@@ -404,7 +404,7 @@ Error execute_trap_instruction(const Word instr, bool &do_halt) {
     const uint8_t padding = bits_8_12(instr);
     if (padding != 0b0000) {
         fprintf(stderr, "Expected padding 0x00 for TRAP instruction\n");
-        exit(ERR_MALFORMED_PADDING);
+        return ERR_MALFORMED_PADDING;
     }
 
     // May be invalid enum variant
@@ -474,7 +474,7 @@ Error execute_trap_instruction(const Word instr, bool &do_halt) {
 
         default:
             fprintf(stderr, "Invalid trap vector 0x%02x\n", trap_vector);
-            exit(ERR_MALFORMED_TRAP);
+            return ERR_MALFORMED_TRAP;
     }
 
     return ERR_OK;
@@ -526,7 +526,7 @@ Error print_char(const char ch) {
         fprintf(stderr,
                 "String contains non-ASCII characters, "
                 "which are not supported.");
-        exit(ERR_UNIMPLEMENTED);
+        return ERR_UNIMPLEMENTED;
     }
     stdout_on_new_line = ch == '\n' || ch == '\r';
     return ERR_OK;
