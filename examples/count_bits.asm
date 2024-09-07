@@ -15,61 +15,61 @@
 
 .ORIG x3000
 
-MAIN
-    LD R1, NEGASCII
-    IN
-    ADD R1, R1, R0      ; Read single-digit integer value
+Main
+    ld r1, NegAscii
+    in
+    add r1, r1, r0      ; read single-digit integer value
 
-    JSR COUNT_ONE       ; Bit-1 counting subroutine
-    JSR OUTPUT          ; Result display subroutine
+    jsr CountOne        ; bit-1 counting subroutine
+    jsr Output          ; result display subroutine
 
-    BR MAIN             ; do while (true)
+    BR Main             ; do while (true)
 
     HALT
 
-NEGASCII .FILL #-48     ; -'0'
-ASCII    .FILL #48      ; '0'
-SAVER7   .FILL #0
-COUNTER  .FILL #16      ; Decrements
-MASK     .FILL x8000    ; First bit 1, rest 0
+NegAscii .fill #-48     ; -'0'
+Ascii    .fill #48      ; '0'
+Saver7   .fill #0
+Counter  .fill #16      ; decrements
+Mask     .fill x8000    ; first bit 1, rest 0
 
-; R0    MASK, temporary values for TRAP
-; R1    input which gets lshifted, later constant 0x30
-; R2    loop counter (decrementing)
-; R3    temporary variable for BRz
-; R4    count of 1-bits
-; R7    return value -- saved to SAVER7
+; r0    mask, temporary values for trap
+; r1    input which gets lshifted, later constant 0x30
+; r2    loop counter (decrementing)
+; r3    temporary variable for brz
+; r4    count of 1-bits
+; r7    return value -- saved to saver7
 
-COUNT_ONE
-    ST R7, SAVER7       ; [saver7] = R7     ; Save return value
-    LD R2, COUNTER      ; R2 = [counter]
-    LD R0, MASK         ; R0 = [mask]
-    AND R4, R4, #0      ; R4 = 0
+CountOne
+    st r7, Saver7       ; [Saver7] = r7     ; save return value
+    ld r2, Counter      ; r2 = [counter]
+    ld r0, Mask         ; r0 = [mask]
+    and r4, r4, #0      ; r4 = 0
 
-COUNT_LOOP              ; for (R2 = [counter]; R2 > 0; --R2) {
-    AND R3, R0, R1      ;     R3 = [mask] & R1
-    BRz NO_ONE          ;     if (R3 != 0) {    ; If first bit is set
-        ADD R4, R4, #1  ;         R4 += 1       ; Increment count of 1-bits
+CountLoop               ; for (r2 = [counter]; r2 > 0; --r2) {
+    and r3, r0, r1      ;     r3 = [mask] & r1
+    BRz NoOne          ;     if (r3 != 0) {    ; if first bit is set
+        add r4, r4, #1  ;         r4 += 1       ; increment count of 1-bits
                         ;     }
-NO_ONE
-    ADD R1, R1, R1      ;     R1 <<= 2          ; R1 += R1
+NoOne
+    add r1, r1, r1      ;     r1 <<= 2          ; r1 += r1
 
-                        ;     // Loop operations
-    ADD R2, R2, #-1     ;     R2 -= 1
-    BRp COUNT_LOOP      ;     if (R2 > 0) goto COUNT_LOOP
+                        ;     // loop operations
+    add r2, r2, #-1     ;     r2 -= 1
+    BRp CountLoop      ;     if (r2 > 0) goto count_loop
                         ; }
-    LD R7, SAVER7       ; R7 = [saver7]
-    RET                 ; return R7
+    ld r7, Saver7       ; r7 = [saver7]
+    ret                 ; return r7
 
-OUTPUT
-    ST R7, SAVER7       ; [saver7] = R7     ; Save return value
-                        ;                   ^ This seems unnecessary
-    LD R1, ASCII        ; R1 = 0x30
-    ADD R0, R4, R1      ; R0 = R4 + 0x30
-    OUT                 ; print(ascii(R4))  ; print(R0)
+Output
+    st r7, Saver7       ; [Saver7] = r7     ; save return value
+                        ;                   ^ this seems unnecessary
+    ld r1, Ascii        ; r1 = 0x30
+    add r0, r4, r1      ; r0 = r4 + 0x30
+    out                 ; print(ascii(r4))  ; print(r0)
 
-    LD R7, SAVER7       ; R7 = [saver7]
-    RET                 ; return R7
+    ld r7, Saver7       ; r7 = [Saver7]
+    RET                 ; return r7
 
 .END
 
