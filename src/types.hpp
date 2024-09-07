@@ -4,8 +4,10 @@
 #include <cstdint>
 #include <cstdlib>
 
-#define MEMORY_SIZE 0x10000L  // Total amount of WORDS in ENTIRE memory
-#define GP_REGISTER_COUNT 8   // Amount of general purpose registers
+#define MEMORY_SIZE 0x10000L    // Total amount of WORDS in ENTIRE memory
+#define MEMORY_USER_MAX 0xFDFF  // Index of last WORD in user program area
+
+#define GP_REGISTER_COUNT 8  // Amount of general purpose registers
 
 #define CONDITION_NEGATIVE 0b100
 #define CONDITION_ZERO 0b010

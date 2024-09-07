@@ -48,11 +48,11 @@
 // Check memory address is within the 'allocated' file memory
 Error memory_check(Word addr) {
     if (addr < memory_file_bounds.start) {
-        fprintf(stderr, "Cannot access non-user memory (before origin)\n");
+        fprintf(stderr, "Cannot access non-user memory (before user memory)\n");
         return ERR_ADDRESS_TOO_LOW;
     }
-    if (addr >= memory_file_bounds.end) {
-        fprintf(stderr, "Cannot access non-file memory (after end of file)\n");
+    if (addr > MEMORY_USER_MAX) {
+        fprintf(stderr, "Cannot access non-user memory (after user memory)\n");
         return ERR_ADDRESS_TOO_HIGH;
     }
     return ERR_OK;
@@ -64,7 +64,7 @@ Error execute_trap_instruction(const Word instr, bool &do_halt);
 
 SignedWord sign_extend(SignedWord value, const size_t size);
 void set_condition_codes(const Word result);
-Error print_char(const char ch);
+void print_char(const char ch);
 void print_on_new_line(void);
 static char *halfbyte_string(const Word word);
 
@@ -401,6 +401,16 @@ Error execute_next_instrution(bool &do_halt) {
     return ERR_OK;
 }
 
+#define IS_ASCII_OR_RETURN_ERR(word)                         \
+    {                                                        \
+        if (word & ~BITMASK_LOW_7) {                         \
+            fprintf(stderr,                                  \
+                    "String contains non-ASCII characters, " \
+                    "which are not supported.");             \
+            return ERR_UNIMPLEMENTED;                        \
+        }                                                    \
+    }
+
 Error execute_trap_instruction(const Word instr, bool &do_halt) {
     // 4 bits padding
     const uint8_t padding = bits_8_12(instr);
@@ -430,7 +440,8 @@ Error execute_trap_instruction(const Word instr, bool &do_halt) {
             const char input = getchar() & BITMASK_LOW_8;  // Zero high 8 bits
             tty_restore();
             // Echo, follow with newline if not already printed
-            IGNORE_ERR(print_char(input));
+            // Don't check if input is ASCII, it doesn't matter
+            print_char(input);
             if (!stdout_on_new_line) {
                 printf("\n");
             }
@@ -439,17 +450,18 @@ Error execute_trap_instruction(const Word instr, bool &do_halt) {
 
         case TRAP_OUT: {
             const Word word = registers.general_purpose[0];
-            const char ch = static_cast<char>(word);
-            RETURN_IF_ERR(print_char(ch));
+            IS_ASCII_OR_RETURN_ERR(word);
+            print_char(static_cast<char>(word));
         }; break;
 
         case TRAP_PUTS: {
             print_on_new_line();
             for (Word i = registers.general_purpose[0];; ++i) {
                 MEMORY_CHECK_RETURN_ERR(i);
-                const Word ch = memory[i];
-                if (ch == 0x0000) break;
-                RETURN_IF_ERR(print_char(ch));
+                const Word word = memory[i];
+                if (word == 0x0000) break;
+                IS_ASCII_OR_RETURN_ERR(word);
+                print_char(static_cast<char>(word));
             }
         } break;
 
@@ -463,9 +475,11 @@ Error execute_trap_instruction(const Word instr, bool &do_halt) {
                 const uint8_t high = bits_high(word);
                 const uint8_t low = bits_low(word);
                 if (high == 0x0000) break;
-                RETURN_IF_ERR(print_char(high));
+                IS_ASCII_OR_RETURN_ERR(high);
+                print_char(high);
                 if (low == 0x0000) break;
-                RETURN_IF_ERR(print_char(low));
+                IS_ASCII_OR_RETURN_ERR(low);
+                print_char(low);
             }
         }; break;
 
@@ -499,21 +513,13 @@ void set_condition_codes(const Word result) {
     registers.condition = (is_negative << 2) | (is_zero << 1) | is_positive;
 }
 
-Error print_char(const char ch) {
+void print_char(const char ch) {
     if (ch == '\r') {
         printf("\n");
     } else {
         printf("%c", ch);
     }
-    // If a bit not between [0,7] is set
-    if (ch & ~BITMASK_LOW_7) {
-        fprintf(stderr,
-                "String contains non-ASCII characters, "
-                "which are not supported.");
-        return ERR_UNIMPLEMENTED;
-    }
     stdout_on_new_line = ch == '\n' || ch == '\r';
-    return ERR_OK;
 }
 
 void print_on_new_line() {
