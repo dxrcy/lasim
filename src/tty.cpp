@@ -4,23 +4,21 @@
 #include <termios.h>  // termios, etc
 #include <unistd.h>   // STDIN_FILENO
 
-static struct termios tty;
+static struct termios stdin_tty;
 
-void tty_get() { tcgetattr(STDIN_FILENO, &tty); }
-
-void tty_apply() { tcsetattr(STDIN_FILENO, TCSANOW, &tty); }
+void tty_get() { tcgetattr(STDIN_FILENO, &stdin_tty); }
 
 void tty_nobuffer_noecho() {
     tty_get();
-    tty.c_lflag &= ~ICANON;
-    tty.c_lflag &= ~ECHO;
-    tty_apply();
+    stdin_tty.c_lflag &= ~ICANON;
+    stdin_tty.c_lflag &= ~ECHO;
+    tcsetattr(STDIN_FILENO, TCSANOW, &stdin_tty);
 }
 
 void tty_restore() {
-    tty.c_lflag |= ICANON;
-    tty.c_lflag |= ECHO;
-    tty_apply();
+    stdin_tty.c_lflag |= ICANON;
+    stdin_tty.c_lflag |= ECHO;
+    tcsetattr(STDIN_FILENO, TCSANOW, &stdin_tty);
 }
 
 #endif

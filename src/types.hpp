@@ -1,5 +1,5 @@
-#ifndef TYPES_H
-#define TYPES_H
+#ifndef TYPES_HPP
+#define TYPES_HPP
 
 #include <cstdint>
 #include <cstdlib>
@@ -7,44 +7,33 @@
 #define MEMORY_SIZE 0x10000L  // Total amount of allocated WORDS in memory
 #define GP_REGISTER_COUNT 8   // Amount of general purpose registers
 
+#define CONDITION_NEGATIVE 0b100
+#define CONDITION_ZERO 0b010
+#define CONDITION_POSITIVE 0b001
+#define CONDITION_DEFAULT CONDITION_ZERO  // Value on program start
+
 #define WORD_SIZE sizeof(Word)
-
-// TODO: Move to `error.hpp` ?
-typedef enum Error {
-    // Ok
-    ERR_OK = 0x00,
-    // CLI arguments
-    ERR_CLI_ARGUMENTS = 0x10,
-    // File operations
-    ERR_FILE_OPEN = 0x20,
-    ERR_FILE_READ = 0x21,
-    ERR_FILE_TOO_SHORT = 0x22,  // No instructions
-    ERR_FILE_TOO_LONG = 0x23,   // Too many instructions to fit in memory
-    // Malformed instructions
-    ERR_MALFORMED_INSTR = 0x30,     // Invalid/unsupported/reserved instruction
-    ERR_MALFORMED_PADDING = 0x31,   // Expected correct padding in instruction
-    ERR_MALFORMED_TRAP = 0x32,      // Invalid/unsupported trap vector
-    ERR_UNAUTHORIZED_INSTR = 0x33,  // RTI (not in supervisor mode)
-    // Runtime error
-    ERR_BAD_ADDRESS = 0x40,  // Trying to load from unallocated memory
-    // Unimplemented
-    ERR_UNIMPLEMENTED = 0x70,
-} Error;
-
-#define RETURN_IF_ERR(result)   \
-    {                           \
-        if (result != ERR_OK) { \
-            return result;      \
-        }                       \
-    }
-// Maybe this can print some log in debug mode ?
-#define IGNORE_ERR(result) result
 
 typedef uint16_t Word;       // 2 bytes
 typedef int16_t SignedWord;  // 2 bytes
 
 typedef uint8_t Register;       // 3 bits
 typedef uint8_t ConditionCode;  // 3 bits
+
+typedef struct Registers {
+    // As long as there are 8 GP registers, and a register operand is defined
+    // with 3 bits, then a properly created `Register` integer may be used to
+    // index this array without worry.
+    // ^ This is written very strangly for some reason.
+    Word general_purpose[GP_REGISTER_COUNT] = {0};
+
+    Word program_counter;
+    Word stack_pointer;
+    Word frame_pointer;
+
+    // 3 bits, NZP
+    ConditionCode condition = CONDITION_DEFAULT;
+} Registers;
 
 // 4 bits
 typedef enum Opcode {
@@ -75,16 +64,5 @@ enum TrapVector {
     TRAP_PUTSP = 0x24,
     TRAP_HALT = 0x25,
 };
-
-typedef struct Registers {
-    Word general_purpose[GP_REGISTER_COUNT] = {0};
-
-    Word program_counter;
-    Word stack_pointer;
-    Word frame_pointer;
-
-    // 3 bits, NZP, N=0, Z=1, P=0
-    ConditionCode condition = 0b010;
-} Registers;
 
 #endif

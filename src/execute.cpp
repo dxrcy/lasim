@@ -3,6 +3,7 @@
 
 #include <cstdio>  // printf, fprintf
 
+#include "error.hpp"
 #include "globals.cpp"
 #include "tty.cpp"
 #include "types.hpp"
@@ -41,10 +42,6 @@
 #define low_6_bits_signed(instr) (to_signed_word((instr) & BITMASK_LOW_6, 6))
 #define low_9_bits_signed(instr) (to_signed_word((instr) & BITMASK_LOW_9, 9))
 #define low_11_bits_signed(instr) (to_signed_word((instr) & BITMASK_LOW_11, 11))
-
-#define CONDITION_NEGATIVE 0b100
-#define CONDITION_ZERO 0b010
-#define CONDITION_POSITIVE 0b001
 
 Error execute(void);
 Error execute_next_instrution(bool &do_halt);

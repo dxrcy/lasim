@@ -4,6 +4,7 @@
 #include <cstdio>   // FILE, fprintf, etc
 #include <cstring>  // memset
 
+#include "error.hpp"
 #include "globals.cpp"
 #include "types.hpp"
 
