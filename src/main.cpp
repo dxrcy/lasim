@@ -10,14 +10,13 @@ int main(const int argc, const char *const *const argv) {
 
     const char *filename = argv[1];
 
-    Word file_start, file_end;
-    read_file_to_memory(filename, file_start, file_end);
+    read_file_to_memory(filename);
 
     /* for (size_t i = file_start - 2; i < file_end + 2; ++i) { */
     /*     printf("FILE: 0x%04lx: 0x%04hx\n", i, memory[i]); */
     /* } */
 
-    execute(file_start, file_end);
+    execute();
 
     printf("\n");
 

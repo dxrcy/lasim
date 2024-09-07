@@ -10,7 +10,7 @@
 // Swap high and low bytes of a word
 #define swap_endianess(word) (((word) << 8) | ((word) >> 8))
 
-void read_file_to_memory(const char *const filename, Word &start, Word &end) {
+void read_file_to_memory(const char *const filename) {
     FILE *const file = fopen(filename, "rb");
 
     if (file == nullptr) {
@@ -21,7 +21,8 @@ void read_file_to_memory(const char *const filename, Word &start, Word &end) {
     // TODO: Handle failure
     Word origin;
     fread(reinterpret_cast<char *>(&origin), WORD_SIZE, 1, file);
-    start = swap_endianess(origin);
+
+    Word start = swap_endianess(origin);
 
     /* printf("origin: 0x%04x\n", start); */
 
@@ -31,7 +32,7 @@ void read_file_to_memory(const char *const filename, Word &start, Word &end) {
     const size_t words_read =
         fread(memory_at_file, WORD_SIZE, max_file_bytes, file);
 
-    end = start + words_read;
+    Word end = start + words_read;
 
     // Mark undefined bytes for debugging
     memset(memory, 0xdd, start * WORD_SIZE);  // Before file
@@ -44,6 +45,9 @@ void read_file_to_memory(const char *const filename, Word &start, Word &end) {
     }
 
     /* printf("words read: %ld\n", words_read); */
+
+    memory_file_bounds.start = start;
+    memory_file_bounds.end = end;
 
     fclose(file);
 }

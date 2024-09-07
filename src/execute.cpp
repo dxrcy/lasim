@@ -43,21 +43,22 @@
 #define CONDITION_ZERO 0b010
 #define CONDITION_POSITIVE 0b001
 
+void execute(const Word file_start, const Word file_end);
+bool execute_next_instrution(void);
+bool execute_trap_instruction(const Word instr);
 void _dbg_print_registers(void);
+Word &memory_get(Word addr);
 SignedWord sign_extend(SignedWord value, const size_t size);
 void set_condition_codes(const Word result);
 void print_char(const char ch);
 void print_on_new_line();
 static char *halfbyte_string(const Word word);
-void execute(const Word file_start, const Word file_end);
-bool execute_next_instrution(void);
-bool execute_trap_instruction(const Word instr);
 
-void execute(const Word file_start, const Word file_end) {
+void execute() {
     // GP and condition registers are already initialized to 0
-    registers.program_counter = file_start;
-    registers.stack_pointer = file_end;
-    registers.frame_pointer = file_end;
+    registers.program_counter = memory_file_bounds.start;
+    registers.stack_pointer = memory_file_bounds.end;
+    registers.frame_pointer = memory_file_bounds.end;
 
     // This loop is written poorly, as I will probably refactor it later.
     while (true) {
@@ -72,19 +73,22 @@ void execute(const Word file_start, const Word file_end) {
 
 // `true` return value indicates that program should end
 bool execute_next_instrution() {
-    const Word instr = memory[registers.program_counter];
+    const Word instr = memory_get(registers.program_counter);
     ++registers.program_counter;
 
     // printf("INSTR at 0x%04x: 0x%04x  %016b\n", registers.program_counter - 1,
     //        instr, instr);
 
     if (instr == 0xdddd) {
-        fprintf(stderr, "Cannot execute non-user memory (before origin)\n");
+        fprintf(stderr,
+                "DEBUG: Attempt to execute sentinal word 0xdddd."
+                " This is probably a bug\n");
         exit(ERR_BAD_ADDRESS);
     }
     if (instr == 0xeeee) {
         fprintf(stderr,
-                "Cannot execute non-executable memory (after end of file)\n");
+                "DEBUG: Attempt to execute sentinal word 0xeeee."
+                " This is probably a bug\n");
         exit(ERR_BAD_ADDRESS);
     }
 
@@ -269,7 +273,7 @@ bool execute_next_instrution() {
         case OPCODE_LD: {
             const Register dest_reg = bits_9_11(instr);
             const SignedWord offset = low_9_bits_signed(instr);
-            const Word value = memory[registers.program_counter + offset];
+            const Word value = memory_get(registers.program_counter + offset);
             registers.general_purpose[dest_reg] = value;
             set_condition_codes(value);
             /* dbg_print_registers(); */
@@ -281,7 +285,7 @@ bool execute_next_instrution() {
             const Register src_reg = bits_9_11(instr);
             const SignedWord offset = low_9_bits_signed(instr);
             const Word value = registers.general_purpose[src_reg];
-            memory[registers.program_counter + offset] = value;
+            memory_get(registers.program_counter + offset) = value;
         }; break;
 
         // LDR*
@@ -290,7 +294,7 @@ bool execute_next_instrution() {
             const Register base_reg = bits_6_8(instr);
             const SignedWord offset = low_6_bits_signed(instr);
             const Word base = registers.general_purpose[base_reg];
-            const Word value = memory[base + offset];
+            const Word value = memory_get(base + offset);
             registers.general_purpose[dest_reg] = value;
             set_condition_codes(value);
         }; break;
@@ -302,15 +306,15 @@ bool execute_next_instrution() {
             const SignedWord offset = low_6_bits_signed(instr);
             const Word value = registers.general_purpose[src_reg];
             const Word base = registers.general_purpose[base_reg];
-            memory[base + offset] = value;
+            memory_get(base + offset) = value;
         }; break;
 
         // LDI+
         case OPCODE_LDI: {
             const Register dest_reg = bits_9_11(instr);
             const SignedWord offset = low_9_bits_signed(instr);
-            const Word pointer = memory[registers.program_counter + offset];
-            const Word value = memory[pointer];
+            const Word pointer = memory_get(registers.program_counter + offset);
+            const Word value = memory_get(pointer);
             registers.general_purpose[dest_reg] = value;
             set_condition_codes(value);
         }; break;
@@ -320,8 +324,8 @@ bool execute_next_instrution() {
             const Register src_reg = bits_9_11(instr);
             const SignedWord offset = low_9_bits_signed(instr);
             const Word pointer = registers.general_purpose[src_reg];
-            const Word value = memory[pointer];
-            memory[registers.program_counter + offset] = value;
+            const Word value = memory_get(pointer);
+            memory_get(registers.program_counter + offset) = value;
         }; break;
 
         // LEA*
@@ -414,7 +418,7 @@ bool execute_trap_instruction(const Word instr) {
 
         case TRAP_PUTS: {
             print_on_new_line();
-            const Word *str = &memory[registers.general_purpose[0]];
+            const Word *str = &memory_get(registers.general_purpose[0]);
             for (Word ch; (ch = str[0]) != 0x0000; ++str) {
                 // If a bit not between [0,7] is set
                 if (ch & ~BITMASK_LOW_7) {
@@ -429,7 +433,8 @@ bool execute_trap_instruction(const Word instr) {
 
         case TRAP_PUTSP: {
             print_on_new_line();
-            const Word *const str_words = &memory[registers.general_purpose[0]];
+            const Word *const str_words =
+                &memory_get(registers.general_purpose[0]);
             const char *str = reinterpret_cast<const char *>(str_words);
             for (Word ch; (ch = str[0]) != 0x00; ++str) {
                 print_char(ch);
@@ -465,6 +470,19 @@ void _dbg_print_registers() {
         printf("    R%d  0x%04hx  %3d\n", reg, value, value);
     }
     printf("--------------------------\n");
+}
+
+// Check memory address, then return reference to memory value
+Word &memory_get(Word addr) {
+    if (addr < memory_file_bounds.start) {
+        fprintf(stderr, "Cannot access non-user memory (before origin)\n");
+        exit(ERR_BAD_ADDRESS);
+    }
+    if (addr >= memory_file_bounds.end) {
+        fprintf(stderr, "Cannot access non-file memory (after end of file)\n");
+        exit(ERR_BAD_ADDRESS);
+    }
+    return memory[addr];
 }
 
 SignedWord sign_extend(SignedWord value, const size_t size) {

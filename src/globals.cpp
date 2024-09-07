@@ -11,11 +11,20 @@
         exit(code);    \
     }
 
-// Exists for program lifetime, but must still be deleted before exit
-// Use `EXIT` macro to automatically free before exiting
-// Dynamically allocated due to large size
+// Lifetime:
+//  - Exists for program lifetime, but must still be deleted before exit
+//  - Use `exit` macro to automatically free before exiting
+//  - Dynamically allocated due to large size
+// Do not access directly in program! Use `memory_get` in `execute.cpp`
 static Word *memory = new Word[MEMORY_SIZE];
+
 static Registers registers;
+
+// Start and end addresses of file in memory
+static struct {
+    Word start;
+    Word end;
+} memory_file_bounds;
 
 // Does not need to be called when using `EXIT` macro
 void free_memory() {
