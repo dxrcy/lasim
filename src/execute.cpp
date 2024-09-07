@@ -61,12 +61,14 @@ Error memory_check(Word addr) {
 Error execute(void);
 Error execute_next_instrution(bool &do_halt);
 Error execute_trap_instruction(const Word instr, bool &do_halt);
-void _dbg_print_registers(void);
+
 SignedWord sign_extend(SignedWord value, const size_t size);
 void set_condition_codes(const Word result);
 Error print_char(const char ch);
 void print_on_new_line(void);
 static char *halfbyte_string(const Word word);
+
+void _dbg_print_registers(void);
 
 Error execute() {
     // GP and condition registers are already initialized to 0
@@ -480,24 +482,6 @@ Error execute_trap_instruction(const Word instr, bool &do_halt) {
     return ERR_OK;
 }
 
-void _dbg_print_registers() {
-    printf("--------------------------\n");
-    printf("    PC  0x%04hx\n", registers.program_counter);
-    printf("    SP  0x%04hx\n", registers.stack_pointer);
-    printf("    FP  0x%04hx\n", registers.frame_pointer);
-    printf("..........................\n");
-    printf("    N=%x  Z=%x  P=%x\n",
-           (registers.condition >> 2),        // Negative
-           (registers.condition >> 1) & 0b1,  // Zero
-           (registers.condition) & 0b1);      // Positive
-    printf("..........................\n");
-    for (int reg = 0; reg < GP_REGISTER_COUNT; ++reg) {
-        const Word value = registers.general_purpose[reg];
-        printf("    R%d  0x%04hx  %3d\n", reg, value, value);
-    }
-    printf("--------------------------\n");
-}
-
 SignedWord sign_extend(SignedWord value, const size_t size) {
     // If previous-highest bit is set
     if (value >> (size - 1) & 0b1) {
@@ -547,6 +531,24 @@ static char *halfbyte_string(const Word word) {
     }
     str[4] = '\0';
     return str;
+}
+
+void _dbg_print_registers() {
+    printf("--------------------------\n");
+    printf("    PC  0x%04hx\n", registers.program_counter);
+    printf("    SP  0x%04hx\n", registers.stack_pointer);
+    printf("    FP  0x%04hx\n", registers.frame_pointer);
+    printf("..........................\n");
+    printf("    N=%x  Z=%x  P=%x\n",
+           (registers.condition >> 2),        // Negative
+           (registers.condition >> 1) & 0b1,  // Zero
+           (registers.condition) & 0b1);      // Positive
+    printf("..........................\n");
+    for (int reg = 0; reg < GP_REGISTER_COUNT; ++reg) {
+        const Word value = registers.general_purpose[reg];
+        printf("    R%d  0x%04hx  %3d\n", reg, value, value);
+    }
+    printf("--------------------------\n");
 }
 
 #endif

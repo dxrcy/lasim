@@ -42,4 +42,5 @@ More LC-3 programs can be found
 # TODO
 
 - Create assembler
+- Add debugger mode
 

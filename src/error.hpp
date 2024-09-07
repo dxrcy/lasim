@@ -1,7 +1,7 @@
 #ifndef ERROR_HPP
 #define ERROR_HPP
 
-// Maybe this can print some log in debug mode ?
+// TODO: Maybe this can print some log in debug mode ?
 #define IGNORE_ERR(result) result
 
 #define RETURN_IF_ERR(result)                \

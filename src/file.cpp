@@ -11,7 +11,7 @@
 // Swap high and low bytes of a word
 #define swap_endianess(word) (((word) << 8) | ((word) >> 8))
 
-Error read_file_to_memory(const char *const filename) {
+Error read_obj_file_to_memory(const char *const filename) {
     FILE *const file = fopen(filename, "rb");
     size_t words_read;
 
@@ -20,7 +20,6 @@ Error read_file_to_memory(const char *const filename) {
         return ERR_FILE_OPEN;
     }
 
-    // TODO: Handle failure
     Word origin;
     words_read = fread(reinterpret_cast<char *>(&origin), WORD_SIZE, 1, file);
 
@@ -62,6 +61,7 @@ Error read_file_to_memory(const char *const filename) {
            (MEMORY_SIZE - end) * WORD_SIZE);  // After file
 
     // TODO: Make this better !!
+    // ^ Read file word-by-word, and swap endianess in the same loop
     for (size_t i = start; i < end; ++i) {
         memory[i] = swap_endianess(memory[i]);
     }

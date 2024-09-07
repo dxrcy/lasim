@@ -26,7 +26,7 @@ static struct {
     Word end;
 } memory_file_bounds;
 
-// Does not need to be called when using `EXIT` macro
+// Does not need to be called when using `exit` macro
 void free_memory() {
     delete[] memory;
     memory = nullptr;
