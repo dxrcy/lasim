@@ -1,6 +1,7 @@
 ; LC-3 Assembly Program: Count number of bit-1 with User Input from 0-9
 ; Author: Minh Nguyen Nhat Tuan
 ; Date: 02/01/2023
+; https://github.com/Nguyen-Nhat-Tuan-Minh/LC_3-Assembly-Program
 
 ; Description:
 ; This LC-3 assembly program demonstrates the counting of bit-1 from User Input in true binary number.
