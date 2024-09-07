@@ -37,10 +37,9 @@ More LC-3 programs can be found
 - References
 - `nullptr`
 - `new` / `delete`
-- Cast functions
+- `static_cast` / `reinterpret_cast`
 
 # TODO
 
-- Check bounds before memory/register access
 - Create assembler
 

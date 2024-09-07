@@ -30,7 +30,7 @@
 #define bits_8_12(word) (((word) >> 8) & BITMASK_LOW_4)
 #define bits_9_10(word) (((word) >> 9) & BITMASK_LOW_2)
 #define bits_9_11(word) (((word) >> 9) & BITMASK_LOW_3)
-#define bits_12_15(word) ((word) >> 12 & BITMASK_LOW_4)
+#define bits_12_15(word) (((word) >> 12) & BITMASK_LOW_4)
 
 #define to_signed_word(value, size) \
     (sign_extend(static_cast<SignedWord>(value), size))
@@ -43,7 +43,7 @@
 #define CONDITION_ZERO 0b010
 #define CONDITION_POSITIVE 0b001
 
-void execute(const Word file_start, const Word file_end);
+void execute();
 bool execute_next_instrution(void);
 bool execute_trap_instruction(const Word instr);
 void _dbg_print_registers(void);
@@ -61,7 +61,9 @@ void execute() {
     registers.frame_pointer = memory_file_bounds.end;
 
     // Loop until `true` is returned, indicating a HALT (TRAP 0x25)
-    while (!execute_next_instrution());
+    while (!execute_next_instrution()) {
+        continue;
+    }
 
     if (!stdout_on_new_line) {
         printf("\n");
@@ -461,8 +463,7 @@ void _dbg_print_registers() {
     printf("    N=%x  Z=%x  P=%x\n",
            (registers.condition >> 2),        // Negative
            (registers.condition >> 1) & 0b1,  // Zero
-           (registers.condition) & 0b1        // Positive
-    );
+           (registers.condition) & 0b1);      // Positive
     printf("..........................\n");
     for (int reg = 0; reg < GP_REGISTER_COUNT; ++reg) {
         const Word value = registers.general_purpose[reg];
