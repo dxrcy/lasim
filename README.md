@@ -49,6 +49,8 @@ This project only uses the following C++ features (to keep it simple):
 - `nullptr`
 - `new` / `delete`
 - `static_cast` / `reinterpret_cast`
+- `std::vector`
+- Namespaces for tagged unions?
 
 # TODO
 

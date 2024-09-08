@@ -20,9 +20,6 @@ int main(const int argc, const char *const *const argv) {
             RETURN_IF_ERR(assemble(options.in_file, options.out_file));
             RETURN_IF_ERR(execute(options.out_file));
             break;
-
-        default:
-            unreachable();
     }
 
     return ERR_OK;

@@ -14,9 +14,7 @@
     {                                        \
         /* `input` may be a function call */ \
         const Error error = (result);        \
-        if (error != ERR_OK) {               \
-            return error;                    \
-        }                                    \
+        if (error != ERR_OK) return error;   \
     }
 
 typedef enum Error {
@@ -29,6 +27,10 @@ typedef enum Error {
     ERR_FILE_READ = 0x21,
     ERR_FILE_TOO_SHORT = 0x22,  // No instructions
     ERR_FILE_TOO_LONG = 0x23,   // Too many instructions to fit in memory
+    ERR_FILE_NOT_ASCII,         // Character in ASM file is not valid ASCII
+    ERR_FILE_UNEXPECTED_EOF,    // File ends before a token is complete
+    // Assembly parsing
+    ERR_ASM_TOKEN_TOO_LONG = 0xee,
     // Malformed instructions
     ERR_MALFORMED_INSTR = 0x30,     // Invalid/unsupported/reserved instruction
     ERR_MALFORMED_PADDING = 0x31,   // Expected correct padding in instruction

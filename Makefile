@@ -10,12 +10,12 @@ main:
 
 example: main
 	@lc3as examples/hello_world.asm >/dev/null
-	@./lc3 -x examples/hello_world.obj
+	@./lc3 examples/hello_world.asm
 
 name=test
 run: main
 	@lc3as examples/$(name).asm >/dev/null
-	@./lc3 -x examples/$(name).obj
+	@./lc3 examples/$(name).asm
 
 watch:
 	@clear
