@@ -1,6 +1,12 @@
 #ifndef ERROR_HPP
 #define ERROR_HPP
 
+#define unreachable()                                          \
+    {                                                          \
+        fprintf(stderr, "Unreachable code reached. Uh oh!\n"); \
+        exit(ERR_UNREACHABLE);                                 \
+    }
+
 // TODO: Maybe this can print some log in debug mode ?
 #define IGNORE_ERR(result) result
 
@@ -31,8 +37,9 @@ typedef enum Error {
     // Runtime error
     ERR_ADDRESS_TOO_LOW = 0x40,   // Trying to load from memory before origin
     ERR_ADDRESS_TOO_HIGH = 0x40,  // Trying to load from memory after file end
-    // Unimplemented
+    // Meta
     ERR_UNIMPLEMENTED = 0x70,
+    ERR_UNREACHABLE = 0x71,
 } Error;
 
 #endif

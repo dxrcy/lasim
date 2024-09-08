@@ -62,11 +62,11 @@ Error memory_check(Word addr) {
     return ERR_OK;
 }
 
-Error execute(const char *const filename);
+Error execute(const char *const obj_file);
 Error execute_next_instrution(bool &do_halt);
 Error execute_trap_instruction(const Word instr, bool &do_halt);
 
-Error read_obj_file_to_memory(const char *const filename);
+Error read_obj_file_to_memory(const char *const obj_file);
 
 SignedWord sign_extend(SignedWord value, const size_t size);
 void set_condition_codes(const Word result);
@@ -76,10 +76,10 @@ static char *halfbyte_string(const Word word);
 
 void _dbg_print_registers(void);
 
-Error execute(const char *const filename) {
+Error execute(const char *const obj_file) {
     // TODO: Allocate `memory` here
 
-    RETURN_IF_ERR(read_obj_file_to_memory(filename));
+    RETURN_IF_ERR(read_obj_file_to_memory(obj_file));
 
     // GP and condition registers are already initialized to 0
     registers.program_counter = memory_file_bounds.start;
@@ -506,12 +506,12 @@ Error execute_trap_instruction(const Word instr, bool &do_halt) {
     return ERR_OK;
 }
 
-Error read_obj_file_to_memory(const char *const filename) {
-    FILE *const file = fopen(filename, "rb");
+Error read_obj_file_to_memory(const char *const obj_file) {
+    FILE *const file = fopen(obj_file, "rb");
     size_t words_read;
 
     if (file == nullptr) {
-        fprintf(stderr, "Could not open file %s\n", filename);
+        fprintf(stderr, "Could not open file %s\n", obj_file);
         return ERR_FILE_OPEN;
     }
 
@@ -519,11 +519,11 @@ Error read_obj_file_to_memory(const char *const filename) {
     words_read = fread(reinterpret_cast<char *>(&origin), WORD_SIZE, 1, file);
 
     if (ferror(file)) {
-        fprintf(stderr, "Could not read file %s\n", filename);
+        fprintf(stderr, "Could not read file %s\n", obj_file);
         return ERR_FILE_READ;
     }
     if (words_read < 1) {
-        fprintf(stderr, "File is too short %s\n", filename);
+        fprintf(stderr, "File is too short %s\n", obj_file);
         return ERR_FILE_TOO_SHORT;
     }
 
@@ -536,15 +536,15 @@ Error read_obj_file_to_memory(const char *const filename) {
     words_read = fread(memory_at_file, WORD_SIZE, max_file_bytes, file);
 
     if (ferror(file)) {
-        fprintf(stderr, "Could not read file %s\n", filename);
+        fprintf(stderr, "Could not read file %s\n", obj_file);
         return ERR_FILE_READ;
     }
     if (words_read < 1) {
-        fprintf(stderr, "File is too short %s\n", filename);
+        fprintf(stderr, "File is too short %s\n", obj_file);
         return ERR_FILE_TOO_SHORT;
     }
     if (!feof(file)) {
-        fprintf(stderr, "File is too long %s\n", filename);
+        fprintf(stderr, "File is too long %s\n", obj_file);
         return ERR_FILE_TOO_LONG;
     }
 

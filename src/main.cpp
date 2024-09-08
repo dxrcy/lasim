@@ -1,3 +1,4 @@
+#include "assemble.cpp"
 #include "cli.cpp"
 #include "error.hpp"
 #include "execute.cpp"
@@ -6,13 +7,23 @@ int main(const int argc, const char *const *const argv) {
     Options options;
     parse_options(options, argc, argv);
 
-    if (options.mode != MODE_EXECUTE_ONLY) {
-        fprintf(stderr,
-                "Only execute-only mode (-x) is currently supported.\n");
-        return ERR_UNIMPLEMENTED;
-    }
+    switch (options.mode) {
+        case MODE_ASSEMBLE_ONLY:
+            RETURN_IF_ERR(assemble(options.in_file, options.out_file));
+            break;
 
-    RETURN_IF_ERR(execute(options.in_file));
+        case MODE_EXECUTE_ONLY:
+            RETURN_IF_ERR(execute(options.in_file));
+            break;
+
+        case MODE_ASSEMBLE_EXECUTE:
+            RETURN_IF_ERR(assemble(options.in_file, options.out_file));
+            RETURN_IF_ERR(execute(options.out_file));
+            break;
+
+        default:
+            unreachable();
+    }
 
     return ERR_OK;
 }
