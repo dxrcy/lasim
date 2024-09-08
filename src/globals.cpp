@@ -16,6 +16,7 @@
 //  - Use `exit` macro to automatically free before exiting
 //  - Dynamically allocated due to large size
 // !! Do not access memory without checking first with `memory_check(addr)`
+// TODO: Only allocate in execute mode
 static Word *memory = new Word[MEMORY_SIZE];
 
 static Registers registers;

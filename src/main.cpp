@@ -1,7 +1,6 @@
 #include "cli.cpp"
 #include "error.hpp"
 #include "execute.cpp"
-#include "file.cpp"
 
 int main(const int argc, const char *const *const argv) {
     Options options;
@@ -13,8 +12,7 @@ int main(const int argc, const char *const *const argv) {
         return ERR_UNIMPLEMENTED;
     }
 
-    RETURN_IF_ERR(read_obj_file_to_memory(options.in_file));
-    RETURN_IF_ERR(execute());
+    RETURN_IF_ERR(execute(options.in_file));
 
     return ERR_OK;
 }
