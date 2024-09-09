@@ -6,6 +6,7 @@
 #include <cstring>  // memcpy
 #include <vector>   // std::vector
 
+#include "bitmasks.hpp"
 #include "error.hpp"
 #include "types.hpp"
 
@@ -46,15 +47,17 @@ using std::vector;
 typedef char TokenStr[MAX_IDENTIFIER + 1];
 typedef TokenStr LabelName;
 
+// TODO: Merge label types
+// TODO: Use a hashmap
 typedef struct LabelDefinition {
     LabelName name;
-    size_t word_index;
+    size_t index;
 } LabelDefinition;
 
 // Different type to label definition for clarity
 typedef struct LabelReference {
     LabelName name;
-    size_t word_index;
+    size_t index;
 } LabelReference;
 
 typedef enum Directive {
@@ -103,6 +106,18 @@ Error get_next_token(const char *&line, Token &token);
 static const char *directive_to_string(Directive directive);
 static const char *instruction_to_string(Instruction instruction);
 
+bool find_label_definition(const TokenStr &needle,
+                           const vector<LabelDefinition> &definitions,
+                           size_t &index) {
+    for (size_t j = 0; j < definitions.size(); ++j) {
+        if (!strcmp(definitions[j].name, needle)) {
+            index = definitions[j].index;
+            return true;
+        }
+    }
+    return false;
+}
+
 void _print_token(const Token &token);
 
 Error assemble(const char *const asm_filename,
@@ -110,7 +125,7 @@ Error assemble(const char *const asm_filename,
     vector<Word> out_words;
     RETURN_IF_ERR(read_asm_file_to_lines(asm_filename, out_words));
 
-    printf("Words: %ld\n", out_words.size());
+    /* printf("Words: %ld\n", out_words.size()); */
 
     for (size_t i = 0; i < out_words.size(); ++i) {
         if (i > 0 && i % 8 == 0) {
@@ -136,7 +151,7 @@ Error read_asm_file_to_lines(const char *const filename, vector<Word> &words) {
     vector<LabelReference> label_references;
 
     while (true) {
-        printf("----------------\n");
+        /* printf("----------------\n"); */
         char line_buf[MAX_LINE];
         const char *line_ptr = line_buf;  // Pointer address is mutated
         if (fgets(line_buf, MAX_LINE, asm_file) == NULL) break;
@@ -146,7 +161,7 @@ Error read_asm_file_to_lines(const char *const filename, vector<Word> &words) {
 
         Token token;
         RETURN_IF_ERR(get_next_token(line_ptr, token));
-        _print_token(token);
+        /* _print_token(token); */
 
         // Empty line
         if (token.tag == Token::NONE) continue;
@@ -172,9 +187,9 @@ Error read_asm_file_to_lines(const char *const filename, vector<Word> &words) {
 
                 case Directive::STRINGZ: {
                     // TODO: Escape characters
-                    printf("%s\n", line_ptr);
+                    /* printf("%s\n", line_ptr); */
                     RETURN_IF_ERR(get_next_token(line_ptr, token));
-                    _print_token(token);
+                    /* _print_token(token); */
                     if (token.tag != Token::LITERAL_STRING) {
                         fprintf(stderr,
                                 "String literal required after `.STRINGZ`\n");
@@ -203,7 +218,17 @@ Error read_asm_file_to_lines(const char *const filename, vector<Word> &words) {
         }
 
         if (token.tag == Token::LABEL) {
-            // TODO: Define label !!
+            TokenStr &name = token.value.label;
+            for (size_t i = 0; i < label_definitions.size(); ++i) {
+                if (!strcmp(label_definitions[i].name, name)) {
+                    fprintf(stderr, "Duplicate label '%s'\n", name);
+                    return ERR_ASM_DUPLICATE_LABEL;
+                }
+            }
+            label_definitions.push_back({});
+            memcpy(label_definitions.back().name, name,
+                   sizeof(LabelDefinition));
+            label_definitions.back().index = words.size();
             RETURN_IF_ERR(get_next_token(line_ptr, token));
         }
 
@@ -211,12 +236,12 @@ Error read_asm_file_to_lines(const char *const filename, vector<Word> &words) {
         if (token.tag == Token::NONE) continue;
 
         if (token.tag != Token::INSTRUCTION) {
-            fprintf(stderr, "Expected instruction\n");
+            fprintf(stderr, "Expected instruction or end of line\n");
             return ERR_ASM_EXPECTED_INSTRUCTION;
         }
 
         Instruction instruction = token.value.instruction;
-        printf("INSTRUCTION: %s\n", instruction_to_string(instruction));
+        /* printf("INSTRUCTION: %s\n", instruction_to_string(instruction)); */
 
         OpcodeValue opcode;
         Word operands;
@@ -233,7 +258,7 @@ Error read_asm_file_to_lines(const char *const filename, vector<Word> &words) {
                 label_references.push_back({});
                 memcpy(label_references.back().name, token.value.label,
                        sizeof(LabelReference));
-                label_references.back().word_index = words.size();
+                label_references.back().index = words.size();
                 operands = dest_reg << 9;
             }; break;
 
@@ -262,10 +287,25 @@ Error read_asm_file_to_lines(const char *const filename, vector<Word> &words) {
     }
 stop_parsing:
 
-    // TODO: Replace label references with PC offsets !
+    // Replace label references with PC offsets based on label definitions
+    for (size_t i = 0; i < label_references.size(); ++i) {
+        LabelReference &ref = label_references[i];
+        /* printf("Resolving '%s' at 0x%04lx\n", ref.name, ref.index); */
+
+        size_t index;
+        if (!find_label_definition(ref.name, label_definitions, index)) {
+            fprintf(stderr, "Undefined label '%s'\n", ref.name);
+            return ERR_ASM_UNDEFINED_LABEL;
+        }
+        /* printf("Found definition at 0x%04lx\n", index); */
+
+        size_t pc_offset = index - ref.index - 1;
+        /* printf("PC offset: 0x%04lx\n", pc_offset); */
+
+        words[ref.index] |= pc_offset & BITMASK_LOW_9;
+    }
 
     fclose(asm_file);
-
     return ERR_OK;
 }
 

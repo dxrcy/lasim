@@ -43,17 +43,19 @@ typedef enum Error {
     ERR_ASM_EXPECTED_ORIG = 0x3b,
     ERR_ASM_EXPECTED_END = 0x3c,
     ERR_ASM_EXPECTED_COMMA = 0x3d,
+    ERR_ASM_DUPLICATE_LABEL = 0x3e,
+    ERR_ASM_UNDEFINED_LABEL = 0x3f,
     // Malformed instructions
-    ERR_MALFORMED_INSTR = 0x40,     // Invalid/unsupported/reserved instruction
-    ERR_MALFORMED_PADDING = 0x41,   // Expected correct padding in instruction
-    ERR_MALFORMED_TRAP = 0x42,      // Invalid/unsupported trap vector
-    ERR_UNAUTHORIZED_INSTR = 0x43,  // RTI (not in supervisor mode)
+    ERR_MALFORMED_INSTR = 0x50,     // Invalid/unsupported/reserved instruction
+    ERR_MALFORMED_PADDING = 0x51,   // Expected correct padding in instruction
+    ERR_MALFORMED_TRAP = 0x52,      // Invalid/unsupported trap vector
+    ERR_UNAUTHORIZED_INSTR = 0x53,  // RTI (not in supervisor mode)
     // Runtime error
-    ERR_ADDRESS_TOO_LOW = 0x51,   // Trying to load from memory before origin
-    ERR_ADDRESS_TOO_HIGH = 0x52,  // Trying to load from memory after file end
+    ERR_ADDRESS_TOO_LOW = 0x61,   // Trying to load from memory before origin
+    ERR_ADDRESS_TOO_HIGH = 0x62,  // Trying to load from memory after file end
     // 'Meta'
-    ERR_UNIMPLEMENTED = 0x71,
-    ERR_UNREACHABLE = 0x72,
+    ERR_UNIMPLEMENTED = 0xf1,
+    ERR_UNREACHABLE = 0xf2,
 } Error;
 
 #endif
