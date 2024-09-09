@@ -70,6 +70,7 @@ typedef enum Directive {
 
 typedef enum Instruction {
     ADD,
+    AND,
     LEA,
     PUTS,
     HALT,
@@ -287,14 +288,16 @@ Error read_asm_file_to_lines(const char *const filename, vector<Word> &words) {
         }
 
         Instruction instruction = token.value.instruction;
-        /* printf("INSTRUCTION: %s\n", instruction_to_string(instruction)); */
+        printf("INSTRUCTION: %s\n", instruction_to_string(instruction));
 
         OpcodeValue opcode = 0;
         Word operands = 0;
 
         switch (instruction) {
-            case Instruction::ADD: {
-                opcode = OPCODE_ADD;
+            case Instruction::ADD:
+            case Instruction::AND: {
+                opcode =
+                    instruction == Instruction::ADD ? OPCODE_ADD : OPCODE_AND;
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
                 EXPECT_TOKEN_IS_TAG(token, REGISTER);
@@ -404,7 +407,7 @@ bool char_can_be_identifier_start(const char ch) {
 }
 
 bool char_is_eol(const char ch) {
-    return ch == '\0' || ch == '\n' || ch == '\\';
+    return ch == '\0' || ch == '\n' || ch == ';';
 }
 
 int8_t parse_hex_digit(const char ch) {
@@ -422,6 +425,22 @@ bool string_equals(const char *const candidate, const char *const target,
         if (tolower(candidate[i]) != tolower(target[i])) return false;
     }
     return true;
+}
+
+static const char *directive_to_string(Directive directive) {
+    switch (directive) {
+        case Directive::ORIG:
+            return "ORIG";
+        case Directive::END:
+            return "END";
+        case Directive::FILL:
+            return "FILL";
+        case Directive::BLKW:
+            return "BLKW";
+        case Directive::STRINGZ:
+            return "STRINGZ";
+    }
+    unreachable();
 }
 
 Error directive_from_string(Token &token, const char *const directive,
@@ -442,18 +461,18 @@ Error directive_from_string(Token &token, const char *const directive,
     return ERR_OK;
 }
 
-static const char *directive_to_string(Directive directive) {
-    switch (directive) {
-        case Directive::ORIG:
-            return "ORIG";
-        case Directive::END:
-            return "END";
-        case Directive::FILL:
-            return "FILL";
-        case Directive::BLKW:
-            return "BLKW";
-        case Directive::STRINGZ:
-            return "STRINGZ";
+static const char *instruction_to_string(Instruction instruction) {
+    switch (instruction) {
+        case Instruction::ADD:
+            return "ADD";
+        case Instruction::AND:
+            return "AND";
+        case Instruction::LEA:
+            return "LEA";
+        case Instruction::PUTS:
+            return "PUTS";
+        case Instruction::HALT:
+            return "HALT";
     }
     unreachable();
 }
@@ -462,6 +481,8 @@ bool instruction_from_string(Token &token, const char *const instruction,
                              size_t len) {
     if (string_equals(instruction, "add", len)) {
         token.value.instruction = Instruction::ADD;
+    } else if (string_equals(instruction, "and", len)) {
+        token.value.instruction = Instruction::AND;
     } else if (string_equals(instruction, "lea", len)) {
         token.value.instruction = Instruction::LEA;
     } else if (string_equals(instruction, "puts", len)) {
@@ -472,20 +493,6 @@ bool instruction_from_string(Token &token, const char *const instruction,
         return false;
     }
     return true;
-}
-
-static const char *instruction_to_string(Instruction instruction) {
-    switch (instruction) {
-        case Instruction::ADD:
-            return "ADD";
-        case Instruction::LEA:
-            return "LEA";
-        case Instruction::PUTS:
-            return "PUTS";
-        case Instruction::HALT:
-            return "HALT";
-    }
-    unreachable();
 }
 
 Error get_next_token(const char *&line, Token &token) {
@@ -553,9 +560,9 @@ Error get_next_token(const char *&line, Token &token) {
     if (line[0] == '#' && (line[1] == '-' || isdigit(line[1]))) {
         ++line;
     }
-    printf("%s\n", line);
+    /* printf("%s\n", line); */
     if (line[0] == '-' || isdigit(line[0])) {
-        printf("AOWIDJAWOIDJ\n");
+        token.tag = Token::LITERAL_INTEGER;
         Word sign = 1;
         if (line[0] == '-') {
             sign = -1;
@@ -573,21 +580,18 @@ Error get_next_token(const char *&line, Token &token) {
             ++line;
         }
         number *= sign;
-        printf("%d\n", number);
+        token.value.literal_integer = number;
         return ERR_OK;
     }
 
     // Register
     // Case-insensitive
-    if (line[0] == 'R' || line[0] == 'r') {
+    if (line[0] == 'R' || line[0] == 'r' && isdigit(line[1]) &&
+                              !char_can_be_in_identifier(line[2])) {
         ++line;
         token.tag = Token::REGISTER;
-        char digit = line[0];
-        if (digit < '0' || digit > '9') {
-            return ERR_ASM_INVALID_REGISTER;
-        }
+        token.value.register_ = line[0] - '0';
         ++line;
-        token.value.register_ = digit - '0';
         return ERR_OK;
     }
 
