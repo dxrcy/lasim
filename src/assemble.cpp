@@ -69,6 +69,7 @@ typedef enum Directive {
 } Directive;
 
 typedef enum Instruction {
+    ADD,
     LEA,
     PUTS,
     HALT,
@@ -91,7 +92,7 @@ typedef struct Token {
         Register register_;
         TokenStr label;           // TODO: This might be able to be a pointer?
         TokenStr literal_string;  // TODO: This might be able to be a pointer?
-        Word literal_integer;
+        SignedWord literal_integer;
         char punctuation;
     } value;
 } Token;
@@ -288,31 +289,64 @@ Error read_asm_file_to_lines(const char *const filename, vector<Word> &words) {
         Instruction instruction = token.value.instruction;
         /* printf("INSTRUCTION: %s\n", instruction_to_string(instruction)); */
 
-        OpcodeValue opcode;
-        Word operands;
+        OpcodeValue opcode = 0;
+        Word operands = 0;
 
         switch (instruction) {
-            case LEA: {
-                opcode = OPCODE_LEA;
+            case Instruction::ADD: {
+                opcode = OPCODE_ADD;
+
                 EXPECT_NEXT_TOKEN(line_ptr, token);
                 EXPECT_TOKEN_IS_TAG(token, REGISTER);
                 Register dest_reg = token.value.register_;
+                operands |= dest_reg << 9;
                 EXPECT_NEXT_COMMA(line_ptr);
+
+                EXPECT_NEXT_TOKEN(line_ptr, token);
+                EXPECT_TOKEN_IS_TAG(token, REGISTER);
+                Register src_reg_a = token.value.register_;
+                operands |= dest_reg << 6;
+                EXPECT_NEXT_COMMA(line_ptr);
+
+                EXPECT_NEXT_TOKEN(line_ptr, token);
+                if (token.tag == Token::REGISTER) {
+                    Register src_reg_b = token.value.register_;
+                    operands |= src_reg_b;
+                } else if (token.tag == Token::LITERAL_INTEGER) {
+                    SignedWord immediate = token.value.literal_integer;
+                    if (immediate < -0b10000 || immediate > 0b11111) {
+                        fprintf(stderr, "Immediate too large\n");
+                        return ERR_ASM_IMMEDIATE_TOO_LARGE;
+                    }
+                    operands |= 1 << 5;  // Flag
+                    operands |= immediate & BITMASK_LOW_5;
+                }
+            }; break;
+
+            case Instruction::LEA: {
+                opcode = OPCODE_LEA;
+
+                EXPECT_NEXT_TOKEN(line_ptr, token);
+                EXPECT_TOKEN_IS_TAG(token, REGISTER);
+                Register dest_reg = token.value.register_;
+                operands |= dest_reg << 9;
+                EXPECT_NEXT_COMMA(line_ptr);
+
                 EXPECT_NEXT_TOKEN(line_ptr, token);
                 EXPECT_TOKEN_IS_TAG(token, LABEL);
+
                 label_references.push_back({});
                 memcpy(label_references.back().name, token.value.label,
                        sizeof(LabelReference));
                 label_references.back().index = words.size();
-                operands = dest_reg << 9;
             }; break;
 
-            case PUTS: {
+            case Instruction::PUTS: {
                 opcode = OPCODE_TRAP;
                 operands = TRAP_PUTS;
             }; break;
 
-            case HALT: {
+            case Instruction::HALT: {
                 opcode = OPCODE_TRAP;
                 operands = TRAP_HALT;
             }; break;
@@ -426,7 +460,9 @@ static const char *directive_to_string(Directive directive) {
 
 bool instruction_from_string(Token &token, const char *const instruction,
                              size_t len) {
-    if (string_equals(instruction, "lea", len)) {
+    if (string_equals(instruction, "add", len)) {
+        token.value.instruction = Instruction::ADD;
+    } else if (string_equals(instruction, "lea", len)) {
         token.value.instruction = Instruction::LEA;
     } else if (string_equals(instruction, "puts", len)) {
         token.value.instruction = Instruction::PUTS;
@@ -440,6 +476,8 @@ bool instruction_from_string(Token &token, const char *const instruction,
 
 static const char *instruction_to_string(Instruction instruction) {
     switch (instruction) {
+        case Instruction::ADD:
+            return "ADD";
         case Instruction::LEA:
             return "LEA";
         case Instruction::PUTS:
@@ -487,12 +525,6 @@ Error get_next_token(const char *&line, Token &token) {
         return ERR_OK;
     }
 
-    // Decimal literal
-    if (line[0] == '0') {
-        // TODO: Decimal literals
-        return ERR_UNIMPLEMENTED;
-    }
-
     // Hex literal
     // TODO: Write these if statements better !
     if (line[0] == '0' && line[1] == 'x') {
@@ -514,6 +546,34 @@ Error get_next_token(const char *&line, Token &token) {
             ++line;
         }
         token.value.literal_integer = number;
+        return ERR_OK;
+    }
+
+    // Decimal literal
+    if (line[0] == '#' && (line[1] == '-' || isdigit(line[1]))) {
+        ++line;
+    }
+    printf("%s\n", line);
+    if (line[0] == '-' || isdigit(line[0])) {
+        printf("AOWIDJAWOIDJ\n");
+        Word sign = 1;
+        if (line[0] == '-') {
+            sign = -1;
+            ++line;
+        }
+        Word number = 0;
+        for (size_t i = 0;; ++i) {
+            char ch = line[0];
+            if (!isdigit(line[0])) {
+                if (char_can_be_in_identifier(ch)) return ERR_ASM_INVALID_TOKEN;
+                break;
+            }
+            number *= 10;
+            number += ch - '0';
+            ++line;
+        }
+        number *= sign;
+        printf("%d\n", number);
         return ERR_OK;
     }
 
