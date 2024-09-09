@@ -127,13 +127,13 @@ Error assemble(const char *const asm_filename, const char *const obj_filename) {
 
     /* printf("Words: %ld\n", out_words.size()); */
 
-    /* for (size_t i = 0; i < out_words.size(); ++i) { */
-    /*     if (i > 0 && i % 8 == 0) { */
-    /*         printf("\n"); */
-    /*     } */
-    /*     printf("%04x ", out_words[i]); */
-    /* } */
-    /* printf("\n"); */
+    for (size_t i = 0; i < out_words.size(); ++i) {
+        if (i > 0 && i % 8 == 0) {
+            printf("\n");
+        }
+        printf("%04x ", out_words[i]);
+    }
+    printf("\n");
 
     RETURN_IF_ERR(write_obj_file(obj_filename, out_words));
 
@@ -154,6 +154,26 @@ Error write_obj_file(const char *const filename, const vector<Word> &words) {
     }
 
     fclose(obj_file);
+    return ERR_OK;
+}
+
+Error escape_character(char *const ch) {
+    switch (*ch) {
+        case 'n':
+            *ch = '\n';
+            break;
+        case 'r':
+            *ch = '\r';
+            break;
+        case 't':
+            *ch = '\t';
+            break;
+        case '0':
+            *ch = '\0';
+            break;
+        default:
+            return ERR_ASM_INVALID_ESCAPE_CHAR;
+    }
     return ERR_OK;
 }
 
@@ -214,6 +234,14 @@ Error read_asm_file_to_lines(const char *const filename, vector<Word> &words) {
                     }
                     const char *string = token.value.literal_string;
                     for (char ch; (ch = string[0]) != '\0'; ++string) {
+                        if (ch == '\\') {
+                            ++string;
+                            // "... \" is treated as unterminated
+                            if (string[0] == '\0')
+                                return ERR_ASM_UNTERMINATED_STRING;
+                            ch = string[0];
+                            RETURN_IF_ERR(escape_character(&ch));
+                        }
                         words.push_back(static_cast<Word>(ch));
                     }
                     words.push_back(0x0000);  // Null-termination

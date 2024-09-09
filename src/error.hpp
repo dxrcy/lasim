@@ -46,6 +46,7 @@ typedef enum Error {
     ERR_ASM_EXPECTED_COMMA = 0x3d,
     ERR_ASM_DUPLICATE_LABEL = 0x3e,
     ERR_ASM_UNDEFINED_LABEL = 0x3f,
+    ERR_ASM_INVALID_ESCAPE_CHAR = 0x40,
     // Malformed instructions
     ERR_MALFORMED_INSTR = 0x50,     // Invalid/unsupported/reserved instruction
     ERR_MALFORMED_PADDING = 0x51,   // Expected correct padding in instruction
