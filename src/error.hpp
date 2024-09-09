@@ -23,25 +23,37 @@ typedef enum Error {
     // CLI arguments
     ERR_CLI = 0x10,
     // File operations
-    ERR_FILE_OPEN = 0x20,
-    ERR_FILE_READ = 0x21,
-    ERR_FILE_TOO_SHORT = 0x22,  // No instructions
-    ERR_FILE_TOO_LONG = 0x23,   // Too many instructions to fit in memory
-    ERR_FILE_NOT_ASCII,         // Character in ASM file is not valid ASCII
-    ERR_FILE_UNEXPECTED_EOF,    // File ends before a token is complete
+    ERR_FILE_OPEN = 0x21,
+    ERR_FILE_READ = 0x22,
+    ERR_FILE_TOO_SHORT = 0x23,       // No instructions
+    ERR_FILE_TOO_LONG = 0x24,        // Too many instructions to fit in memory
+    ERR_FILE_NOT_ASCII = 0x25,       // Character in ASM file is not valid ASCII
+    ERR_FILE_UNEXPECTED_EOF = 0x26,  // File ends before a token is complete
     // Assembly parsing
-    ERR_ASM_TOKEN_TOO_LONG = 0xee,
+    ERR_ASM_TOKEN_TOO_LONG = 0x31,
+    ERR_ASM_UNTERMINATED_STRING = 0x32,
+    ERR_ASM_INVALID_TOKEN = 0x33,
+    ERR_ASM_INVALID_DIRECTIVE = 0x34,
+    ERR_ASM_INVALID_REGISTER = 0x35,
+    ERR_ASM_INVALID_OPERAND = 0x36,
+    ERR_ASM_UNEXPECTED_DIRECTIVE = 0x37,
+    ERR_ASM_UNEXPECTED_OPERAND = 0x38,
+    ERR_ASM_EXPECTED_INSTRUCTION = 0x39,
+    ERR_ASM_EXPECTED_OPERAND = 0x3a,
+    ERR_ASM_EXPECTED_ORIG = 0x3b,
+    ERR_ASM_EXPECTED_END = 0x3c,
+    ERR_ASM_EXPECTED_COMMA = 0x3d,
     // Malformed instructions
-    ERR_MALFORMED_INSTR = 0x30,     // Invalid/unsupported/reserved instruction
-    ERR_MALFORMED_PADDING = 0x31,   // Expected correct padding in instruction
-    ERR_MALFORMED_TRAP = 0x32,      // Invalid/unsupported trap vector
-    ERR_UNAUTHORIZED_INSTR = 0x33,  // RTI (not in supervisor mode)
+    ERR_MALFORMED_INSTR = 0x40,     // Invalid/unsupported/reserved instruction
+    ERR_MALFORMED_PADDING = 0x41,   // Expected correct padding in instruction
+    ERR_MALFORMED_TRAP = 0x42,      // Invalid/unsupported trap vector
+    ERR_UNAUTHORIZED_INSTR = 0x43,  // RTI (not in supervisor mode)
     // Runtime error
-    ERR_ADDRESS_TOO_LOW = 0x40,   // Trying to load from memory before origin
-    ERR_ADDRESS_TOO_HIGH = 0x40,  // Trying to load from memory after file end
-    // Meta
-    ERR_UNIMPLEMENTED = 0x70,
-    ERR_UNREACHABLE = 0x71,
+    ERR_ADDRESS_TOO_LOW = 0x51,   // Trying to load from memory before origin
+    ERR_ADDRESS_TOO_HIGH = 0x52,  // Trying to load from memory after file end
+    // 'Meta'
+    ERR_UNIMPLEMENTED = 0x71,
+    ERR_UNREACHABLE = 0x72,
 } Error;
 
 #endif
