@@ -16,6 +16,9 @@
 
 #define WORD_SIZE sizeof(Word)
 
+// Swap high and low bytes of a word
+#define swap_endian(word) (((word) << 8) | ((word) >> 8))
+
 typedef uint16_t Word;       // 2 bytes
 typedef int16_t SignedWord;  // 2 bytes
 

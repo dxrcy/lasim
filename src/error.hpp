@@ -25,9 +25,10 @@ typedef enum Error {
     // File operations
     ERR_FILE_OPEN = 0x21,
     ERR_FILE_READ = 0x22,
-    ERR_FILE_TOO_SHORT = 0x23,       // No instructions
-    ERR_FILE_TOO_LONG = 0x24,        // Too many instructions to fit in memory
-    ERR_FILE_NOT_ASCII = 0x25,       // Character in ASM file is not valid ASCII
+    ERR_FILE_WRITE = 0x23,
+    ERR_FILE_TOO_SHORT = 0x24,       // No instructions
+    ERR_FILE_TOO_LONG = 0x25,        // Too many instructions to fit in memory
+    ERR_FILE_NOT_ASCII = 0x26,       // Character in ASM file is not valid ASCII
     ERR_FILE_UNEXPECTED_EOF = 0x26,  // File ends before a token is complete
     // Assembly parsing
     ERR_ASM_TOKEN_TOO_LONG = 0x31,

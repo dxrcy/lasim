@@ -100,6 +100,7 @@ typedef uint8_t OpcodeValue;  // 4 bits
 
 Error assemble(const char *const asm_filename, const char *const obj_filename);
 Error read_asm_file_to_lines(const char *const filename, vector<Word> &words);
+Error write_obj_file(const char *const filename, const vector<Word> &words);
 Error get_next_token(const char *&line, Token &token);
 // TODO: Add other prototypes
 
@@ -120,24 +121,40 @@ bool find_label_definition(const TokenStr &needle,
 
 void _print_token(const Token &token);
 
-Error assemble(const char *const asm_filename,
-               const char *const _obj_filename) {
+Error assemble(const char *const asm_filename, const char *const obj_filename) {
     vector<Word> out_words;
     RETURN_IF_ERR(read_asm_file_to_lines(asm_filename, out_words));
 
     /* printf("Words: %ld\n", out_words.size()); */
 
-    for (size_t i = 0; i < out_words.size(); ++i) {
-        if (i > 0 && i % 8 == 0) {
-            printf("\n");
-        }
-        printf("%04x ", out_words[i]);
+    /* for (size_t i = 0; i < out_words.size(); ++i) { */
+    /*     if (i > 0 && i % 8 == 0) { */
+    /*         printf("\n"); */
+    /*     } */
+    /*     printf("%04x ", out_words[i]); */
+    /* } */
+    /* printf("\n"); */
+
+    RETURN_IF_ERR(write_obj_file(obj_filename, out_words));
+
+    return ERR_OK;
+}
+
+Error write_obj_file(const char *const filename, const vector<Word> &words) {
+    FILE *obj_file = fopen(filename, "wb");
+    if (obj_file == nullptr) {
+        fprintf(stderr, "Could not open file %s\n", filename);
+        return ERR_FILE_OPEN;
     }
-    printf("\n");
 
-    // TODO: Write to output file
+    for (size_t i = 0; i < words.size(); ++i) {
+        Word word = swap_endian(words[i]);
+        fwrite(&word, sizeof(Word), 1, obj_file);
+        if (ferror(obj_file)) return ERR_FILE_WRITE;
+    }
 
-    return ERR_UNIMPLEMENTED;
+    fclose(obj_file);
+    return ERR_OK;
 }
 
 Error read_asm_file_to_lines(const char *const filename, vector<Word> &words) {

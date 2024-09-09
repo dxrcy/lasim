@@ -17,9 +17,6 @@
 #define low_9_bits_signed(instr) (to_signed_word((instr) & BITMASK_LOW_9, 9))
 #define low_11_bits_signed(instr) (to_signed_word((instr) & BITMASK_LOW_11, 11))
 
-// Swap high and low bytes of a word
-#define swap_endianess(word) (((word) << 8) | ((word) >> 8))
-
 #define MEMORY_CHECK_RETURN_ERR(addr) RETURN_IF_ERR(memory_check(addr))
 
 // Check memory address is within the 'allocated' file memory
@@ -501,7 +498,7 @@ Error read_obj_filename_to_memory(const char *const obj_filename) {
         return ERR_FILE_TOO_SHORT;
     }
 
-    Word start = swap_endianess(origin);
+    Word start = swap_endian(origin);
 
     /* printf("origin: 0x%04x\n", start); */
 
@@ -532,7 +529,7 @@ Error read_obj_filename_to_memory(const char *const obj_filename) {
     // TODO: Make this better !!
     // ^ Read file word-by-word, and swap endianess in the same loop
     for (size_t i = start; i < end; ++i) {
-        memory[i] = swap_endianess(memory[i]);
+        memory[i] = swap_endian(memory[i]);
     }
 
     /* printf("words read: %ld\n", words_read); */
