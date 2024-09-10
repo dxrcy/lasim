@@ -47,7 +47,6 @@ This project only uses the following C++ features (to keep it simple):
 
 - References
 - `nullptr`
-- `new` / `delete`
 - `static_cast` / `reinterpret_cast`
 - `std::vector`
 - `enum class`

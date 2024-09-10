@@ -66,7 +66,6 @@ Error execute(const char *const obj_filename) {
         printf("\n");
     }
 
-    free_memory();
     return ERR_OK;
 }
 
