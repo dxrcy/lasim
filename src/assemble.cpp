@@ -12,7 +12,7 @@
 
 using std::vector;
 
-#define MAX_LINE 64
+#define MAX_LINE 512  // This can be large as it is not aggregated
 #define MAX_IDENTIFIER 32
 #define MAX_LITERAL_STRING 32  // TODO: I think this should be longer ?
 
@@ -247,22 +247,22 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
     vector<LabelReference> label_references;
 
     while (true) {
-        /* printf("----------------\n"); */
         char line_buf[MAX_LINE];
         const char *line_ptr = line_buf;  // Pointer address is mutated
         if (fgets(line_buf, MAX_LINE, asm_file) == NULL) break;
         if (ferror(asm_file)) return ERR_FILE_READ;
 
-        /* printf("<%s>", line_ptr); */
+        printf("<%s>\n", line_ptr);
 
         Token token;
         RETURN_IF_ERR(get_next_token(line_ptr, token));
-        /* _print_token(token); */
+        _print_token(token);
 
         // Empty line
         if (token.tag == Token::NONE) continue;
 
         if (words.size() == 0) {
+            /* _print_token(token); */
             if (token.tag != Token::DIRECTIVE) {
                 fprintf(stderr, "First line must be `.ORIG`\n");
                 return ERR_ASM_EXPECTED_ORIG;
@@ -850,7 +850,7 @@ Error parse_literal_integer_hex(const char *&line, Token &token) {
             return ERR_ASM_INVALID_TOKEN;
         }
     }
-    while (new_line[0] == '0') ++new_line;
+    while (new_line[0] == '0' && isdigit(new_line[1])) ++new_line;
 
     // Not an integer
     // Continue to next token
@@ -899,7 +899,7 @@ Error parse_literal_integer_decimal(const char *&line, Token &token) {
             return ERR_ASM_INVALID_TOKEN;
         }
     }
-    while (new_line[0] == '0') ++new_line;
+    while (new_line[0] == '0' && isdigit(new_line[1])) ++new_line;
 
     // Not an integer
     // Continue to next token
@@ -934,10 +934,14 @@ Error parse_literal_integer_decimal(const char *&line, Token &token) {
 Error get_next_token(const char *&line, Token &token) {
     token.tag = Token::NONE;
 
+    /* printf("-->%c<\n", line[0]); */
+
     // Ignore leading spaces
     while (isspace(line[0])) ++line;
     // Linebreak, EOF, or comment
     if (char_is_eol(line[0])) return ERR_OK;
+
+    /* printf("<<%s>>\n", line); */
 
     /* printf("<%c> 0x%04hx\n", line[0], line[0]); */
 

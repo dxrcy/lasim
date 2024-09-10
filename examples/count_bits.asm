@@ -18,7 +18,7 @@
 Main
     ld r1, NegAscii
     in
-    add r1, r1, r0      ; read single-digit integer value
+    add r1, r1, #0      ; read single-digit integer value
 
     jsr CountOne        ; bit-1 counting subroutine
     jsr Output          ; result display subroutine
