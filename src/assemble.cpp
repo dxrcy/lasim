@@ -13,9 +13,9 @@
 using std::vector;
 
 #define MAX_LINE 512  // This can be large as it is not aggregated
-#define MAX_IDENTIFIER 32
-#define MAX_LITERAL_STRING 32  // TODO: I think this should be longer ?
+#define MAX_LABEL 32
 
+// TODO: Rename these macros probably
 #define EXPECT_NEXT_TOKEN(line_ptr, token)              \
     {                                                   \
         RETURN_IF_ERR(get_next_token(line_ptr, token)); \
@@ -35,26 +35,37 @@ using std::vector;
 
 #define EXPECT_NEXT_COMMA(line_ptr)                                \
     {                                                              \
-        Token token;                                               \
-        EXPECT_NEXT_TOKEN(line_ptr, token);                        \
-        if (token.tag != Token::PUNCTUATION ||                     \
-            token.value.punctuation != ',') {                      \
+        RETURN_IF_ERR(get_next_token(line_ptr, token));            \
+        if (token.tag != Token::COMMA) {                           \
             fprintf(stderr, "Expected comma following operand\n"); \
             return ERR_ASM_EXPECTED_COMMA;                         \
         }                                                          \
     }
 
-typedef char TokenStr[MAX_IDENTIFIER + 1];
-typedef TokenStr LabelName;
+#define EXPECT_EOL(line_ptr)                                           \
+    {                                                                  \
+        Token token;                                                   \
+        RETURN_IF_ERR(get_next_token(line_ptr, token));                \
+        if (token.tag != Token::NONE) {                                \
+            fprintf(stderr, "Unexpected operand after instruction\n"); \
+            return ERR_ASM_UNEXPECTED_OPERAND;                         \
+        }                                                              \
+    }
 
-// TODO: Use a hashmap
+typedef struct StringSlice {
+    const char *pointer;
+    size_t length;
+} StringSlice;
+
+typedef char LabelString[MAX_LABEL];
+
 typedef struct LabelDefinition {
-    LabelName name;
+    LabelString name;
     SignedWord index;
 } LabelDefinition;
 
 typedef struct LabelReference {
-    LabelName name;
+    LabelString name;
     SignedWord index;
     bool is_offset11;  // Used for `JSR` only
 } LabelReference;
@@ -108,18 +119,16 @@ typedef struct Token {
         LABEL,
         LITERAL_STRING,
         LITERAL_INTEGER,
-        // TODO: Change to `,` if no other punctuation is used
-        PUNCTUATION,
+        COMMA,
         NONE,
     } tag;
     union {
         Directive directive;
         Instruction instruction;
         Register register_;
-        TokenStr label;           // TODO: This might be able to be a pointer?
-        TokenStr literal_string;  // TODO: This might be able to be a pointer?
+        StringSlice label;  // Gets copied on push to a labels vector
+        StringSlice literal_string;
         SignedWord literal_integer;
-        char punctuation;
     } value;
 } Token;
 
@@ -134,12 +143,18 @@ Error get_next_token(const char *&line, Token &token);
 static const char *directive_to_string(Directive directive);
 static const char *instruction_to_string(Instruction instruction);
 
-bool find_label_definition(const TokenStr &needle,
+bool string_equals(const char *const candidate, const char *const target);
+
+void _print_string_slice(const StringSlice &slice);
+void _print_token(const Token &token);
+
+bool find_label_definition(const LabelString &target,
                            const vector<LabelDefinition> &definitions,
                            SignedWord &index) {
     for (size_t j = 0; j < definitions.size(); ++j) {
-        if (!strcmp(definitions[j].name, needle)) {
-            index = definitions[j].index;
+        LabelDefinition candidate = definitions[j];
+        if (string_equals(candidate.name, target)) {
+            index = candidate.index;
             return true;
         }
     }
@@ -147,29 +162,21 @@ bool find_label_definition(const TokenStr &needle,
 }
 
 void add_label_reference(vector<LabelReference> &references,
-                         const TokenStr &name, const Word index,
+                         const StringSlice &name, const Word index,
                          const bool is_offset11) {
     references.push_back({});
-    memcpy(references.back().name, name, sizeof(name));
-    references.back().index = index;
-    references.back().is_offset11 = is_offset11;
+    LabelReference &ref = references.back();
+    memcpy(ref.name, name.pointer, name.length);
+    ref.index = index;
+    ref.is_offset11 = is_offset11;
+    /* printf("label:<"); */
+    /* _print_string_slice(name); */
+    /* printf(">\n"); */
 }
-
-void _print_token(const Token &token);
 
 Error assemble(const char *const asm_filename, const char *const obj_filename) {
     vector<Word> out_words;
     RETURN_IF_ERR(read_and_assemble(asm_filename, out_words));
-
-    /* printf("Words: %ld\n", out_words.size()); */
-
-    /* for (size_t i = 0; i < out_words.size(); ++i) { */
-    /*     if (i > 0 && i % 8 == 0) { */
-    /*         printf("\n"); */
-    /*     } */
-    /*     printf("%04x ", out_words[i]); */
-    /* } */
-    /* printf("\n"); */
 
     RETURN_IF_ERR(write_obj_file(obj_filename, out_words));
 
@@ -182,6 +189,8 @@ Error write_obj_file(const char *const filename, const vector<Word> &words) {
         fprintf(stderr, "Could not open file %s\n", filename);
         return ERR_FILE_OPEN;
     }
+
+    /* printf("Size: %lu words\n", words.size()); */
 
     for (size_t i = 0; i < words.size(); ++i) {
         Word word = swap_endian(words[i]);
@@ -256,6 +265,7 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
 
         Token token;
         RETURN_IF_ERR(get_next_token(line_ptr, token));
+
         /* _print_token(token); */
 
         // Empty line
@@ -279,16 +289,19 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
         // TODO: Parsing label before directive *might* have bad effects,
         //     although I cannot think of any off the top of my head.
         if (token.tag == Token::LABEL) {
-            const TokenStr &name = token.value.label;
+            const StringSlice &name = token.value.label;
             for (size_t i = 0; i < label_definitions.size(); ++i) {
-                if (!strcmp(label_definitions[i].name, name)) {
-                    fprintf(stderr, "Duplicate label '%s'\n", name);
+                if (!string_equals(label_definitions[i].name, name.pointer)) {
+                    fprintf(stderr, "Duplicate label '%s'\n", name.pointer);
                     return ERR_ASM_DUPLICATE_LABEL;
                 }
             }
             label_definitions.push_back({});
-            memcpy(label_definitions.back().name, name, sizeof(TokenStr));
-            label_definitions.back().index = words.size();
+            LabelDefinition &def = label_definitions.back();
+            memcpy(def.name, name.pointer, name.length);
+            def.index = words.size();
+
+            /* _print_string_slice(name); */
             RETURN_IF_ERR(get_next_token(line_ptr, token));
         }
 
@@ -300,7 +313,6 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                     goto stop_parsing;
 
                 case Directive::STRINGZ: {
-                    // TODO: Escape characters
                     /* printf("%s\n", line_ptr); */
                     RETURN_IF_ERR(get_next_token(line_ptr, token));
                     /* _print_token(token); */
@@ -309,14 +321,19 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                                 "String literal required after `.STRINGZ`\n");
                         return ERR_ASM_EXPECTED_OPERAND;
                     }
-                    const char *string = token.value.literal_string;
-                    for (char ch; (ch = string[0]) != '\0'; ++string) {
+                    const char *string = token.value.literal_string.pointer;
+                    /* printf("("); */
+                    /* _print_string_slice(token.value.literal_string); */
+                    /* printf(")\n"); */
+                    for (size_t i = 0; i < token.value.literal_string.length;
+                         ++i) {
+                        char ch = string[i];
                         if (ch == '\\') {
-                            ++string;
+                            ++i;
                             // "... \" is treated as unterminated
-                            if (string[0] == '\0')
+                            if (i > token.value.literal_string.length)
                                 return ERR_ASM_UNTERMINATED_STRING;
-                            ch = string[0];
+                            ch = string[i];
                             RETURN_IF_ERR(escape_character(&ch));
                         }
                         words.push_back(static_cast<Word>(ch));
@@ -346,11 +363,7 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                     return ERR_ASM_UNEXPECTED_DIRECTIVE;
             }
 
-            RETURN_IF_ERR(get_next_token(line_ptr, token));
-            if (token.tag != Token::NONE) {
-                fprintf(stderr, "Unexpected operand after directive\n");
-                return ERR_ASM_UNEXPECTED_OPERAND;
-            }
+            EXPECT_EOL(line_ptr);
             continue;
         }
 
@@ -364,7 +377,8 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
         }
 
         const Instruction instruction = token.value.instruction;
-        /* printf("Instruction: %s\n", instruction_to_string(instruction)); */
+        /* printf("Instruction: %s\n", instruction_to_string(instruction));
+         */
 
         Opcode opcode;
         Word operands = 0;
@@ -584,7 +598,8 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
 
                     // Trap instruction with explicit code
                     case Instruction::TRAP: {
-                        // TODO: Check should be aware of sign; See `ADD` case
+                        // TODO: Check should be aware of sign; See `ADD`
+                        // case
                         EXPECT_NEXT_TOKEN(line_ptr, token);
                         EXPECT_TOKEN_IS_TAG(token, LITERAL_INTEGER);
                         const SignedWord immediate =
@@ -607,11 +622,7 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
             }; break;
         }
 
-        RETURN_IF_ERR(get_next_token(line_ptr, token));
-        if (token.tag != Token::NONE) {
-            fprintf(stderr, "Unexpected operand after instruction\n");
-            return ERR_ASM_UNEXPECTED_OPERAND;
-        }
+        EXPECT_EOL(line_ptr);
 
         Word word = static_cast<Word>(opcode) << 12 | operands;
         words.push_back(word);
@@ -621,7 +632,7 @@ stop_parsing:
     // Replace label references with PC offsets based on label definitions
     for (size_t i = 0; i < label_references.size(); ++i) {
         LabelReference &ref = label_references[i];
-        /* printf("Resolving '%s' at 0x%04lx\n", ref.name, ref.index); */
+        /* printf("Resolving '%s' at 0x%04x\n", ref.name, ref.index); */
 
         SignedWord index;
         if (!find_label_definition(ref.name, label_definitions, index)) {
@@ -669,12 +680,13 @@ int8_t parse_hex_digit(const char ch) {
     return -1;
 }
 
+// TODO: Replace with standard lib function
 // Candidate is NOT null-terminated
 // Match is CASE-INSENSITIVE
-bool string_equals(const char *const candidate, const char *const target,
-                   const size_t candidate_len) {
-    for (size_t i = 0; i < candidate_len; ++i) {
-        if (tolower(candidate[i]) != tolower(target[i])) return false;
+bool string_equals(const char *candidate, const char *target) {
+    // Equality will check \0-mismatch, so no worry of reading past string
+    for (; candidate[0] != '\0'; ++candidate, ++target) {
+        if (tolower(candidate[0]) != tolower(target[0])) return false;
     }
     return true;
 }
@@ -695,17 +707,16 @@ static const char *directive_to_string(Directive directive) {
     UNREACHABLE();
 }
 
-Error directive_from_string(Token &token, const char *const directive,
-                            size_t len) {
-    if (string_equals(directive, "orig", len)) {
+Error directive_from_string(Token &token, const char *const directive) {
+    if (string_equals("orig", directive)) {
         token.value.directive = Directive::ORIG;
-    } else if (string_equals(directive, "end", len)) {
+    } else if (string_equals("end", directive)) {
         token.value.directive = Directive::END;
-    } else if (string_equals(directive, "fill", len)) {
+    } else if (string_equals("fill", directive)) {
         token.value.directive = Directive::FILL;
-    } else if (string_equals(directive, "blkw", len)) {
+    } else if (string_equals("blkw", directive)) {
         token.value.directive = Directive::BLKW;
-    } else if (string_equals(directive, "stringz", len)) {
+    } else if (string_equals("stringz", directive)) {
         token.value.directive = Directive::STRINGZ;
     } else {
         return ERR_ASM_INVALID_DIRECTIVE;
@@ -779,67 +790,66 @@ static const char *instruction_to_string(Instruction instruction) {
     UNREACHABLE();
 }
 
-bool instruction_from_string(Token &token, const char *const instruction,
-                             size_t len) {
-    if (string_equals(instruction, "add", len)) {
+bool instruction_from_string(Token &token, const char *const instruction) {
+    if (string_equals("add", instruction)) {
         token.value.instruction = Instruction::ADD;
-    } else if (string_equals(instruction, "and", len)) {
+    } else if (string_equals("and", instruction)) {
         token.value.instruction = Instruction::AND;
-    } else if (string_equals(instruction, "not", len)) {
+    } else if (string_equals("not", instruction)) {
         token.value.instruction = Instruction::NOT;
-    } else if (string_equals(instruction, "br", len)) {
+    } else if (string_equals("br", instruction)) {
         token.value.instruction = Instruction::BR;
-    } else if (string_equals(instruction, "brn", len)) {
+    } else if (string_equals("brn", instruction)) {
         token.value.instruction = Instruction::BRN;
-    } else if (string_equals(instruction, "brz", len)) {
+    } else if (string_equals("brz", instruction)) {
         token.value.instruction = Instruction::BRZ;
-    } else if (string_equals(instruction, "brp", len)) {
+    } else if (string_equals("brp", instruction)) {
         token.value.instruction = Instruction::BRP;
-    } else if (string_equals(instruction, "brnz", len)) {
+    } else if (string_equals("brnz", instruction)) {
         token.value.instruction = Instruction::BRNZ;
-    } else if (string_equals(instruction, "brzp", len)) {
+    } else if (string_equals("brzp", instruction)) {
         token.value.instruction = Instruction::BRZP;
-    } else if (string_equals(instruction, "brnp", len)) {
+    } else if (string_equals("brnp", instruction)) {
         token.value.instruction = Instruction::BRNP;
-    } else if (string_equals(instruction, "brnzp", len)) {
+    } else if (string_equals("brnzp", instruction)) {
         token.value.instruction = Instruction::BRNZP;
-    } else if (string_equals(instruction, "jmp", len)) {
+    } else if (string_equals("jmp", instruction)) {
         token.value.instruction = Instruction::JMP;
-    } else if (string_equals(instruction, "ret", len)) {
+    } else if (string_equals("ret", instruction)) {
         token.value.instruction = Instruction::RET;
-    } else if (string_equals(instruction, "jsr", len)) {
+    } else if (string_equals("jsr", instruction)) {
         token.value.instruction = Instruction::JSR;
-    } else if (string_equals(instruction, "jsrr", len)) {
+    } else if (string_equals("jsrr", instruction)) {
         token.value.instruction = Instruction::JSRR;
-    } else if (string_equals(instruction, "ld", len)) {
+    } else if (string_equals("ld", instruction)) {
         token.value.instruction = Instruction::LD;
-    } else if (string_equals(instruction, "st", len)) {
+    } else if (string_equals("st", instruction)) {
         token.value.instruction = Instruction::ST;
-    } else if (string_equals(instruction, "ldi", len)) {
+    } else if (string_equals("ldi", instruction)) {
         token.value.instruction = Instruction::LDI;
-    } else if (string_equals(instruction, "sti", len)) {
+    } else if (string_equals("sti", instruction)) {
         token.value.instruction = Instruction::STI;
-    } else if (string_equals(instruction, "ldr", len)) {
+    } else if (string_equals("ldr", instruction)) {
         token.value.instruction = Instruction::LDR;
-    } else if (string_equals(instruction, "str", len)) {
+    } else if (string_equals("str", instruction)) {
         token.value.instruction = Instruction::STR;
-    } else if (string_equals(instruction, "lea", len)) {
+    } else if (string_equals("lea", instruction)) {
         token.value.instruction = Instruction::LEA;
-    } else if (string_equals(instruction, "trap", len)) {
+    } else if (string_equals("trap", instruction)) {
         token.value.instruction = Instruction::TRAP;
-    } else if (string_equals(instruction, "getc", len)) {
+    } else if (string_equals("getc", instruction)) {
         token.value.instruction = Instruction::GETC;
-    } else if (string_equals(instruction, "out", len)) {
+    } else if (string_equals("out", instruction)) {
         token.value.instruction = Instruction::OUT;
-    } else if (string_equals(instruction, "puts", len)) {
+    } else if (string_equals("puts", instruction)) {
         token.value.instruction = Instruction::PUTS;
-    } else if (string_equals(instruction, "in", len)) {
+    } else if (string_equals("in", instruction)) {
         token.value.instruction = Instruction::IN;
-    } else if (string_equals(instruction, "putsp", len)) {
+    } else if (string_equals("putsp", instruction)) {
         token.value.instruction = Instruction::PUTSP;
-    } else if (string_equals(instruction, "halt", len)) {
+    } else if (string_equals("halt", instruction)) {
         token.value.instruction = Instruction::HALT;
-    } else if (string_equals(instruction, "rti", len)) {
+    } else if (string_equals("rti", instruction)) {
         token.value.instruction = Instruction::RTI;
     } else {
         return false;
@@ -970,8 +980,7 @@ Error get_next_token(const char *&line, Token &token) {
 
     // Comma
     if (line[0] == ',') {
-        token.tag = Token::PUNCTUATION;
-        token.value.punctuation = ',';
+        token.tag = Token::COMMA;
         ++line;
         return ERR_OK;
     }
@@ -980,18 +989,15 @@ Error get_next_token(const char *&line, Token &token) {
     if (line[0] == '"') {
         ++line;
         token.tag = Token::LITERAL_STRING;
-        size_t i = 0;
-        for (; i < MAX_LITERAL_STRING; ++i) {
+        token.value.literal_string.pointer = line;
+        for (; line[0] != '"'; ++line) {
             if (line[0] == '\n' || line[0] == '\0')
                 return ERR_ASM_UNTERMINATED_STRING;
-            if (line[0] == '"') {
-                ++line;
-                break;
-            }
-            token.value.literal_string[i] = line[0];
-            ++line;
         }
-        token.value.literal_string[i] = '\0';
+        token.value.literal_string.length =
+            line - token.value.literal_string.pointer;
+        ++line;  // Account for closing quote
+        /* _print_string_slice(token.value.literal_string); */
         return ERR_OK;
     }
 
@@ -1012,12 +1018,10 @@ Error get_next_token(const char *&line, Token &token) {
         ++line;
         token.tag = Token::DIRECTIVE;
         const char *directive = line;
-        size_t len = 0;
-        for (; len < MAX_IDENTIFIER; ++len) {
-            if (!char_can_be_in_identifier(tolower(line[0]))) break;
+        while (char_can_be_in_identifier(tolower(line[0]))) {
             ++line;
         }
-        return directive_from_string(token, directive, len);
+        return directive_from_string(token, directive);
     }
 
     // Hex literal
@@ -1034,31 +1038,38 @@ Error get_next_token(const char *&line, Token &token) {
 
     // Label or instruction
     // Case-insensitive
-    const char *identifier = line;
+    StringSlice identifier;
+    identifier.pointer = line;
     ++line;
-    size_t len = 1;
-    for (; len < MAX_IDENTIFIER; ++len) {
+    for (; char_can_be_in_identifier(tolower(line[0])); ++line) {
         if (!char_can_be_in_identifier(tolower(line[0]))) break;
-        ++line;
     }
+    identifier.length = line - identifier.pointer;
 
-    if (instruction_from_string(token, identifier, len)) {
+    /* printf("IDENT: <"); */
+    /* _print_string_slice(identifier); */
+    /* printf(">\n"); */
+
+    if (instruction_from_string(token, identifier.pointer)) {
         // Instruction -- value already set
         token.tag = Token::INSTRUCTION;
     } else {
         // Label
+        // TODO: Check if length > MAX_LABEL
         token.tag = Token::LABEL;
-        size_t i = 0;
-        for (; i < len; ++i) {
-            token.value.label[i] = identifier[i];
-        }
-        token.value.label[i] = '\0';
+        token.value.label = identifier;
     }
     return ERR_OK;
 }
 
+void _print_string_slice(const StringSlice &slice) {
+    for (size_t i = 0; i < slice.length; ++i) {
+        printf("%c", slice.pointer[i]);
+    }
+}
+
 void _print_token(const Token &token) {
-    printf("TOKEN: ");
+    printf("Token: ");
     switch (token.tag) {
         case Token::INSTRUCTION: {
             printf("Instruction: %s\n",
@@ -1072,17 +1083,21 @@ void _print_token(const Token &token) {
             printf("Register: R%d\n", token.value.register_);
         }; break;
         case Token::LABEL: {
-            printf("Label: <%s>\n", token.value.label);
+            printf("Label: <");
+            _print_string_slice(token.value.label);
+            printf(">\n");
         }; break;
         case Token::LITERAL_STRING: {
-            printf("String: <%s>\n", token.value.literal_string);
+            printf("String: <");
+            _print_string_slice(token.value.literal_string);
+            printf(">\n");
         }; break;
         case Token::LITERAL_INTEGER: {
             printf("Integer: 0x%04hx #%d\n", token.value.literal_integer,
                    token.value.literal_integer);
         }; break;
-        case Token::PUNCTUATION: {
-            printf("Punctuation: <%c>\n", token.value.punctuation);
+        case Token::COMMA: {
+            printf("Comma\n");
         }; break;
         case Token::NONE: {
             printf("NONE!\n");

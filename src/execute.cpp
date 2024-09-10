@@ -44,7 +44,7 @@ void print_char(const char ch);
 void print_on_new_line(void);
 static char *halfbyte_string(const Word word);
 
-void _dbg_print_registers(void);
+void _print_registers(void);
 
 Error execute(const char *const obj_filename) {
     // TODO: Allocate `memory` here
@@ -575,7 +575,7 @@ void print_on_new_line() {
     }
 }
 
-// Since %b printf format specifier is not ISO-compliant
+// Since %b printf format specifier is ""not ISO-compliant""
 static char *halfbyte_string(const Word word) {
     static char str[5];
     for (int i = 0; i < 4; ++i) {
@@ -585,7 +585,7 @@ static char *halfbyte_string(const Word word) {
     return str;
 }
 
-void _dbg_print_registers() {
+void _print_registers() {
     printf("--------------------------\n");
     printf("    PC  0x%04hx\n", registers.program_counter);
     printf("    SP  0x%04hx\n", registers.stack_pointer);
