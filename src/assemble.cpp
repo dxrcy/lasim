@@ -73,6 +73,13 @@ enum class Instruction {
     AND,
     NOT,
     BR,
+    BRN,
+    BRZ,
+    BRP,
+    BRNZ,
+    BRZP,
+    BRNP,
+    BRNZP,
     JMP,
     RET,
     JSR,
@@ -203,6 +210,30 @@ Error escape_character(char *const ch) {
             return ERR_ASM_INVALID_ESCAPE_CHAR;
     }
     return ERR_OK;
+}
+
+// Must ONLY be called with a BR* instruction
+ConditionCode branch_condition_code(Instruction instruction) {
+    switch (instruction) {
+        case Instruction::BR:
+            return 0b000;
+        case Instruction::BRN:
+            return 0b100;
+        case Instruction::BRZ:
+            return 0b010;
+        case Instruction::BRP:
+            return 0b001;
+        case Instruction::BRNZ:
+            return 0b110;
+        case Instruction::BRZP:
+            return 0b011;
+        case Instruction::BRNP:
+            return 0b101;
+        case Instruction::BRNZP:
+            return 0b111;
+        default:
+            unreachable();
+    }
 }
 
 Error read_and_assemble(const char *const filename, vector<Word> &words) {
@@ -342,7 +373,11 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                     operands |= src_reg_b;
                 } else if (token.tag == Token::LITERAL_INTEGER) {
                     SignedWord immediate = token.value.literal_integer;
-                    if (immediate < -0b10000 || immediate > 0b11111) {
+                    // TODO: This currently treats all integers as unsigned!
+                    // Ideally, if the integer is meant to be signed (it
+                    //      has a minus sign), the last 5 bits may be 1s,
+                    //      otherwise only the last 4 bits may be 1s
+                    if (immediate >> 5 != 0) {
                         fprintf(stderr, "Immediate too large\n");
                         return ERR_ASM_IMMEDIATE_TOO_LARGE;
                     }
@@ -368,8 +403,22 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                 operands |= BITMASK_LOW_6;  // Padding
             }; break;
 
-            case Instruction::BR: {
-                return ERR_UNIMPLEMENTED;
+            case Instruction::BR:
+            case Instruction::BRN:
+            case Instruction::BRZ:
+            case Instruction::BRP:
+            case Instruction::BRNZ:
+            case Instruction::BRZP:
+            case Instruction::BRNP:
+            case Instruction::BRNZP: {
+                opcode = Opcode::BR;
+                ConditionCode condition = branch_condition_code(instruction);
+                operands |= condition << 9;
+
+                EXPECT_NEXT_TOKEN(line_ptr, token);
+                EXPECT_TOKEN_IS_TAG(token, LABEL);
+                add_label_reference(label_references, token.value.label,
+                                    words.size());
             }; break;
 
             case Instruction::JMP: {
@@ -579,6 +628,20 @@ static const char *instruction_to_string(Instruction instruction) {
             return "NOT";
         case Instruction::BR:
             return "BR";
+        case Instruction::BRN:
+            return "RN";
+        case Instruction::BRZ:
+            return "RZ";
+        case Instruction::BRP:
+            return "RP";
+        case Instruction::BRNZ:
+            return "RNZ";
+        case Instruction::BRZP:
+            return "RZP";
+        case Instruction::BRNP:
+            return "RNP";
+        case Instruction::BRNZP:
+            return "RNZP";
         case Instruction::JMP:
             return "JMP";
         case Instruction::RET:
@@ -631,6 +694,20 @@ bool instruction_from_string(Token &token, const char *const instruction,
         token.value.instruction = Instruction::NOT;
     } else if (string_equals(instruction, "br", len)) {
         token.value.instruction = Instruction::BR;
+    } else if (string_equals(instruction, "brn", len)) {
+        token.value.instruction = Instruction::BRN;
+    } else if (string_equals(instruction, "brz", len)) {
+        token.value.instruction = Instruction::BRZ;
+    } else if (string_equals(instruction, "brp", len)) {
+        token.value.instruction = Instruction::BRP;
+    } else if (string_equals(instruction, "brnz", len)) {
+        token.value.instruction = Instruction::BRNZ;
+    } else if (string_equals(instruction, "brzp", len)) {
+        token.value.instruction = Instruction::BRZP;
+    } else if (string_equals(instruction, "brnp", len)) {
+        token.value.instruction = Instruction::BRNP;
+    } else if (string_equals(instruction, "brnzp", len)) {
+        token.value.instruction = Instruction::BRNZP;
     } else if (string_equals(instruction, "jmp", len)) {
         token.value.instruction = Instruction::JMP;
     } else if (string_equals(instruction, "ret", len)) {
@@ -675,6 +752,110 @@ bool instruction_from_string(Token &token, const char *const instruction,
     return true;
 }
 
+Error parse_literal_integer_hex(const char *&line, Token &token) {
+    const char *new_line = line;
+
+    bool negative = false;
+    if (new_line[0] == '-') {
+        ++new_line;
+        negative = true;
+    }
+    // Only allow one 0 in prefixx
+    if (new_line[0] == '0') ++new_line;
+    // Must have prefix
+    if (new_line[0] != 'x') {
+        return ERR_OK;
+    }
+    ++new_line;
+
+    if (new_line[0] == '-') {
+        ++new_line;
+        // Don't allow `-x-`
+        if (negative) {
+            return ERR_ASM_INVALID_TOKEN;
+        }
+    }
+    while (new_line[0] == '0') ++new_line;
+
+    // Not an integer
+    // Continue to next token
+    if (parse_hex_digit(new_line[0]) < 0) {
+        return ERR_OK;
+    }
+
+    line = new_line;  // Skip [x0-] which was just checked
+    token.tag = Token::LITERAL_INTEGER;
+
+    Word number = 0;
+    while (true) {
+        char ch = line[0];
+        int8_t digit = parse_hex_digit(ch);  // Catches '\0'
+        if (digit < 0) {
+            // Integer-suffix type situation
+            if (ch != '\0' && char_can_be_in_identifier(ch))
+                return ERR_ASM_INVALID_TOKEN;
+            break;
+        }
+        number <<= 4;
+        ++line;
+    }
+
+    // TODO: Maybe don't set sign here...
+    number *= negative ? -1 : 1;
+    token.value.literal_integer = number;
+
+    return ERR_OK;
+}
+
+Error parse_literal_integer_decimal(const char *&line, Token &token) {
+    const char *new_line = line;
+
+    bool negative = false;
+    if (new_line[0] == '-') {
+        ++new_line;
+        negative = true;
+    }
+    // Don't allow any 0's before prefix
+    if (new_line[0] == '#') ++new_line;  // Optional
+    if (new_line[0] == '-') {
+        ++new_line;
+        // Don't allow `-#-`
+        if (negative) {
+            return ERR_ASM_INVALID_TOKEN;
+        }
+    }
+    while (new_line[0] == '0') ++new_line;
+
+    // Not an integer
+    // Continue to next token
+    if (!isdigit(new_line[0])) {
+        return ERR_OK;
+    }
+
+    line = new_line;  // Skip [#0-] which was just checked
+    token.tag = Token::LITERAL_INTEGER;
+
+    Word number = 0;
+    while (true) {
+        char ch = line[0];
+        if (!isdigit(line[0])) {  // Catches '\0'
+            // Integer-suffix type situation
+            if (ch != '\0' && char_can_be_in_identifier(ch))
+                return ERR_ASM_INVALID_TOKEN;
+            break;
+        }
+        number *= 10;
+        number += ch - '0';
+        ++line;
+    }
+
+    // TODO: Maybe don't set sign here...
+    number *= negative ? -1 : 1;
+    token.value.literal_integer = number;
+
+    return ERR_OK;
+}
+
 Error get_next_token(const char *&line, Token &token) {
     token.tag = Token::NONE;
 
@@ -712,58 +893,6 @@ Error get_next_token(const char *&line, Token &token) {
         return ERR_OK;
     }
 
-    // Hex literal
-    // TODO: Write these if statements better !
-    if (line[0] == '0' && line[1] == 'x') {
-        ++line;
-    }
-    if (line[0] == 'x') {
-        token.tag = Token::LITERAL_INTEGER;
-        ++line;
-        Word number = 0;
-        while (true) {
-            char ch = line[0];
-            int8_t digit = parse_hex_digit(ch);  // Catches '\0'
-            if (digit < 0) {
-                if (char_can_be_in_identifier(ch)) return ERR_ASM_INVALID_TOKEN;
-                break;
-            }
-            number <<= 4;
-            number += digit;
-            ++line;
-        }
-        token.value.literal_integer = number;
-        return ERR_OK;
-    }
-
-    // Decimal literal
-    if (line[0] == '#' && (line[1] == '-' || isdigit(line[1]))) {
-        ++line;
-    }
-    /* printf("%s\n", line); */
-    if (line[0] == '-' || isdigit(line[0])) {
-        token.tag = Token::LITERAL_INTEGER;
-        Word sign = 1;
-        if (line[0] == '-') {
-            sign = -1;
-            ++line;
-        }
-        Word number = 0;
-        while (true) {
-            char ch = line[0];
-            if (!isdigit(line[0])) {  // Catches '\0'
-                if (char_can_be_in_identifier(ch)) return ERR_ASM_INVALID_TOKEN;
-                break;
-            }
-            number *= 10;
-            number += ch - '0';
-            ++line;
-        }
-        number *= sign;
-        token.value.literal_integer = number;
-        return ERR_OK;
-    }
-
     // Register
     // Case-insensitive
     if ((line[0] == 'R' || line[0] == 'r') &&
@@ -788,6 +917,13 @@ Error get_next_token(const char *&line, Token &token) {
         }
         return directive_from_string(token, directive, len);
     }
+
+    // Hex literal
+    RETURN_IF_ERR(parse_literal_integer_hex(line, token));
+    if (token.tag != Token::NONE) return ERR_OK;  // Tried to parse, but failed
+    // Decimal literal
+    RETURN_IF_ERR(parse_literal_integer_decimal(line, token));
+    if (token.tag != Token::NONE) return ERR_OK;  // Tried to parse, but failed
 
     // Character cannot start an identifier -> invalid
     if (!char_can_be_identifier_start(line[0])) {

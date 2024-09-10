@@ -1,9 +1,11 @@
 .ORIG x3000
 
     LEA R0, HELLO_WORLD
-    ADD R0, R0, x12
+    ADD R0, R0, x04
     NOT R0, R0
+    BRz HELLO_WORLD
     ; PUTS
+    BRnp HELLO_WORLD
 
     HALT
 
