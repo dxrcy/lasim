@@ -15,6 +15,7 @@ int main(const int argc, const char *const *const argv) {
             break;
         default:
             printf("ERROR: 0x%04x\n", error);
+            return error;
     }
 
     return ERR_OK;

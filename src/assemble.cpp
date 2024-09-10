@@ -276,6 +276,24 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
             continue;
         }
 
+        // TODO: Parsing label before directive *might* have bad effects,
+        //     although I cannot think of any off the top of my head.
+        if (token.tag == Token::LABEL) {
+            const TokenStr &name = token.value.label;
+            for (size_t i = 0; i < label_definitions.size(); ++i) {
+                if (!strcmp(label_definitions[i].name, name)) {
+                    fprintf(stderr, "Duplicate label '%s'\n", name);
+                    return ERR_ASM_DUPLICATE_LABEL;
+                }
+            }
+            label_definitions.push_back({});
+            memcpy(label_definitions.back().name, name, sizeof(TokenStr));
+            label_definitions.back().index = words.size();
+            RETURN_IF_ERR(get_next_token(line_ptr, token));
+        }
+
+        /* _print_token(token); */
+
         if (token.tag == Token::DIRECTIVE) {
             switch (token.value.directive) {
                 case Directive::END:
@@ -306,6 +324,12 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                     words.push_back(0x0000);  // Null-termination
                 }; break;
 
+                case Directive::FILL: {
+                    EXPECT_NEXT_TOKEN(line_ptr, token);
+                    EXPECT_TOKEN_IS_TAG(token, LITERAL_INTEGER);
+                    words.push_back(token.value.literal_integer);
+                }; break;
+
                 default:
                     // Includes `ORIG`
                     fprintf(stderr, "Unexpected directive `%s`\n",
@@ -321,30 +345,17 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
             continue;
         }
 
-        if (token.tag == Token::LABEL) {
-            const TokenStr &name = token.value.label;
-            for (size_t i = 0; i < label_definitions.size(); ++i) {
-                if (!strcmp(label_definitions[i].name, name)) {
-                    fprintf(stderr, "Duplicate label '%s'\n", name);
-                    return ERR_ASM_DUPLICATE_LABEL;
-                }
-            }
-            label_definitions.push_back({});
-            memcpy(label_definitions.back().name, name, sizeof(TokenStr));
-            label_definitions.back().index = words.size();
-            RETURN_IF_ERR(get_next_token(line_ptr, token));
-        }
-
         // Line with only label
         if (token.tag == Token::NONE) continue;
 
         if (token.tag != Token::INSTRUCTION) {
+            /* _print_token(token); */
             fprintf(stderr, "Expected instruction or end of line\n");
             return ERR_ASM_EXPECTED_INSTRUCTION;
         }
 
         const Instruction instruction = token.value.instruction;
-        printf("INSTRUCTION: %s\n", instruction_to_string(instruction));
+        /* printf("Instruction: %s\n", instruction_to_string(instruction)); */
 
         Opcode opcode;
         Word operands = 0;
