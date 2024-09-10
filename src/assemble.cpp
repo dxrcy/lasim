@@ -47,17 +47,16 @@ using std::vector;
 typedef char TokenStr[MAX_IDENTIFIER + 1];
 typedef TokenStr LabelName;
 
-// TODO: Merge label types
 // TODO: Use a hashmap
 typedef struct LabelDefinition {
     LabelName name;
     size_t index;
 } LabelDefinition;
 
-// Different type to label definition for clarity
 typedef struct LabelReference {
     LabelName name;
     size_t index;
+    bool is_offset11;  // Used for `JSR` only
 } LabelReference;
 
 enum class Directive {
@@ -98,7 +97,6 @@ enum class Instruction {
     IN,
     PUTSP,
     HALT,
-    RTI,
 };
 
 typedef struct Token {
@@ -148,10 +146,12 @@ bool find_label_definition(const TokenStr &needle,
 }
 
 void add_label_reference(vector<LabelReference> &references,
-                         const TokenStr &name, const Word index) {
+                         const TokenStr &name, const Word index,
+                         const bool is_offset11) {
     references.push_back({});
     memcpy(references.back().name, name, sizeof(name));
     references.back().index = index;
+    references.back().is_offset11 = is_offset11;
 }
 
 void _print_token(const Token &token);
@@ -232,7 +232,7 @@ ConditionCode branch_condition_code(Instruction instruction) {
         case Instruction::BRNZP:
             return 0b111;
         default:
-            unreachable();
+            UNREACHABLE();
     }
 }
 
@@ -419,7 +419,7 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                 EXPECT_NEXT_TOKEN(line_ptr, token);
                 EXPECT_TOKEN_IS_TAG(token, LABEL);
                 add_label_reference(label_references, token.value.label,
-                                    words.size());
+                                    words.size(), false);
             }; break;
 
             case Instruction::JMP:
@@ -442,13 +442,11 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                 if (instruction == Instruction::JSR) {
                     operands |= 1 << 11;  // Flag
 
-                    // TODO: JSR uses `PCOffset11` !
-                    // Add some sort of flag to `label_references` so it is
-                    //     properly replaced with the label offset
+                    // PCOffset11
                     EXPECT_NEXT_TOKEN(line_ptr, token);
                     EXPECT_TOKEN_IS_TAG(token, LABEL);
                     add_label_reference(label_references, token.value.label,
-                                        words.size());
+                                        words.size(), true);
                 } else {
                     EXPECT_NEXT_TOKEN(line_ptr, token);
                     EXPECT_TOKEN_IS_TAG(token, REGISTER);
@@ -475,7 +473,7 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                         opcode = Opcode::STI;
                         break;
                     default:
-                        unreachable();
+                        UNREACHABLE();
                 }
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
@@ -487,7 +485,7 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                 EXPECT_NEXT_TOKEN(line_ptr, token);
                 EXPECT_TOKEN_IS_TAG(token, LABEL);
                 add_label_reference(label_references, token.value.label,
-                                    words.size());
+                                    words.size(), false);
             }; break;
 
             case Instruction::LDR:
@@ -505,6 +503,16 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                 EXPECT_TOKEN_IS_TAG(token, REGISTER);
                 const Register base_reg = token.value.register_;
                 operands |= base_reg << 6;
+
+                // TODO: Check should be aware of sign; See `ADD` case
+                EXPECT_NEXT_TOKEN(line_ptr, token);
+                EXPECT_TOKEN_IS_TAG(token, LITERAL_INTEGER);
+                const SignedWord immediate = token.value.literal_integer;
+                if (immediate >> 6 != 0) {
+                    fprintf(stderr, "Immediate too large\n");
+                    return ERR_ASM_IMMEDIATE_TOO_LARGE;
+                }
+                operands |= immediate & BITMASK_LOW_6;
             }; break;
 
             case Instruction::LEA: {
@@ -519,52 +527,58 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                 EXPECT_NEXT_TOKEN(line_ptr, token);
                 EXPECT_TOKEN_IS_TAG(token, LABEL);
                 add_label_reference(label_references, token.value.label,
-                                    words.size());
-
-                // TODO: Offset6
-                EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_TAG(token, LABEL);
-                add_label_reference(label_references, token.value.label,
-                                    words.size());
-
+                                    words.size(), false);
             }; break;
 
-            case Instruction::TRAP: {
-                return ERR_UNIMPLEMENTED;
-            }; break;
-
-            case Instruction::GETC: {
-                return ERR_UNIMPLEMENTED;
-            }; break;
-
-            case Instruction::OUT: {
-                return ERR_UNIMPLEMENTED;
-            }; break;
-
-            case Instruction::PUTS: {
-                opcode = Opcode::TRAP;
-                operands = static_cast<Word>(TrapVector::PUTS);
-            }; break;
-
-            case Instruction::IN: {
-                return ERR_UNIMPLEMENTED;
-            }; break;
-
-            case Instruction::PUTSP: {
-                return ERR_UNIMPLEMENTED;
-            }; break;
-
+            case Instruction::TRAP:
+            case Instruction::GETC:
+            case Instruction::OUT:
+            case Instruction::PUTS:
+            case Instruction::IN:
+            case Instruction::PUTSP:
             case Instruction::HALT: {
                 opcode = Opcode::TRAP;
-                operands = static_cast<Word>(TrapVector::HALT);
-            }; break;
 
-            case Instruction::RTI: {
-                return ERR_UNIMPLEMENTED;
-            }; break;
+                TrapVector trap_vector;
+                switch (instruction) {
+                    case Instruction::GETC:
+                        trap_vector = TrapVector::GETC;
+                        break;
+                    case Instruction::OUT:
+                        trap_vector = TrapVector::OUT;
+                        break;
+                    case Instruction::PUTS:
+                        trap_vector = TrapVector::PUTS;
+                        break;
+                    case Instruction::IN:
+                        trap_vector = TrapVector::IN;
+                        break;
+                    case Instruction::PUTSP:
+                        trap_vector = TrapVector::PUTSP;
+                        break;
+                    case Instruction::HALT:
+                        trap_vector = TrapVector::HALT;
+                        break;
 
-            default:
-                return ERR_UNIMPLEMENTED;
+                    // Trap instruction with explicit code
+                    case Instruction::TRAP: {
+                        // TODO: Check should be aware of sign; See `ADD` case
+                        EXPECT_NEXT_TOKEN(line_ptr, token);
+                        EXPECT_TOKEN_IS_TAG(token, LITERAL_INTEGER);
+                        const SignedWord immediate =
+                            token.value.literal_integer;
+                        if (immediate >> 8 != 0) {
+                            fprintf(stderr, "Immediate too large\n");
+                            return ERR_ASM_IMMEDIATE_TOO_LARGE;
+                        }
+                        trap_vector = static_cast<TrapVector>(immediate);
+                    }; break;
+
+                    default:
+                        UNREACHABLE();
+                }
+                operands = static_cast<Word>(trap_vector);
+            }; break;
         }
 
         RETURN_IF_ERR(get_next_token(line_ptr, token));
@@ -593,7 +607,9 @@ stop_parsing:
         size_t pc_offset = index - ref.index - 1;
         /* printf("PC offset: 0x%04lx\n", pc_offset); */
 
-        words[ref.index] |= pc_offset & BITMASK_LOW_9;
+        uint8_t mask = (1U << (ref.is_offset11 ? 11 : 9)) - 1;
+
+        words[ref.index] |= pc_offset & mask;
     }
 
     fclose(asm_file);
@@ -649,7 +665,7 @@ static const char *directive_to_string(Directive directive) {
         case Directive::STRINGZ:
             return "STRINGZ";
     }
-    unreachable();
+    UNREACHABLE();
 }
 
 Error directive_from_string(Token &token, const char *const directive,
@@ -730,10 +746,8 @@ static const char *instruction_to_string(Instruction instruction) {
             return "PUTSP";
         case Instruction::HALT:
             return "HALT";
-        case Instruction::RTI:
-            return "RTI";
     }
-    unreachable();
+    UNREACHABLE();
 }
 
 bool instruction_from_string(Token &token, const char *const instruction,
@@ -796,8 +810,6 @@ bool instruction_from_string(Token &token, const char *const instruction,
         token.value.instruction = Instruction::PUTSP;
     } else if (string_equals(instruction, "halt", len)) {
         token.value.instruction = Instruction::HALT;
-    } else if (string_equals(instruction, "rti", len)) {
-        token.value.instruction = Instruction::RTI;
     } else {
         return false;
     }

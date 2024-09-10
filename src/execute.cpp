@@ -388,7 +388,7 @@ Error execute_next_instrution(bool &do_halt) {
             fprintf(stderr,                                  \
                     "String contains non-ASCII characters, " \
                     "which are not supported.");             \
-            return ERR_UNIMPLEMENTED;                        \
+            UNIMPLEMENTED();                                 \
         }                                                    \
     }
 

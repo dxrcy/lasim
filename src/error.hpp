@@ -1,7 +1,12 @@
 #ifndef ERROR_HPP
 #define ERROR_HPP
 
-#define unreachable()                                          \
+#define UNIMPLEMENTED()                                   \
+    {                                                     \
+        fprintf(stderr, "Not yet implemented.\n"); \
+        exit(ERR_UNIMPLEMENTED);                          \
+    }
+#define UNREACHABLE()                                          \
     {                                                          \
         fprintf(stderr, "Unreachable code reached. Uh oh!\n"); \
         exit(ERR_UNREACHABLE);                                 \
