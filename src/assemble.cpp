@@ -120,7 +120,7 @@ typedef struct Token {
 typedef uint8_t OpcodeValue;  // 4 bits
 
 Error assemble(const char *const asm_filename, const char *const obj_filename);
-Error read_asm_file_to_lines(const char *const filename, vector<Word> &words);
+Error read_and_assemble(const char *const filename, vector<Word> &words);
 Error write_obj_file(const char *const filename, const vector<Word> &words);
 Error get_next_token(const char *&line, Token &token);
 // TODO: Add other prototypes
@@ -140,11 +140,18 @@ bool find_label_definition(const TokenStr &needle,
     return false;
 }
 
+void add_label_reference(vector<LabelReference> &references,
+                         const TokenStr &name, const Word index) {
+    references.push_back({});
+    memcpy(references.back().name, name, sizeof(name));
+    references.back().index = index;
+}
+
 void _print_token(const Token &token);
 
 Error assemble(const char *const asm_filename, const char *const obj_filename) {
     vector<Word> out_words;
-    RETURN_IF_ERR(read_asm_file_to_lines(asm_filename, out_words));
+    RETURN_IF_ERR(read_and_assemble(asm_filename, out_words));
 
     /* printf("Words: %ld\n", out_words.size()); */
 
@@ -198,7 +205,7 @@ Error escape_character(char *const ch) {
     return ERR_OK;
 }
 
-Error read_asm_file_to_lines(const char *const filename, vector<Word> &words) {
+Error read_and_assemble(const char *const filename, vector<Word> &words) {
     FILE *asm_file = fopen(filename, "r");
     if (asm_file == nullptr) {
         fprintf(stderr, "Could not open file %s\n", filename);
@@ -292,8 +299,7 @@ Error read_asm_file_to_lines(const char *const filename, vector<Word> &words) {
                 }
             }
             label_definitions.push_back({});
-            memcpy(label_definitions.back().name, name,
-                   sizeof(LabelDefinition));
+            memcpy(label_definitions.back().name, name, sizeof(TokenStr));
             label_definitions.back().index = words.size();
             RETURN_IF_ERR(get_next_token(line_ptr, token));
         }
@@ -327,7 +333,7 @@ Error read_asm_file_to_lines(const char *const filename, vector<Word> &words) {
                 EXPECT_NEXT_TOKEN(line_ptr, token);
                 EXPECT_TOKEN_IS_TAG(token, REGISTER);
                 Register src_reg_a = token.value.register_;
-                operands |= dest_reg << 6;
+                operands |= src_reg_a << 6;
                 EXPECT_NEXT_COMMA(line_ptr);
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
@@ -404,11 +410,9 @@ Error read_asm_file_to_lines(const char *const filename, vector<Word> &words) {
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
                 EXPECT_TOKEN_IS_TAG(token, LABEL);
+                add_label_reference(label_references, token.value.label,
+                                    words.size());
 
-                label_references.push_back({});
-                memcpy(label_references.back().name, token.value.label,
-                       sizeof(LabelReference));
-                label_references.back().index = words.size();
             }; break;
 
             case Instruction::TRAP: {
@@ -704,9 +708,9 @@ Error get_next_token(const char *&line, Token &token) {
         token.tag = Token::LITERAL_INTEGER;
         ++line;
         Word number = 0;
-        for (size_t i = 0;; ++i) {
+        while (true) {
             char ch = line[0];
-            int8_t digit = parse_hex_digit(ch);
+            int8_t digit = parse_hex_digit(ch);  // Catches '\0'
             if (digit < 0) {
                 if (char_can_be_in_identifier(ch)) return ERR_ASM_INVALID_TOKEN;
                 break;
@@ -732,9 +736,9 @@ Error get_next_token(const char *&line, Token &token) {
             ++line;
         }
         Word number = 0;
-        for (size_t i = 0;; ++i) {
+        while (true) {
             char ch = line[0];
-            if (!isdigit(line[0])) {
+            if (!isdigit(line[0])) {  // Catches '\0'
                 if (char_can_be_in_identifier(ch)) return ERR_ASM_INVALID_TOKEN;
                 break;
             }
@@ -749,8 +753,8 @@ Error get_next_token(const char *&line, Token &token) {
 
     // Register
     // Case-insensitive
-    if (line[0] == 'R' || line[0] == 'r' && isdigit(line[1]) &&
-                              !char_can_be_in_identifier(line[2])) {
+    if ((line[0] == 'R' || line[0] == 'r') &&
+        (isdigit(line[1]) && !char_can_be_in_identifier(line[2]))) {
         ++line;
         token.tag = Token::REGISTER;
         token.value.register_ = line[0] - '0';
