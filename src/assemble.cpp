@@ -71,9 +71,27 @@ enum class Directive {
 enum class Instruction {
     ADD,
     AND,
+    NOT,
+    BR,
+    JMP,
+    RET,
+    JSR,
+    JSRR,
+    LD,
+    ST,
+    LDI,
+    STI,
+    LDR,
+    STR,
     LEA,
+    TRAP,
+    GETC,
+    OUT,
     PUTS,
+    IN,
+    PUTSP,
     HALT,
+    RTI,
 };
 
 typedef struct Token {
@@ -84,6 +102,7 @@ typedef struct Token {
         LABEL,
         LITERAL_STRING,
         LITERAL_INTEGER,
+        // TODO: Change to `,` if no other punctuation is used
         PUNCTUATION,
         NONE,
     } tag;
@@ -326,6 +345,54 @@ Error read_asm_file_to_lines(const char *const filename, vector<Word> &words) {
                 }
             }; break;
 
+            case Instruction::NOT: {
+                return ERR_UNIMPLEMENTED;
+            }; break;
+
+            case Instruction::BR: {
+                return ERR_UNIMPLEMENTED;
+            }; break;
+
+            case Instruction::JMP: {
+                return ERR_UNIMPLEMENTED;
+            }; break;
+
+            case Instruction::RET: {
+                return ERR_UNIMPLEMENTED;
+            }; break;
+
+            case Instruction::JSR: {
+                return ERR_UNIMPLEMENTED;
+            }; break;
+
+            case Instruction::JSRR: {
+                return ERR_UNIMPLEMENTED;
+            }; break;
+
+            case Instruction::LD: {
+                return ERR_UNIMPLEMENTED;
+            }; break;
+
+            case Instruction::ST: {
+                return ERR_UNIMPLEMENTED;
+            }; break;
+
+            case Instruction::LDI: {
+                return ERR_UNIMPLEMENTED;
+            }; break;
+
+            case Instruction::STI: {
+                return ERR_UNIMPLEMENTED;
+            }; break;
+
+            case Instruction::LDR: {
+                return ERR_UNIMPLEMENTED;
+            }; break;
+
+            case Instruction::STR: {
+                return ERR_UNIMPLEMENTED;
+            }; break;
+
             case Instruction::LEA: {
                 opcode = Opcode::LEA;
 
@@ -344,14 +411,38 @@ Error read_asm_file_to_lines(const char *const filename, vector<Word> &words) {
                 label_references.back().index = words.size();
             }; break;
 
+            case Instruction::TRAP: {
+                return ERR_UNIMPLEMENTED;
+            }; break;
+
+            case Instruction::GETC: {
+                return ERR_UNIMPLEMENTED;
+            }; break;
+
+            case Instruction::OUT: {
+                return ERR_UNIMPLEMENTED;
+            }; break;
+
             case Instruction::PUTS: {
                 opcode = Opcode::TRAP;
                 operands = static_cast<Word>(TrapVector::PUTS);
             }; break;
 
+            case Instruction::IN: {
+                return ERR_UNIMPLEMENTED;
+            }; break;
+
+            case Instruction::PUTSP: {
+                return ERR_UNIMPLEMENTED;
+            }; break;
+
             case Instruction::HALT: {
                 opcode = Opcode::TRAP;
                 operands = static_cast<Word>(TrapVector::HALT);
+            }; break;
+
+            case Instruction::RTI: {
+                return ERR_UNIMPLEMENTED;
             }; break;
 
             default:
@@ -467,12 +558,48 @@ static const char *instruction_to_string(Instruction instruction) {
             return "ADD";
         case Instruction::AND:
             return "AND";
+        case Instruction::NOT:
+            return "NOT";
+        case Instruction::BR:
+            return "BR";
+        case Instruction::JMP:
+            return "JMP";
+        case Instruction::RET:
+            return "RET";
+        case Instruction::JSR:
+            return "JSR";
+        case Instruction::JSRR:
+            return "JSRR";
+        case Instruction::LD:
+            return "LD";
+        case Instruction::ST:
+            return "ST";
+        case Instruction::LDI:
+            return "LDI";
+        case Instruction::STI:
+            return "STI";
+        case Instruction::LDR:
+            return "LDR";
+        case Instruction::STR:
+            return "STR";
         case Instruction::LEA:
             return "LEA";
+        case Instruction::TRAP:
+            return "TRAP";
+        case Instruction::GETC:
+            return "GETC";
+        case Instruction::OUT:
+            return "OUT";
         case Instruction::PUTS:
             return "PUTS";
+        case Instruction::IN:
+            return "IN";
+        case Instruction::PUTSP:
+            return "PUTSP";
         case Instruction::HALT:
             return "HALT";
+        case Instruction::RTI:
+            return "RTI";
     }
     unreachable();
 }
@@ -483,12 +610,48 @@ bool instruction_from_string(Token &token, const char *const instruction,
         token.value.instruction = Instruction::ADD;
     } else if (string_equals(instruction, "and", len)) {
         token.value.instruction = Instruction::AND;
+    } else if (string_equals(instruction, "not", len)) {
+        token.value.instruction = Instruction::NOT;
+    } else if (string_equals(instruction, "br", len)) {
+        token.value.instruction = Instruction::BR;
+    } else if (string_equals(instruction, "jmp", len)) {
+        token.value.instruction = Instruction::JMP;
+    } else if (string_equals(instruction, "ret", len)) {
+        token.value.instruction = Instruction::RET;
+    } else if (string_equals(instruction, "jsr", len)) {
+        token.value.instruction = Instruction::JSR;
+    } else if (string_equals(instruction, "jsrr", len)) {
+        token.value.instruction = Instruction::JSRR;
+    } else if (string_equals(instruction, "ld", len)) {
+        token.value.instruction = Instruction::LD;
+    } else if (string_equals(instruction, "st", len)) {
+        token.value.instruction = Instruction::ST;
+    } else if (string_equals(instruction, "ldi", len)) {
+        token.value.instruction = Instruction::LDI;
+    } else if (string_equals(instruction, "sti", len)) {
+        token.value.instruction = Instruction::STI;
+    } else if (string_equals(instruction, "ldr", len)) {
+        token.value.instruction = Instruction::LDR;
+    } else if (string_equals(instruction, "str", len)) {
+        token.value.instruction = Instruction::STR;
     } else if (string_equals(instruction, "lea", len)) {
         token.value.instruction = Instruction::LEA;
+    } else if (string_equals(instruction, "trap", len)) {
+        token.value.instruction = Instruction::TRAP;
+    } else if (string_equals(instruction, "getc", len)) {
+        token.value.instruction = Instruction::GETC;
+    } else if (string_equals(instruction, "out", len)) {
+        token.value.instruction = Instruction::OUT;
     } else if (string_equals(instruction, "puts", len)) {
         token.value.instruction = Instruction::PUTS;
+    } else if (string_equals(instruction, "in", len)) {
+        token.value.instruction = Instruction::IN;
+    } else if (string_equals(instruction, "putsp", len)) {
+        token.value.instruction = Instruction::PUTSP;
     } else if (string_equals(instruction, "halt", len)) {
         token.value.instruction = Instruction::HALT;
+    } else if (string_equals(instruction, "rti", len)) {
+        token.value.instruction = Instruction::RTI;
     } else {
         return false;
     }
