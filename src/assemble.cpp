@@ -145,7 +145,8 @@ static const char *instruction_to_string(Instruction instruction);
 
 bool string_equals(const char *const candidate, const char *const target);
 
-void _print_string_slice(const StringSlice &slice);
+void print_string_slice(FILE *const &file, const StringSlice &slice);
+
 void _print_token(const Token &token);
 
 bool find_label_definition(const LabelString &target,
@@ -166,6 +167,14 @@ void add_label_reference(vector<LabelReference> &references,
                          const bool is_offset11) {
     references.push_back({});
     LabelReference &ref = references.back();
+    /* printf("\nStart:\n"); */
+    /* for (size_t i = 0; i < name.length; ++i) { */
+    /* printf("%ld\t", i); */
+    /* fflush(stdout); */
+    /* printf("%c\n", name.pointer[i]); */
+    /* ref.name[i] = 'i'; */
+    /* } */
+    /* printf("Done!\n"); */
     memcpy(ref.name, name.pointer, name.length);
     ref.index = index;
     ref.is_offset11 = is_offset11;
@@ -291,8 +300,15 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
         if (token.tag == Token::LABEL) {
             const StringSlice &name = token.value.label;
             for (size_t i = 0; i < label_definitions.size(); ++i) {
-                if (!string_equals(label_definitions[i].name, name.pointer)) {
-                    fprintf(stderr, "Duplicate label '%s'\n", name.pointer);
+                /* printf("-- <"); */
+                /* printf("%s", label_definitions[i].name); */
+                /* printf("> : <"); */
+                /* print_string_slice(stdout, name); */
+                /* printf(">\n"); */
+                if (string_equals(label_definitions[i].name, name.pointer)) {
+                    fprintf(stderr, "Duplicate label '");
+                    print_string_slice(stderr, name);
+                    fprintf(stderr, "'\n");
                     return ERR_ASM_DUPLICATE_LABEL;
                 }
             }
@@ -480,6 +496,8 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                     // PCOffset11
                     EXPECT_NEXT_TOKEN(line_ptr, token);
                     EXPECT_TOKEN_IS_TAG(token, LABEL);
+                    /* printf(">>"); */
+                    /* _print_token(token); */
                     add_label_reference(label_references, token.value.label,
                                         words.size(), true);
                 } else {
@@ -681,12 +699,21 @@ int8_t parse_hex_digit(const char ch) {
 }
 
 // TODO: Replace with standard lib function
+// TODO: Swap argument order
 // Candidate is NOT null-terminated
 // Match is CASE-INSENSITIVE
 bool string_equals(const char *candidate, const char *target) {
     // Equality will check \0-mismatch, so no worry of reading past string
     for (; candidate[0] != '\0'; ++candidate, ++target) {
         if (tolower(candidate[0]) != tolower(target[0])) return false;
+    }
+    return true;
+}
+
+bool string_equals_slice(const char *target, const StringSlice candidate) {
+    // Equality will check \0-mismatch, so no worry of reading past string
+    for (size_t i = 0; i < candidate.length; ++i) {
+        if (tolower(candidate.pointer[i]) != tolower(target[i])) return false;
     }
     return true;
 }
@@ -790,66 +817,67 @@ static const char *instruction_to_string(Instruction instruction) {
     UNREACHABLE();
 }
 
-bool instruction_from_string(Token &token, const char *const instruction) {
-    if (string_equals("add", instruction)) {
+bool instruction_from_string_slice(Token &token,
+                                   const StringSlice &instruction) {
+    if (string_equals_slice("add", instruction)) {
         token.value.instruction = Instruction::ADD;
-    } else if (string_equals("and", instruction)) {
+    } else if (string_equals_slice("and", instruction)) {
         token.value.instruction = Instruction::AND;
-    } else if (string_equals("not", instruction)) {
+    } else if (string_equals_slice("not", instruction)) {
         token.value.instruction = Instruction::NOT;
-    } else if (string_equals("br", instruction)) {
+    } else if (string_equals_slice("br", instruction)) {
         token.value.instruction = Instruction::BR;
-    } else if (string_equals("brn", instruction)) {
+    } else if (string_equals_slice("brn", instruction)) {
         token.value.instruction = Instruction::BRN;
-    } else if (string_equals("brz", instruction)) {
+    } else if (string_equals_slice("brz", instruction)) {
         token.value.instruction = Instruction::BRZ;
-    } else if (string_equals("brp", instruction)) {
+    } else if (string_equals_slice("brp", instruction)) {
         token.value.instruction = Instruction::BRP;
-    } else if (string_equals("brnz", instruction)) {
+    } else if (string_equals_slice("brnz", instruction)) {
         token.value.instruction = Instruction::BRNZ;
-    } else if (string_equals("brzp", instruction)) {
+    } else if (string_equals_slice("brzp", instruction)) {
         token.value.instruction = Instruction::BRZP;
-    } else if (string_equals("brnp", instruction)) {
+    } else if (string_equals_slice("brnp", instruction)) {
         token.value.instruction = Instruction::BRNP;
-    } else if (string_equals("brnzp", instruction)) {
+    } else if (string_equals_slice("brnzp", instruction)) {
         token.value.instruction = Instruction::BRNZP;
-    } else if (string_equals("jmp", instruction)) {
+    } else if (string_equals_slice("jmp", instruction)) {
         token.value.instruction = Instruction::JMP;
-    } else if (string_equals("ret", instruction)) {
+    } else if (string_equals_slice("ret", instruction)) {
         token.value.instruction = Instruction::RET;
-    } else if (string_equals("jsr", instruction)) {
+    } else if (string_equals_slice("jsr", instruction)) {
         token.value.instruction = Instruction::JSR;
-    } else if (string_equals("jsrr", instruction)) {
+    } else if (string_equals_slice("jsrr", instruction)) {
         token.value.instruction = Instruction::JSRR;
-    } else if (string_equals("ld", instruction)) {
+    } else if (string_equals_slice("ld", instruction)) {
         token.value.instruction = Instruction::LD;
-    } else if (string_equals("st", instruction)) {
+    } else if (string_equals_slice("st", instruction)) {
         token.value.instruction = Instruction::ST;
-    } else if (string_equals("ldi", instruction)) {
+    } else if (string_equals_slice("ldi", instruction)) {
         token.value.instruction = Instruction::LDI;
-    } else if (string_equals("sti", instruction)) {
+    } else if (string_equals_slice("sti", instruction)) {
         token.value.instruction = Instruction::STI;
-    } else if (string_equals("ldr", instruction)) {
+    } else if (string_equals_slice("ldr", instruction)) {
         token.value.instruction = Instruction::LDR;
-    } else if (string_equals("str", instruction)) {
+    } else if (string_equals_slice("str", instruction)) {
         token.value.instruction = Instruction::STR;
-    } else if (string_equals("lea", instruction)) {
+    } else if (string_equals_slice("lea", instruction)) {
         token.value.instruction = Instruction::LEA;
-    } else if (string_equals("trap", instruction)) {
+    } else if (string_equals_slice("trap", instruction)) {
         token.value.instruction = Instruction::TRAP;
-    } else if (string_equals("getc", instruction)) {
+    } else if (string_equals_slice("getc", instruction)) {
         token.value.instruction = Instruction::GETC;
-    } else if (string_equals("out", instruction)) {
+    } else if (string_equals_slice("out", instruction)) {
         token.value.instruction = Instruction::OUT;
-    } else if (string_equals("puts", instruction)) {
+    } else if (string_equals_slice("puts", instruction)) {
         token.value.instruction = Instruction::PUTS;
-    } else if (string_equals("in", instruction)) {
+    } else if (string_equals_slice("in", instruction)) {
         token.value.instruction = Instruction::IN;
-    } else if (string_equals("putsp", instruction)) {
+    } else if (string_equals_slice("putsp", instruction)) {
         token.value.instruction = Instruction::PUTSP;
-    } else if (string_equals("halt", instruction)) {
+    } else if (string_equals_slice("halt", instruction)) {
         token.value.instruction = Instruction::HALT;
-    } else if (string_equals("rti", instruction)) {
+    } else if (string_equals_slice("rti", instruction)) {
         token.value.instruction = Instruction::RTI;
     } else {
         return false;
@@ -1050,7 +1078,7 @@ Error get_next_token(const char *&line, Token &token) {
     /* _print_string_slice(identifier); */
     /* printf(">\n"); */
 
-    if (instruction_from_string(token, identifier.pointer)) {
+    if (instruction_from_string_slice(token, identifier)) {
         // Instruction -- value already set
         token.tag = Token::INSTRUCTION;
     } else {
@@ -1062,9 +1090,9 @@ Error get_next_token(const char *&line, Token &token) {
     return ERR_OK;
 }
 
-void _print_string_slice(const StringSlice &slice) {
+void print_string_slice(FILE *const &file, const StringSlice &slice) {
     for (size_t i = 0; i < slice.length; ++i) {
-        printf("%c", slice.pointer[i]);
+        fprintf(file, "%c", slice.pointer[i]);
     }
 }
 
@@ -1084,12 +1112,12 @@ void _print_token(const Token &token) {
         }; break;
         case Token::LABEL: {
             printf("Label: <");
-            _print_string_slice(token.value.label);
+            print_string_slice(stdout, token.value.label);
             printf(">\n");
         }; break;
         case Token::LITERAL_STRING: {
             printf("String: <");
-            _print_string_slice(token.value.literal_string);
+            print_string_slice(stdout, token.value.literal_string);
             printf(">\n");
         }; break;
         case Token::LITERAL_INTEGER: {
