@@ -83,13 +83,13 @@ Error execute_next_instrution(bool &do_halt) {
     if (instr == 0xdddd) {
         fprintf(stderr,
                 "DEBUG: Attempt to execute sentinal word 0xdddd."
-                " This is probably a bug\n");
+                " You probably screwed up.\n");
         return ERR_ADDRESS_TOO_LOW;
     }
     if (instr == 0xeeee) {
         fprintf(stderr,
                 "DEBUG: Attempt to execute sentinal word 0xeeee."
-                " This is probably a bug\n");
+                " You probably screwed up.\n");
         return ERR_ADDRESS_TOO_HIGH;
     }
 

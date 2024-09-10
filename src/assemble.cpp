@@ -322,7 +322,7 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
         }
 
         if (token.tag == Token::LABEL) {
-            TokenStr &name = token.value.label;
+            const TokenStr &name = token.value.label;
             for (size_t i = 0; i < label_definitions.size(); ++i) {
                 if (!strcmp(label_definitions[i].name, name)) {
                     fprintf(stderr, "Duplicate label '%s'\n", name);
@@ -343,7 +343,7 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
             return ERR_ASM_EXPECTED_INSTRUCTION;
         }
 
-        Instruction instruction = token.value.instruction;
+        const Instruction instruction = token.value.instruction;
         printf("INSTRUCTION: %s\n", instruction_to_string(instruction));
 
         Opcode opcode;
@@ -357,22 +357,22 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
                 EXPECT_TOKEN_IS_TAG(token, REGISTER);
-                Register dest_reg = token.value.register_;
+                const Register dest_reg = token.value.register_;
                 operands |= dest_reg << 9;
                 EXPECT_NEXT_COMMA(line_ptr);
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
                 EXPECT_TOKEN_IS_TAG(token, REGISTER);
-                Register src_reg_a = token.value.register_;
+                const Register src_reg_a = token.value.register_;
                 operands |= src_reg_a << 6;
                 EXPECT_NEXT_COMMA(line_ptr);
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
                 if (token.tag == Token::REGISTER) {
-                    Register src_reg_b = token.value.register_;
+                    const Register src_reg_b = token.value.register_;
                     operands |= src_reg_b;
                 } else if (token.tag == Token::LITERAL_INTEGER) {
-                    SignedWord immediate = token.value.literal_integer;
+                    const SignedWord immediate = token.value.literal_integer;
                     // TODO: This currently treats all integers as unsigned!
                     // Ideally, if the integer is meant to be signed (it
                     //      has a minus sign), the last 5 bits may be 1s,
@@ -391,13 +391,13 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
                 EXPECT_TOKEN_IS_TAG(token, REGISTER);
-                Register dest_reg = token.value.register_;
+                const Register dest_reg = token.value.register_;
                 operands |= dest_reg << 9;
                 EXPECT_NEXT_COMMA(line_ptr);
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
                 EXPECT_TOKEN_IS_TAG(token, REGISTER);
-                Register src_reg = token.value.register_;
+                const Register src_reg = token.value.register_;
                 operands |= src_reg << 6;
 
                 operands |= BITMASK_LOW_6;  // Padding
@@ -412,7 +412,8 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
             case Instruction::BRNP:
             case Instruction::BRNZP: {
                 opcode = Opcode::BR;
-                ConditionCode condition = branch_condition_code(instruction);
+                const ConditionCode condition =
+                    branch_condition_code(instruction);
                 operands |= condition << 9;
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
@@ -421,44 +422,89 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                                     words.size());
             }; break;
 
-            case Instruction::JMP: {
-                return ERR_UNIMPLEMENTED;
-            }; break;
-
+            case Instruction::JMP:
             case Instruction::RET: {
-                return ERR_UNIMPLEMENTED;
+                opcode = Opcode::JMP_RET;
+
+                Register addr_reg = 7;  // Default R7 for `RET`
+                if (instruction == Instruction::JMP) {
+                    EXPECT_NEXT_TOKEN(line_ptr, token);
+                    EXPECT_TOKEN_IS_TAG(token, REGISTER);
+                    addr_reg = token.value.register_;
+                }
+                operands |= addr_reg << 6;
             }; break;
 
-            case Instruction::JSR: {
-                return ERR_UNIMPLEMENTED;
-            }; break;
-
+            case Instruction::JSR:
             case Instruction::JSRR: {
-                return ERR_UNIMPLEMENTED;
+                opcode = Opcode::JSR_JSRR;
+
+                if (instruction == Instruction::JSR) {
+                    operands |= 1 << 11;  // Flag
+
+                    // TODO: JSR uses `PCOffset11` !
+                    // Add some sort of flag to `label_references` so it is
+                    //     properly replaced with the label offset
+                    EXPECT_NEXT_TOKEN(line_ptr, token);
+                    EXPECT_TOKEN_IS_TAG(token, LABEL);
+                    add_label_reference(label_references, token.value.label,
+                                        words.size());
+                } else {
+                    EXPECT_NEXT_TOKEN(line_ptr, token);
+                    EXPECT_TOKEN_IS_TAG(token, REGISTER);
+                    const Register addr_reg = token.value.register_;
+                    operands |= addr_reg << 6;
+                }
             }; break;
 
-            case Instruction::LD: {
-                return ERR_UNIMPLEMENTED;
-            }; break;
-
-            case Instruction::ST: {
-                return ERR_UNIMPLEMENTED;
-            }; break;
-
-            case Instruction::LDI: {
-                return ERR_UNIMPLEMENTED;
-            }; break;
-
+            case Instruction::LD:
+            case Instruction::LDI:
+            case Instruction::ST:
             case Instruction::STI: {
-                return ERR_UNIMPLEMENTED;
+                switch (instruction) {
+                    case Instruction::LD:
+                        opcode = Opcode::LD;
+                        break;
+                    case Instruction::LDI:
+                        opcode = Opcode::LDI;
+                        break;
+                    case Instruction::ST:
+                        opcode = Opcode::ST;
+                        break;
+                    case Instruction::STI:
+                        opcode = Opcode::STI;
+                        break;
+                    default:
+                        unreachable();
+                }
+
+                EXPECT_NEXT_TOKEN(line_ptr, token);
+                EXPECT_TOKEN_IS_TAG(token, REGISTER);
+                const Register ds_reg = token.value.register_;
+                operands |= ds_reg << 9;
+                EXPECT_NEXT_COMMA(line_ptr);
+
+                EXPECT_NEXT_TOKEN(line_ptr, token);
+                EXPECT_TOKEN_IS_TAG(token, LABEL);
+                add_label_reference(label_references, token.value.label,
+                                    words.size());
             }; break;
 
-            case Instruction::LDR: {
-                return ERR_UNIMPLEMENTED;
-            }; break;
-
+            case Instruction::LDR:
             case Instruction::STR: {
-                return ERR_UNIMPLEMENTED;
+                opcode =
+                    instruction == Instruction::LDR ? Opcode::LDR : Opcode::STR;
+
+                EXPECT_NEXT_TOKEN(line_ptr, token);
+                EXPECT_TOKEN_IS_TAG(token, REGISTER);
+                const Register ds_reg = token.value.register_;
+                operands |= ds_reg << 9;
+                EXPECT_NEXT_COMMA(line_ptr);
+
+                EXPECT_NEXT_TOKEN(line_ptr, token);
+                EXPECT_TOKEN_IS_TAG(token, REGISTER);
+                const Register base_reg = token.value.register_;
+                operands |= base_reg << 6;
             }; break;
 
             case Instruction::LEA: {
@@ -466,10 +512,16 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
                 EXPECT_TOKEN_IS_TAG(token, REGISTER);
-                Register dest_reg = token.value.register_;
+                const Register dest_reg = token.value.register_;
                 operands |= dest_reg << 9;
                 EXPECT_NEXT_COMMA(line_ptr);
 
+                EXPECT_NEXT_TOKEN(line_ptr, token);
+                EXPECT_TOKEN_IS_TAG(token, LABEL);
+                add_label_reference(label_references, token.value.label,
+                                    words.size());
+
+                // TODO: Offset6
                 EXPECT_NEXT_TOKEN(line_ptr, token);
                 EXPECT_TOKEN_IS_TAG(token, LABEL);
                 add_label_reference(label_references, token.value.label,
