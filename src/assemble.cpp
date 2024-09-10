@@ -97,6 +97,7 @@ enum class Instruction {
     IN,
     PUTSP,
     HALT,
+    RTI,
 };
 
 typedef struct Token {
@@ -600,6 +601,10 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                 }
                 operands = static_cast<Word>(trap_vector);
             }; break;
+
+            case Instruction::RTI: {
+                opcode = Opcode::RTI;
+            }; break;
         }
 
         RETURN_IF_ERR(get_next_token(line_ptr, token));
@@ -768,6 +773,8 @@ static const char *instruction_to_string(Instruction instruction) {
             return "PUTSP";
         case Instruction::HALT:
             return "HALT";
+        case Instruction::RTI:
+            return "RTI";
     }
     UNREACHABLE();
 }
@@ -832,6 +839,8 @@ bool instruction_from_string(Token &token, const char *const instruction,
         token.value.instruction = Instruction::PUTSP;
     } else if (string_equals(instruction, "halt", len)) {
         token.value.instruction = Instruction::HALT;
+    } else if (string_equals(instruction, "rti", len)) {
+        token.value.instruction = Instruction::RTI;
     } else {
         return false;
     }
