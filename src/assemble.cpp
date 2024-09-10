@@ -352,7 +352,20 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
             }; break;
 
             case Instruction::NOT: {
-                return ERR_UNIMPLEMENTED;
+                opcode = Opcode::NOT;
+
+                EXPECT_NEXT_TOKEN(line_ptr, token);
+                EXPECT_TOKEN_IS_TAG(token, REGISTER);
+                Register dest_reg = token.value.register_;
+                operands |= dest_reg << 9;
+                EXPECT_NEXT_COMMA(line_ptr);
+
+                EXPECT_NEXT_TOKEN(line_ptr, token);
+                EXPECT_TOKEN_IS_TAG(token, REGISTER);
+                Register src_reg = token.value.register_;
+                operands |= src_reg << 6;
+
+                operands |= BITMASK_LOW_6;  // Padding
             }; break;
 
             case Instruction::BR: {
