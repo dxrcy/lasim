@@ -17,6 +17,7 @@
         if (error != ERR_OK) return error;   \
     }
 
+// TODO: Maybe change to `enum class` ?
 typedef enum Error {
     // Ok
     ERR_OK = 0x00,

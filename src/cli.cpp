@@ -14,14 +14,14 @@
 #define DEFAULT_OUT_EXTENSION "obj"
 #define DEFAULT_OUT_EXTENSION_SIZE (sizeof(DEFAULT_OUT_EXTENSION))
 
-enum Mode {
-    MODE_ASSEMBLE_EXECUTE,  // (default)
-    MODE_ASSEMBLE_ONLY,     // -a
-    MODE_EXECUTE_ONLY,      // -x
+enum class Mode {
+    ASSEMBLE_EXECUTE,  // (default)
+    ASSEMBLE_ONLY,     // -a
+    EXECUTE_ONLY,      // -x
 };
 
 struct Options {
-    enum Mode mode;
+    Mode mode;
     char in_file[MAX_FILENAME + 1];
     char out_file[MAX_FILENAME + 1];
 };
@@ -36,7 +36,7 @@ void copy_filename_with_extension(char *const dest, const char *const src);
 
 void parse_options(Options &options, const int argc,
                    const char *const *const argv) {
-    options.mode = MODE_ASSEMBLE_EXECUTE;
+    options.mode = Mode::ASSEMBLE_EXECUTE;
 
     bool in_file_set = false;
     bool out_file_set = false;
@@ -85,8 +85,8 @@ void parse_options(Options &options, const int argc,
 
                 // Assemble
                 case 'a': {
-                    if (options.mode == MODE_ASSEMBLE_EXECUTE) {
-                        options.mode = MODE_ASSEMBLE_ONLY;
+                    if (options.mode == Mode::ASSEMBLE_EXECUTE) {
+                        options.mode = Mode::ASSEMBLE_ONLY;
                     } else {
                         fprintf(stderr, "Cannot specify `-a` with `-x`\n");
                         print_usage_hint();
@@ -96,8 +96,8 @@ void parse_options(Options &options, const int argc,
 
                 // Execute
                 case 'x': {
-                    if (options.mode == MODE_ASSEMBLE_EXECUTE) {
-                        options.mode = MODE_EXECUTE_ONLY;
+                    if (options.mode == Mode::ASSEMBLE_EXECUTE) {
+                        options.mode = Mode::EXECUTE_ONLY;
                     } else {
                         fprintf(stderr, "Cannot specify `-x` with `-a`\n");
                         print_usage_hint();
@@ -120,7 +120,7 @@ void parse_options(Options &options, const int argc,
         exit(ERR_CLI);
     }
 
-    if (options.mode == MODE_EXECUTE_ONLY) {
+    if (options.mode == Mode::EXECUTE_ONLY) {
         if (out_file_set) {
             fprintf(stderr, "Cannot specify output file with `-x`\n");
             print_usage_hint();

@@ -101,7 +101,7 @@ Error execute_next_instrution(bool &do_halt) {
 
     switch (opcode) {
         // ADD*
-        case OPCODE_ADD: {
+        case Opcode::ADD: {
             const Register dest_reg = bits_9_11(instr);
             const Register src_reg_a = bits_6_8(instr);
 
@@ -137,7 +137,7 @@ Error execute_next_instrution(bool &do_halt) {
         }; break;
 
         // AND*
-        case OPCODE_AND: {
+        case Opcode::AND: {
             const Register dest_reg = bits_9_11(instr);
             const Register src_reg_a = bits_6_8(instr);
 
@@ -172,7 +172,7 @@ Error execute_next_instrution(bool &do_halt) {
         }; break;
 
         // NOT*
-        case OPCODE_NOT: {
+        case Opcode::NOT: {
             const Register dest_reg = bits_9_11(instr);
             const Register src_reg = bits_6_8(instr);
 
@@ -195,7 +195,7 @@ Error execute_next_instrution(bool &do_halt) {
         }; break;
 
         // BRcc
-        case OPCODE_BR: {
+        case Opcode::BR: {
             // Skip special NOP case
             if (instr == 0x0000) {
                 break;
@@ -222,7 +222,7 @@ Error execute_next_instrution(bool &do_halt) {
         }; break;
 
         // JMP/RET
-        case OPCODE_JMP_RET: {
+        case Opcode::JMP_RET: {
             // 3 bits padding
             const uint8_t padding_1 = bits_9_11(instr);
             if (padding_1 != 0b000) {
@@ -244,7 +244,7 @@ Error execute_next_instrution(bool &do_halt) {
         }; break;
 
         // JSR/JSRR
-        case OPCODE_JSR_JSRR: {
+        case Opcode::JSR_JSRR: {
             // Save PC to R7
             registers.general_purpose[7] = registers.program_counter;
             // Bit 11 defines JSR or JSRR
@@ -271,7 +271,7 @@ Error execute_next_instrution(bool &do_halt) {
         }; break;
 
         // LD*
-        case OPCODE_LD: {
+        case Opcode::LD: {
             const Register dest_reg = bits_9_11(instr);
             const SignedWord offset = low_9_bits_signed(instr);
 
@@ -284,7 +284,7 @@ Error execute_next_instrution(bool &do_halt) {
         }; break;
 
         // ST
-        case OPCODE_ST: {
+        case Opcode::ST: {
             /* printf("STORE\n"); */
             const Register src_reg = bits_9_11(instr);
             const SignedWord offset = low_9_bits_signed(instr);
@@ -295,7 +295,7 @@ Error execute_next_instrution(bool &do_halt) {
         }; break;
 
         // LDR*
-        case OPCODE_LDR: {
+        case Opcode::LDR: {
             const Register dest_reg = bits_9_11(instr);
             const Register base_reg = bits_6_8(instr);
             const SignedWord offset = low_6_bits_signed(instr);
@@ -309,7 +309,7 @@ Error execute_next_instrution(bool &do_halt) {
         }; break;
 
         // STR
-        case OPCODE_STR: {
+        case Opcode::STR: {
             const Register src_reg = bits_9_11(instr);
             const Register base_reg = bits_6_8(instr);
             const SignedWord offset = low_6_bits_signed(instr);
@@ -321,7 +321,7 @@ Error execute_next_instrution(bool &do_halt) {
         }; break;
 
         // LDI+
-        case OPCODE_LDI: {
+        case Opcode::LDI: {
             const Register dest_reg = bits_9_11(instr);
             const SignedWord offset = low_9_bits_signed(instr);
 
@@ -335,7 +335,7 @@ Error execute_next_instrution(bool &do_halt) {
         }; break;
 
         // STI
-        case OPCODE_STI: {
+        case Opcode::STI: {
             const Register src_reg = bits_9_11(instr);
             const SignedWord offset = low_9_bits_signed(instr);
             const Word pointer = registers.general_purpose[src_reg];
@@ -347,7 +347,7 @@ Error execute_next_instrution(bool &do_halt) {
         }; break;
 
         // LEA*
-        case OPCODE_LEA: {
+        case Opcode::LEA: {
             const Register dest_reg = bits_9_11(instr);
             const SignedWord offset = low_9_bits_signed(instr);
             /* printf(">LEA REG%d, pc_offset:0x%04hx\n", reg, */
@@ -359,22 +359,23 @@ Error execute_next_instrution(bool &do_halt) {
         }; break;
 
         // TRAP
-        case OPCODE_TRAP: {
+        case Opcode::TRAP: {
             RETURN_IF_ERR(execute_trap_instruction(instr, do_halt));
         }; break;
 
         // RTI (supervisor-only)
-        case OPCODE_RTI:
+        case Opcode::RTI:
             fprintf(stderr,
                     "Invalid use of RTI opcode: 0b%s in non-supervisor mode\n",
-                    halfbyte_string(OPCODE_RTI));
+                    halfbyte_string(static_cast<Word>(opcode)));
             return ERR_UNAUTHORIZED_INSTR;
             break;
 
         // Invalid enum variant
         default:
             fprintf(stderr, "Invalid opcode: 0b%s (0x%04x)\n",
-                    halfbyte_string(opcode), opcode);
+                    halfbyte_string(static_cast<Word>(opcode)),
+                    static_cast<Word>(opcode));
             return ERR_MALFORMED_INSTR;
     }
 
@@ -401,11 +402,10 @@ Error execute_trap_instruction(const Word instr, bool &do_halt) {
 
     // May be invalid enum variant
     // Handled in default switch branch
-    const enum TrapVector trap_vector =
-        static_cast<enum TrapVector>(bits_0_8(instr));
+    const TrapVector trap_vector = static_cast<TrapVector>(bits_0_8(instr));
 
     switch (trap_vector) {
-        case TRAP_GETC: {
+        case TrapVector::GETC: {
             tty_nobuffer_noecho();                         // Disable echo
             const char input = getchar() & BITMASK_LOW_8;  // Zero high 8 bits
             tty_restore();
@@ -413,7 +413,7 @@ Error execute_trap_instruction(const Word instr, bool &do_halt) {
             /* dbg_print_registers(); */
         }; break;
 
-        case TRAP_IN: {
+        case TrapVector::IN: {
             print_on_new_line();
             printf("Input a character> ");
             tty_nobuffer_noecho();
@@ -428,13 +428,13 @@ Error execute_trap_instruction(const Word instr, bool &do_halt) {
             registers.general_purpose[0] = input;
         }; break;
 
-        case TRAP_OUT: {
+        case TrapVector::OUT: {
             const Word word = registers.general_purpose[0];
             IS_ASCII_OR_RETURN_ERR(word);
             print_char(static_cast<char>(word));
         }; break;
 
-        case TRAP_PUTS: {
+        case TrapVector::PUTS: {
             print_on_new_line();
             for (Word i = registers.general_purpose[0];; ++i) {
                 MEMORY_CHECK_RETURN_ERR(i);
@@ -445,7 +445,7 @@ Error execute_trap_instruction(const Word instr, bool &do_halt) {
             }
         } break;
 
-        case TRAP_PUTSP: {
+        case TrapVector::PUTSP: {
             print_on_new_line();
             // Loop over words, then split into bytes
             // This is done to ensure the memory check is sound
@@ -463,13 +463,14 @@ Error execute_trap_instruction(const Word instr, bool &do_halt) {
             }
         }; break;
 
-        case TRAP_HALT:
+        case TrapVector::HALT:
             do_halt = true;
             return ERR_OK;
             break;
 
         default:
-            fprintf(stderr, "Invalid trap vector 0x%02x\n", trap_vector);
+            fprintf(stderr, "Invalid trap vector 0x%02x\n",
+                    static_cast<Word>(trap_vector));
             return ERR_MALFORMED_TRAP;
     }
 

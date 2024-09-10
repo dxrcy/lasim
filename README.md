@@ -50,7 +50,7 @@ This project only uses the following C++ features (to keep it simple):
 - `new` / `delete`
 - `static_cast` / `reinterpret_cast`
 - `std::vector`
-- Namespaces for tagged unions?
+- `enum class`
 
 # TODO
 

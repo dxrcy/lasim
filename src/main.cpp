@@ -22,15 +22,15 @@ int main(const int argc, const char *const *const argv) {
 
 Error try_run(Options &options) {
     switch (options.mode) {
-        case MODE_ASSEMBLE_ONLY:
+        case Mode::ASSEMBLE_ONLY:
             RETURN_IF_ERR(assemble(options.in_file, options.out_file));
             break;
 
-        case MODE_EXECUTE_ONLY:
+        case Mode::EXECUTE_ONLY:
             RETURN_IF_ERR(execute(options.in_file));
             break;
 
-        case MODE_ASSEMBLE_EXECUTE:
+        case Mode::ASSEMBLE_EXECUTE:
             RETURN_IF_ERR(assemble(options.in_file, options.out_file));
             RETURN_IF_ERR(execute(options.out_file));
             break;

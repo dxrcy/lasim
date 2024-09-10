@@ -41,33 +41,33 @@ typedef struct Registers {
 } Registers;
 
 // 4 bits
-typedef enum Opcode {
-    OPCODE_ADD = 0b0001,
-    OPCODE_AND = 0b0101,
-    OPCODE_BR = 0b0000,
-    OPCODE_JMP_RET = 0b1100,
-    OPCODE_JSR_JSRR = 0b0100,
-    OPCODE_LD = 0b0010,
-    OPCODE_LDI = 0b1010,
-    OPCODE_LDR = 0b0110,
-    OPCODE_LEA = 0b1110,
-    OPCODE_NOT = 0b1001,
-    OPCODE_RTI = 0b1000,
-    OPCODE_ST = 0b0011,
-    OPCODE_STI = 0b1011,
-    OPCODE_STR = 0b0111,
-    OPCODE_TRAP = 0b1111,
-    OPCODE_RESERVED = 0b1101,
-} Opcode;
+enum class Opcode {
+    ADD = 0b0001,
+    AND = 0b0101,
+    BR = 0b0000,
+    JMP_RET = 0b1100,
+    JSR_JSRR = 0b0100,
+    LD = 0b0010,
+    LDI = 0b1010,
+    LDR = 0b0110,
+    LEA = 0b1110,
+    NOT = 0b1001,
+    RTI = 0b1000,
+    ST = 0b0011,
+    STI = 0b1011,
+    STR = 0b0111,
+    TRAP = 0b1111,
+    RESERVED = 0b1101,
+};
 
 // 8 bits
-enum TrapVector {
-    TRAP_GETC = 0x20,
-    TRAP_OUT = 0x21,
-    TRAP_PUTS = 0x22,
-    TRAP_IN = 0x23,
-    TRAP_PUTSP = 0x24,
-    TRAP_HALT = 0x25,
+enum class TrapVector {
+    GETC = 0x20,
+    OUT = 0x21,
+    PUTS = 0x22,
+    IN = 0x23,
+    PUTSP = 0x24,
+    HALT = 0x25,
 };
 
 #endif

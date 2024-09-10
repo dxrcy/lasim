@@ -60,21 +60,21 @@ typedef struct LabelReference {
     size_t index;
 } LabelReference;
 
-typedef enum Directive {
+enum class Directive {
     ORIG,
     END,
     STRINGZ,
     FILL,
     BLKW,
-} Directive;
+};
 
-typedef enum Instruction {
+enum class Instruction {
     ADD,
     AND,
     LEA,
     PUTS,
     HALT,
-} Instruction;
+};
 
 typedef struct Token {
     enum {
@@ -290,14 +290,14 @@ Error read_asm_file_to_lines(const char *const filename, vector<Word> &words) {
         Instruction instruction = token.value.instruction;
         printf("INSTRUCTION: %s\n", instruction_to_string(instruction));
 
-        OpcodeValue opcode = 0;
+        Opcode opcode;
         Word operands = 0;
 
         switch (instruction) {
             case Instruction::ADD:
             case Instruction::AND: {
                 opcode =
-                    instruction == Instruction::ADD ? OPCODE_ADD : OPCODE_AND;
+                    instruction == Instruction::ADD ? Opcode::ADD : Opcode::AND;
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
                 EXPECT_TOKEN_IS_TAG(token, REGISTER);
@@ -327,7 +327,7 @@ Error read_asm_file_to_lines(const char *const filename, vector<Word> &words) {
             }; break;
 
             case Instruction::LEA: {
-                opcode = OPCODE_LEA;
+                opcode = Opcode::LEA;
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
                 EXPECT_TOKEN_IS_TAG(token, REGISTER);
@@ -345,13 +345,13 @@ Error read_asm_file_to_lines(const char *const filename, vector<Word> &words) {
             }; break;
 
             case Instruction::PUTS: {
-                opcode = OPCODE_TRAP;
-                operands = TRAP_PUTS;
+                opcode = Opcode::TRAP;
+                operands = static_cast<Word>(TrapVector::PUTS);
             }; break;
 
             case Instruction::HALT: {
-                opcode = OPCODE_TRAP;
-                operands = TRAP_HALT;
+                opcode = Opcode::TRAP;
+                operands = static_cast<Word>(TrapVector::HALT);
             }; break;
 
             default:
@@ -364,7 +364,7 @@ Error read_asm_file_to_lines(const char *const filename, vector<Word> &words) {
             return ERR_ASM_UNEXPECTED_OPERAND;
         }
 
-        Word word = opcode << 12 | operands;
+        Word word = static_cast<Word>(opcode) << 12 | operands;
         words.push_back(word);
     }
 stop_parsing:
