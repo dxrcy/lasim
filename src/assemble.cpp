@@ -50,12 +50,12 @@ typedef TokenStr LabelName;
 // TODO: Use a hashmap
 typedef struct LabelDefinition {
     LabelName name;
-    size_t index;
+    SignedWord index;
 } LabelDefinition;
 
 typedef struct LabelReference {
     LabelName name;
-    size_t index;
+    SignedWord index;
     bool is_offset11;  // Used for `JSR` only
 } LabelReference;
 
@@ -135,7 +135,7 @@ static const char *instruction_to_string(Instruction instruction);
 
 bool find_label_definition(const TokenStr &needle,
                            const vector<LabelDefinition> &definitions,
-                           size_t &index) {
+                           SignedWord &index) {
     for (size_t j = 0; j < definitions.size(); ++j) {
         if (!strcmp(definitions[j].name, needle)) {
             index = definitions[j].index;
@@ -162,13 +162,13 @@ Error assemble(const char *const asm_filename, const char *const obj_filename) {
 
     /* printf("Words: %ld\n", out_words.size()); */
 
-    for (size_t i = 0; i < out_words.size(); ++i) {
-        if (i > 0 && i % 8 == 0) {
-            printf("\n");
-        }
-        printf("%04x ", out_words[i]);
-    }
-    printf("\n");
+    /* for (size_t i = 0; i < out_words.size(); ++i) { */
+    /*     if (i > 0 && i % 8 == 0) { */
+    /*         printf("\n"); */
+    /*     } */
+    /*     printf("%04x ", out_words[i]); */
+    /* } */
+    /* printf("\n"); */
 
     RETURN_IF_ERR(write_obj_file(obj_filename, out_words));
 
@@ -215,8 +215,6 @@ Error escape_character(char *const ch) {
 // Must ONLY be called with a BR* instruction
 ConditionCode branch_condition_code(Instruction instruction) {
     switch (instruction) {
-        case Instruction::BR:
-            return 0b000;
         case Instruction::BRN:
             return 0b100;
         case Instruction::BRZ:
@@ -229,6 +227,7 @@ ConditionCode branch_condition_code(Instruction instruction) {
             return 0b011;
         case Instruction::BRNP:
             return 0b101;
+        case Instruction::BR:
         case Instruction::BRNZP:
             return 0b111;
         default:
@@ -252,11 +251,11 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
         if (fgets(line_buf, MAX_LINE, asm_file) == NULL) break;
         if (ferror(asm_file)) return ERR_FILE_READ;
 
-        printf("<%s>\n", line_ptr);
+        /* printf("<%s>\n", line_ptr); */
 
         Token token;
         RETURN_IF_ERR(get_next_token(line_ptr, token));
-        _print_token(token);
+        /* _print_token(token); */
 
         // Empty line
         if (token.tag == Token::NONE) continue;
@@ -330,6 +329,15 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                     words.push_back(token.value.literal_integer);
                 }; break;
 
+                case Directive::BLKW: {
+                    EXPECT_NEXT_TOKEN(line_ptr, token);
+                    EXPECT_TOKEN_IS_TAG(token, LITERAL_INTEGER);
+                    // TODO: Replace with better vector function
+                    for (Word i = 0; i < token.value.literal_integer; ++i) {
+                        words.push_back(0x0000);
+                    }
+                }; break;
+
                 default:
                     // Includes `ORIG`
                     fprintf(stderr, "Unexpected directive `%s`\n",
@@ -384,13 +392,14 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                     operands |= src_reg_b;
                 } else if (token.tag == Token::LITERAL_INTEGER) {
                     const SignedWord immediate = token.value.literal_integer;
+                    /* _print_token(token); */
                     // TODO: This currently treats all integers as unsigned!
                     // Ideally, if the integer is meant to be signed (it
                     //      has a minus sign), the last 5 bits may be 1s,
                     //      otherwise only the last 4 bits may be 1s
                     if (immediate >> 5 != 0) {
                         fprintf(stderr, "Immediate too large\n");
-                        return ERR_ASM_IMMEDIATE_TOO_LARGE;
+                        /* return ERR_ASM_IMMEDIATE_TOO_LARGE; */
                     }
                     operands |= 1 << 5;  // Flag
                     operands |= immediate & BITMASK_LOW_5;
@@ -514,6 +523,7 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                 EXPECT_TOKEN_IS_TAG(token, REGISTER);
                 const Register base_reg = token.value.register_;
                 operands |= base_reg << 6;
+                EXPECT_NEXT_COMMA(line_ptr);
 
                 // TODO: Check should be aware of sign; See `ADD` case
                 EXPECT_NEXT_TOKEN(line_ptr, token);
@@ -608,17 +618,18 @@ stop_parsing:
         LabelReference &ref = label_references[i];
         /* printf("Resolving '%s' at 0x%04lx\n", ref.name, ref.index); */
 
-        size_t index;
+        SignedWord index;
         if (!find_label_definition(ref.name, label_definitions, index)) {
             fprintf(stderr, "Undefined label '%s'\n", ref.name);
             return ERR_ASM_UNDEFINED_LABEL;
         }
         /* printf("Found definition at 0x%04lx\n", index); */
 
-        size_t pc_offset = index - ref.index - 1;
+        /* printf("0x%04x -> 0x%04x\n", ref.index, index); */
+        SignedWord pc_offset = index - ref.index - 1;
         /* printf("PC offset: 0x%04lx\n", pc_offset); */
 
-        uint8_t mask = (1U << (ref.is_offset11 ? 11 : 9)) - 1;
+        Word mask = (1U << (ref.is_offset11 ? 11 : 9)) - 1;
 
         words[ref.index] |= pc_offset & mask;
     }
@@ -648,8 +659,8 @@ bool char_is_eol(const char ch) {
 
 int8_t parse_hex_digit(const char ch) {
     if (ch >= '0' && ch <= '9') return ch - '0';
-    if (ch >= 'A' && ch <= 'Z') return ch - 'A';
-    if (ch >= 'a' && ch <= 'z') return ch - 'a';
+    if (ch >= 'A' && ch <= 'Z') return ch - 'A' + 10;
+    if (ch >= 'a' && ch <= 'z') return ch - 'a' + 10;
     return -1;
 }
 
@@ -838,7 +849,7 @@ Error parse_literal_integer_hex(const char *&line, Token &token) {
     // Only allow one 0 in prefixx
     if (new_line[0] == '0') ++new_line;
     // Must have prefix
-    if (new_line[0] != 'x') {
+    if (new_line[0] != 'x' && new_line[0] != 'X') {
         return ERR_OK;
     }
     ++new_line;
@@ -849,6 +860,7 @@ Error parse_literal_integer_hex(const char *&line, Token &token) {
         if (negative) {
             return ERR_ASM_INVALID_TOKEN;
         }
+        negative = true;
     }
     while (new_line[0] == '0' && isdigit(new_line[1])) ++new_line;
 
@@ -872,6 +884,7 @@ Error parse_literal_integer_hex(const char *&line, Token &token) {
             break;
         }
         number <<= 4;
+        number += digit;
         ++line;
     }
 
@@ -898,6 +911,7 @@ Error parse_literal_integer_decimal(const char *&line, Token &token) {
         if (negative) {
             return ERR_ASM_INVALID_TOKEN;
         }
+        negative = true;
     }
     while (new_line[0] == '0' && isdigit(new_line[1])) ++new_line;
 
@@ -1030,7 +1044,6 @@ Error get_next_token(const char *&line, Token &token) {
             token.value.label[i] = identifier[i];
         }
         token.value.label[i] = '\0';
-        // TODO: Check if next character is colon !
     }
     return ERR_OK;
 }
