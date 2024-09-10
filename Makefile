@@ -9,7 +9,7 @@ main:
 	$(CC) $(CFLAGS) src/main.cpp -o $(TARGET)
 
 example: main
-	@./lc3 examples/hello_world.asm -o examples/hello_world2.obj
+	@./lc3 examples/hello_world.asm -o examples/hello_world.obj
 
 name=test
 run: main
