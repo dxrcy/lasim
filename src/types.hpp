@@ -15,9 +15,11 @@
 #define CONDITION_DEFAULT CONDITION_ZERO  // Value on program start
 
 #define WORD_SIZE sizeof(Word)
+// All 1's for sizeof(Word)
+#define WORD_MAX_UNSIGNED ((Word)(~0))
 
 // Swap high and low bytes of a word
-#define swap_endian(word) (((word) << 8) | ((word) >> 8))
+#define swap_endian(_word) (((_word) << 8) | ((_word) >> 8))
 
 typedef uint16_t Word;       // 2 bytes
 typedef int16_t SignedWord;  // 2 bytes

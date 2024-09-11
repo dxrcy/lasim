@@ -10,14 +10,25 @@
 #include "tty.cpp"
 #include "types.hpp"
 
-#define to_signed_word(value, size) \
-    (sign_extend(static_cast<SignedWord>(value), size))
+#define to_signed_word(_value, _size) \
+    (sign_extend(static_cast<SignedWord>(_value), (_size)))
 
-#define low_6_bits_signed(instr) (to_signed_word((instr) & BITMASK_LOW_6, 6))
-#define low_9_bits_signed(instr) (to_signed_word((instr) & BITMASK_LOW_9, 9))
-#define low_11_bits_signed(instr) (to_signed_word((instr) & BITMASK_LOW_11, 11))
+#define low_6_bits_signed(_instr) (to_signed_word((_instr) & BITMASK_LOW_6, 6))
+#define low_9_bits_signed(_instr) (to_signed_word((_instr) & BITMASK_LOW_9, 9))
+#define low_11_bits_signed(_instr) \
+    (to_signed_word((_instr) & BITMASK_LOW_11, 11))
 
-#define MEMORY_CHECK_RETURN_ERR(addr) RETURN_IF_ERR(memory_check(addr))
+#define EXPECT_MEMORY_CHECK(_addr) RETURN_IF_ERR(memory_check(_addr))
+
+#define EXPECT_WORD_IS_ASCII(_word)                          \
+    {                                                        \
+        if ((_word) & ~BITMASK_LOW_7) {                      \
+            fprintf(stderr,                                  \
+                    "String contains non-ASCII characters, " \
+                    "which are not supported.");             \
+            UNIMPLEMENTED();                                 \
+        }                                                    \
+    }
 
 // Check memory address is within the 'allocated' file memory
 Error memory_check(Word addr) {
@@ -71,7 +82,7 @@ Error execute(const char *const obj_filename) {
 
 // `true` return value indicates that program should end
 Error execute_next_instrution(bool &do_halt) {
-    MEMORY_CHECK_RETURN_ERR(registers.program_counter);
+    EXPECT_MEMORY_CHECK(registers.program_counter);
     const Word instr = memory[registers.program_counter];
     ++registers.program_counter;
 
@@ -274,7 +285,7 @@ Error execute_next_instrution(bool &do_halt) {
             const Register dest_reg = bits_9_11(instr);
             const SignedWord offset = low_9_bits_signed(instr);
 
-            MEMORY_CHECK_RETURN_ERR(registers.program_counter + offset);
+            EXPECT_MEMORY_CHECK(registers.program_counter + offset);
             const Word value = memory[registers.program_counter + offset];
 
             registers.general_purpose[dest_reg] = value;
@@ -289,7 +300,7 @@ Error execute_next_instrution(bool &do_halt) {
             const SignedWord offset = low_9_bits_signed(instr);
             const Word value = registers.general_purpose[src_reg];
 
-            MEMORY_CHECK_RETURN_ERR(registers.program_counter + offset);
+            EXPECT_MEMORY_CHECK(registers.program_counter + offset);
             memory[registers.program_counter + offset] = value;
         }; break;
 
@@ -300,7 +311,7 @@ Error execute_next_instrution(bool &do_halt) {
             const SignedWord offset = low_6_bits_signed(instr);
             const Word base = registers.general_purpose[base_reg];
 
-            MEMORY_CHECK_RETURN_ERR(base + offset);
+            EXPECT_MEMORY_CHECK(base + offset);
             const Word value = memory[base + offset];
 
             registers.general_purpose[dest_reg] = value;
@@ -315,7 +326,7 @@ Error execute_next_instrution(bool &do_halt) {
             const Word value = registers.general_purpose[src_reg];
             const Word base = registers.general_purpose[base_reg];
 
-            MEMORY_CHECK_RETURN_ERR(base + offset);
+            EXPECT_MEMORY_CHECK(base + offset);
             memory[base + offset] = value;
         }; break;
 
@@ -324,9 +335,9 @@ Error execute_next_instrution(bool &do_halt) {
             const Register dest_reg = bits_9_11(instr);
             const SignedWord offset = low_9_bits_signed(instr);
 
-            MEMORY_CHECK_RETURN_ERR(registers.program_counter + offset);
+            EXPECT_MEMORY_CHECK(registers.program_counter + offset);
             const Word pointer = memory[registers.program_counter + offset];
-            MEMORY_CHECK_RETURN_ERR(pointer);
+            EXPECT_MEMORY_CHECK(pointer);
             const Word value = memory[pointer];
 
             registers.general_purpose[dest_reg] = value;
@@ -339,8 +350,8 @@ Error execute_next_instrution(bool &do_halt) {
             const SignedWord offset = low_9_bits_signed(instr);
             const Word pointer = registers.general_purpose[src_reg];
 
-            MEMORY_CHECK_RETURN_ERR(pointer);
-            MEMORY_CHECK_RETURN_ERR(registers.program_counter + offset);
+            EXPECT_MEMORY_CHECK(pointer);
+            EXPECT_MEMORY_CHECK(registers.program_counter + offset);
             const Word value = memory[pointer];
             memory[registers.program_counter + offset] = value;
         }; break;
@@ -381,16 +392,6 @@ Error execute_next_instrution(bool &do_halt) {
     return ERR_OK;
 }
 
-#define IS_ASCII_OR_RETURN_ERR(word)                         \
-    {                                                        \
-        if (word & ~BITMASK_LOW_7) {                         \
-            fprintf(stderr,                                  \
-                    "String contains non-ASCII characters, " \
-                    "which are not supported.");             \
-            UNIMPLEMENTED();                                 \
-        }                                                    \
-    }
-
 Error execute_trap_instruction(const Word instr, bool &do_halt) {
     // 4 bits padding
     const uint8_t padding = bits_8_12(instr);
@@ -429,17 +430,17 @@ Error execute_trap_instruction(const Word instr, bool &do_halt) {
 
         case TrapVector::OUT: {
             const Word word = registers.general_purpose[0];
-            IS_ASCII_OR_RETURN_ERR(word);
+            EXPECT_WORD_IS_ASCII(word);
             print_char(static_cast<char>(word));
         }; break;
 
         case TrapVector::PUTS: {
             print_on_new_line();
             for (Word i = registers.general_purpose[0];; ++i) {
-                MEMORY_CHECK_RETURN_ERR(i);
+                EXPECT_MEMORY_CHECK(i);
                 const Word word = memory[i];
                 if (word == 0x0000) break;
-                IS_ASCII_OR_RETURN_ERR(word);
+                EXPECT_WORD_IS_ASCII(word);
                 print_char(static_cast<char>(word));
             }
         } break;
@@ -449,15 +450,15 @@ Error execute_trap_instruction(const Word instr, bool &do_halt) {
             // Loop over words, then split into bytes
             // This is done to ensure the memory check is sound
             for (Word i = registers.general_purpose[0];; ++i) {
-                MEMORY_CHECK_RETURN_ERR(i);
+                EXPECT_MEMORY_CHECK(i);
                 const Word word = memory[i];
                 const uint8_t high = bits_high(word);
                 const uint8_t low = bits_low(word);
                 if (high == 0x0000) break;
-                IS_ASCII_OR_RETURN_ERR(high);
+                EXPECT_WORD_IS_ASCII(high);
                 print_char(high);
                 if (low == 0x0000) break;
-                IS_ASCII_OR_RETURN_ERR(low);
+                EXPECT_WORD_IS_ASCII(low);
                 print_char(low);
             }
         }; break;

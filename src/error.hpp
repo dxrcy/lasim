@@ -1,10 +1,10 @@
 #ifndef ERROR_HPP
 #define ERROR_HPP
 
-#define UNIMPLEMENTED()                                   \
-    {                                                     \
+#define UNIMPLEMENTED()                            \
+    {                                              \
         fprintf(stderr, "Not yet implemented.\n"); \
-        exit(ERR_UNIMPLEMENTED);                          \
+        exit(ERR_UNIMPLEMENTED);                   \
     }
 #define UNREACHABLE()                                          \
     {                                                          \
@@ -13,12 +13,13 @@
     }
 
 // TODO: Maybe this can print some log in debug mode ?
-#define IGNORE_ERR(result) result
+#define IGNORE_ERR(_result) (_result)
 
-#define RETURN_IF_ERR(result)                \
+// Note that other files contain wrappers around this macro
+#define RETURN_IF_ERR(_result)               \
     {                                        \
         /* `input` may be a function call */ \
-        const Error error = (result);        \
+        const Error error = (_result);       \
         if (error != ERR_OK) return error;   \
     }
 

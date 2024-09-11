@@ -15,37 +15,34 @@ using std::vector;
 #define MAX_LINE 512  // This can be large as it is not aggregated
 #define MAX_LABEL 32
 
-// All 1's for sizeof(Word)
-#define WORD_MAX_UNSIGNED ((Word)(~0))
-
 // Used by `assemble_file_to_words`
-#define EXPECT_NEXT_TOKEN(_line_ptr, _token)               \
-    {                                                      \
-        RETURN_IF_ERR(take_next_token(_line_ptr, _token)); \
-        if (_token.kind == Token::NONE) {                  \
-            fprintf(stderr, "Expected operand\n");         \
-            return ERR_ASM_EXPECTED_OPERAND;               \
-        }                                                  \
+#define EXPECT_NEXT_TOKEN(_line_ptr, _token)                   \
+    {                                                          \
+        RETURN_IF_ERR(take_next_token((_line_ptr), (_token))); \
+        if ((_token).kind == Token::NONE) {                    \
+            fprintf(stderr, "Expected operand\n");             \
+            return ERR_ASM_EXPECTED_OPERAND;                   \
+        }                                                      \
     }
 #define EXPECT_TOKEN_IS_KIND(_token, _kind)       \
     {                                             \
-        if (_token.kind != Token::_kind) {        \
+        if ((_token).kind != Token::_kind) {      \
             fprintf(stderr, "Invalid operand\n"); \
             return ERR_ASM_INVALID_OPERAND;       \
         }                                         \
     }
-#define EXPECT_TOKEN_IS_INTEGER(_token)               \
-    {                                                 \
-        if (_token.kind != Token::INTEGER_POSITIVE && \
-            _token.kind != Token::INTEGER_NEGATIVE) { \
-            fprintf(stderr, "Invalid operand\n");     \
-            return ERR_ASM_INVALID_OPERAND;           \
-        }                                             \
+#define EXPECT_TOKEN_IS_INTEGER(_token)                 \
+    {                                                   \
+        if ((_token).kind != Token::INTEGER_POSITIVE && \
+            (_token).kind != Token::INTEGER_NEGATIVE) { \
+            fprintf(stderr, "Invalid operand\n");       \
+            return ERR_ASM_INVALID_OPERAND;             \
+        }                                               \
     }
 #define EXPECT_COMMA(_line_ptr)                                    \
     {                                                              \
         Token token;                                               \
-        RETURN_IF_ERR(take_next_token(_line_ptr, token));          \
+        RETURN_IF_ERR(take_next_token((_line_ptr), token));        \
         if (token.kind != Token::COMMA) {                          \
             fprintf(stderr, "Expected comma following operand\n"); \
             return ERR_ASM_EXPECTED_COMMA;                         \
@@ -54,18 +51,18 @@ using std::vector;
 #define EXPECT_EOL(_line_ptr)                                          \
     {                                                                  \
         Token token;                                                   \
-        RETURN_IF_ERR(take_next_token(_line_ptr, token));              \
+        RETURN_IF_ERR(take_next_token((_line_ptr), token));            \
         if (token.kind != Token::NONE) {                               \
             fprintf(stderr, "Unexpected operand after instruction\n"); \
             return ERR_ASM_UNEXPECTED_OPERAND;                         \
         }                                                              \
     }
-#define EXPECT_INTEGER_FITS_SIZE(_value, _is_negative, _size_bits)      \
-    {                                                                   \
-        if (!does_integer_fit_size(_value, _is_negative, _size_bits)) { \
-            fprintf(stderr, "Immediate too large\n");                   \
-            return ERR_ASM_IMMEDIATE_TOO_LARGE;                         \
-        }                                                               \
+#define EXPECT_INTEGER_FITS_SIZE(_value, _is_negative, _size_bits)            \
+    {                                                                         \
+        if (!does_integer_fit_size((_value), (_is_negative), (_size_bits))) { \
+            fprintf(stderr, "Immediate too large\n");                         \
+            return ERR_ASM_IMMEDIATE_TOO_LARGE;                               \
+        }                                                                     \
     }
 
 // Temporary reference to a substring of a line
