@@ -15,28 +15,27 @@ using std::vector;
 #define MAX_LINE 512  // This can be large as it is not aggregated
 #define MAX_LABEL 32
 
-// TODO: Rename these macros probably
-#define EXPECT_NEXT_TOKEN(line_ptr, token)              \
-    {                                                   \
-        RETURN_IF_ERR(get_next_token(line_ptr, token)); \
-        if (token.tag == Token::NONE) {                 \
-            fprintf(stderr, "Expected operand\n");      \
-            return ERR_ASM_EXPECTED_OPERAND;            \
-        }                                               \
+#define EXPECT_NEXT_TOKEN(line_ptr, token)               \
+    {                                                    \
+        RETURN_IF_ERR(take_next_token(line_ptr, token)); \
+        if (token.kind == Token::NONE) {                 \
+            fprintf(stderr, "Expected operand\n");       \
+            return ERR_ASM_EXPECTED_OPERAND;             \
+        }                                                \
     }
 
-#define EXPECT_TOKEN_IS_TAG(token, tag)           \
+#define EXPECT_TOKEN_IS_KIND(token, kind)         \
     {                                             \
-        if (token.tag != Token::tag) {            \
+        if (token.kind != Token::kind) {          \
             fprintf(stderr, "Invalid operand\n"); \
             return ERR_ASM_INVALID_OPERAND;       \
         }                                         \
     }
 
-#define EXPECT_NEXT_COMMA(line_ptr)                                \
+#define EXPECT_COMMA(line_ptr)                                     \
     {                                                              \
-        RETURN_IF_ERR(get_next_token(line_ptr, token));            \
-        if (token.tag != Token::COMMA) {                           \
+        RETURN_IF_ERR(take_next_token(line_ptr, token));           \
+        if (token.kind != Token::COMMA) {                          \
             fprintf(stderr, "Expected comma following operand\n"); \
             return ERR_ASM_EXPECTED_COMMA;                         \
         }                                                          \
@@ -45,13 +44,15 @@ using std::vector;
 #define EXPECT_EOL(line_ptr)                                           \
     {                                                                  \
         Token token;                                                   \
-        RETURN_IF_ERR(get_next_token(line_ptr, token));                \
-        if (token.tag != Token::NONE) {                                \
+        RETURN_IF_ERR(take_next_token(line_ptr, token));               \
+        if (token.kind != Token::NONE) {                               \
             fprintf(stderr, "Unexpected operand after instruction\n"); \
             return ERR_ASM_UNEXPECTED_OPERAND;                         \
         }                                                              \
     }
 
+// Temporary reference to a substring of a line
+// Must be copied if used after line is overwritten
 typedef struct StringSlice {
     const char *pointer;
     size_t length;
@@ -59,6 +60,7 @@ typedef struct StringSlice {
 
 typedef char LabelString[MAX_LABEL];
 
+// TODO: Why is `index` signed ?
 typedef struct LabelDefinition {
     LabelString name;
     SignedWord index;
@@ -116,31 +118,33 @@ typedef struct Token {
         DIRECTIVE,
         INSTRUCTION,
         REGISTER,
+        INTEGER,
+        STRING,
         LABEL,
-        LITERAL_STRING,
-        LITERAL_INTEGER,
         COMMA,
         NONE,
-    } tag;
+    } kind;
     union {
         Directive directive;
         Instruction instruction;
         Register register_;
+        SignedWord integer;
         // `StringSlice`s are only valid for lifetime of `line`
+        StringSlice string;
         StringSlice label;  // Gets copied on push to a labels vector
-        StringSlice literal_string;
-        SignedWord literal_integer;
     } value;
 } Token;
 
-// TODO: Rename some functions
 // TODO: Make appropriate variables `const`
+// TODO: Document functions
+
+// Note: 'take' here means increment the line pointer and return a token
 
 Error assemble(const char *const asm_filename, const char *const obj_filename);
 Error write_obj_file(const char *const filename, const vector<Word> &words);
-Error read_and_assemble(const char *const filename, vector<Word> &words);
+Error assemble_file_to_words(const char *const filename, vector<Word> &words);
 
-ConditionCode branch_condition_code(Instruction instruction);
+ConditionCode get_branch_condition_code(Instruction instruction);
 void add_label_reference(vector<LabelReference> &references,
                          const StringSlice &name, const Word index,
                          const bool is_offset11);
@@ -148,15 +152,15 @@ bool find_label_definition(const LabelString &target,
                            const vector<LabelDefinition> &definitions,
                            SignedWord &index);
 
-Error get_next_token(const char *&line, Token &token);
-Error parse_literal_integer_hex(const char *&line, Token &token);
-Error parse_literal_integer_decimal(const char *&line, Token &token);
+Error take_next_token(const char *&line, Token &token);
+Error take_integer_hex(const char *&line, Token &token);
+Error take_integer_decimal(const char *&line, Token &token);
 int8_t parse_hex_digit(const char ch);
 
 Error escape_character(char *const ch);
-bool char_is_eol(const char ch);
-bool char_can_be_in_identifier(const char ch);
-bool char_can_be_identifier_start(const char ch);
+bool is_char_eol(const char ch);
+bool is_char_valid_in_identifier(const char ch);
+bool is_char_valid_identifier_start(const char ch);
 
 bool string_equals_slice(const char *target, const StringSlice candidate);
 void print_string_slice(FILE *const &file, const StringSlice &slice);
@@ -174,7 +178,7 @@ void _print_token(const Token &token);
 
 Error assemble(const char *const asm_filename, const char *const obj_filename) {
     vector<Word> out_words;
-    RETURN_IF_ERR(read_and_assemble(asm_filename, out_words));
+    RETURN_IF_ERR(assemble_file_to_words(asm_filename, out_words));
     RETURN_IF_ERR(write_obj_file(obj_filename, out_words));
     return ERR_OK;
 }
@@ -198,7 +202,7 @@ Error write_obj_file(const char *const filename, const vector<Word> &words) {
     return ERR_OK;
 }
 
-Error read_and_assemble(const char *const filename, vector<Word> &words) {
+Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
     FILE *asm_file = fopen(filename, "r");
     if (asm_file == nullptr) {
         fprintf(stderr, "Could not open file %s\n", filename);
@@ -217,31 +221,31 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
         /* printf("<%s>\n", line_ptr); */
 
         Token token;
-        RETURN_IF_ERR(get_next_token(line_ptr, token));
+        RETURN_IF_ERR(take_next_token(line_ptr, token));
 
         /* _print_token(token); */
 
         // Empty line
-        if (token.tag == Token::NONE) continue;
+        if (token.kind == Token::NONE) continue;
 
         if (words.size() == 0) {
             /* _print_token(token); */
-            if (token.tag != Token::DIRECTIVE) {
+            if (token.kind != Token::DIRECTIVE) {
                 fprintf(stderr, "First line must be `.ORIG`\n");
                 return ERR_ASM_EXPECTED_ORIG;
             }
-            RETURN_IF_ERR(get_next_token(line_ptr, token));
-            if (token.tag != Token::LITERAL_INTEGER) {
+            RETURN_IF_ERR(take_next_token(line_ptr, token));
+            if (token.kind != Token::INTEGER) {
                 fprintf(stderr, "Integer literal required after `.ORIG`\n");
                 return ERR_ASM_EXPECTED_OPERAND;
             }
-            words.push_back(token.value.literal_integer);
+            words.push_back(token.value.integer);
             continue;
         }
 
         // TODO: Parsing label before directive *might* have bad effects,
         //     although I cannot think of any off the top of my head.
-        if (token.tag == Token::LABEL) {
+        if (token.kind == Token::LABEL) {
             const StringSlice &name = token.value.label;
             for (size_t i = 0; i < label_definitions.size(); ++i) {
                 /* printf("-- <"); */
@@ -262,36 +266,35 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
             def.index = words.size();
 
             /* _print_string_slice(name); */
-            RETURN_IF_ERR(get_next_token(line_ptr, token));
+            RETURN_IF_ERR(take_next_token(line_ptr, token));
         }
 
         /* _print_token(token); */
 
-        if (token.tag == Token::DIRECTIVE) {
+        if (token.kind == Token::DIRECTIVE) {
             switch (token.value.directive) {
                 case Directive::END:
                     goto stop_parsing;
 
                 case Directive::STRINGZ: {
                     /* printf("%s\n", line_ptr); */
-                    RETURN_IF_ERR(get_next_token(line_ptr, token));
+                    RETURN_IF_ERR(take_next_token(line_ptr, token));
                     /* _print_token(token); */
-                    if (token.tag != Token::LITERAL_STRING) {
+                    if (token.kind != Token::STRING) {
                         fprintf(stderr,
                                 "String literal required after `.STRINGZ`\n");
                         return ERR_ASM_EXPECTED_OPERAND;
                     }
-                    const char *string = token.value.literal_string.pointer;
+                    const char *string = token.value.string.pointer;
                     /* printf("("); */
                     /* _print_string_slice(token.value.literal_string); */
                     /* printf(")\n"); */
-                    for (size_t i = 0; i < token.value.literal_string.length;
-                         ++i) {
+                    for (size_t i = 0; i < token.value.string.length; ++i) {
                         char ch = string[i];
                         if (ch == '\\') {
                             ++i;
                             // "... \" is treated as unterminated
-                            if (i > token.value.literal_string.length)
+                            if (i > token.value.string.length)
                                 return ERR_ASM_UNTERMINATED_STRING;
                             ch = string[i];
                             RETURN_IF_ERR(escape_character(&ch));
@@ -303,15 +306,15 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
 
                 case Directive::FILL: {
                     EXPECT_NEXT_TOKEN(line_ptr, token);
-                    EXPECT_TOKEN_IS_TAG(token, LITERAL_INTEGER);
-                    words.push_back(token.value.literal_integer);
+                    EXPECT_TOKEN_IS_KIND(token, INTEGER);
+                    words.push_back(token.value.integer);
                 }; break;
 
                 case Directive::BLKW: {
                     EXPECT_NEXT_TOKEN(line_ptr, token);
-                    EXPECT_TOKEN_IS_TAG(token, LITERAL_INTEGER);
+                    EXPECT_TOKEN_IS_KIND(token, INTEGER);
                     // TODO: Replace with better vector function
-                    for (Word i = 0; i < token.value.literal_integer; ++i) {
+                    for (Word i = 0; i < token.value.integer; ++i) {
                         words.push_back(0x0000);
                     }
                 }; break;
@@ -328,9 +331,9 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
         }
 
         // Line with only label
-        if (token.tag == Token::NONE) continue;
+        if (token.kind == Token::NONE) continue;
 
-        if (token.tag != Token::INSTRUCTION) {
+        if (token.kind != Token::INSTRUCTION) {
             /* _print_token(token); */
             fprintf(stderr, "Expected instruction or end of line\n");
             return ERR_ASM_EXPECTED_INSTRUCTION;
@@ -350,23 +353,23 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                     instruction == Instruction::ADD ? Opcode::ADD : Opcode::AND;
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_TAG(token, REGISTER);
+                EXPECT_TOKEN_IS_KIND(token, REGISTER);
                 const Register dest_reg = token.value.register_;
                 operands |= dest_reg << 9;
-                EXPECT_NEXT_COMMA(line_ptr);
+                EXPECT_COMMA(line_ptr);
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_TAG(token, REGISTER);
+                EXPECT_TOKEN_IS_KIND(token, REGISTER);
                 const Register src_reg_a = token.value.register_;
                 operands |= src_reg_a << 6;
-                EXPECT_NEXT_COMMA(line_ptr);
+                EXPECT_COMMA(line_ptr);
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
-                if (token.tag == Token::REGISTER) {
+                if (token.kind == Token::REGISTER) {
                     const Register src_reg_b = token.value.register_;
                     operands |= src_reg_b;
-                } else if (token.tag == Token::LITERAL_INTEGER) {
-                    const SignedWord immediate = token.value.literal_integer;
+                } else if (token.kind == Token::INTEGER) {
+                    const SignedWord immediate = token.value.integer;
                     /* _print_token(token); */
                     // TODO: This currently treats all integers as unsigned!
                     // Ideally, if the integer is meant to be signed (it
@@ -385,13 +388,13 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                 opcode = Opcode::NOT;
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_TAG(token, REGISTER);
+                EXPECT_TOKEN_IS_KIND(token, REGISTER);
                 const Register dest_reg = token.value.register_;
                 operands |= dest_reg << 9;
-                EXPECT_NEXT_COMMA(line_ptr);
+                EXPECT_COMMA(line_ptr);
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_TAG(token, REGISTER);
+                EXPECT_TOKEN_IS_KIND(token, REGISTER);
                 const Register src_reg = token.value.register_;
                 operands |= src_reg << 6;
 
@@ -408,11 +411,11 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
             case Instruction::BRNZP: {
                 opcode = Opcode::BR;
                 const ConditionCode condition =
-                    branch_condition_code(instruction);
+                    get_branch_condition_code(instruction);
                 operands |= condition << 9;
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_TAG(token, LABEL);
+                EXPECT_TOKEN_IS_KIND(token, LABEL);
                 add_label_reference(label_references, token.value.label,
                                     words.size(), false);
             }; break;
@@ -424,7 +427,7 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                 Register addr_reg = 7;  // Default R7 for `RET`
                 if (instruction == Instruction::JMP) {
                     EXPECT_NEXT_TOKEN(line_ptr, token);
-                    EXPECT_TOKEN_IS_TAG(token, REGISTER);
+                    EXPECT_TOKEN_IS_KIND(token, REGISTER);
                     addr_reg = token.value.register_;
                 }
                 operands |= addr_reg << 6;
@@ -439,14 +442,14 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
 
                     // PCOffset11
                     EXPECT_NEXT_TOKEN(line_ptr, token);
-                    EXPECT_TOKEN_IS_TAG(token, LABEL);
+                    EXPECT_TOKEN_IS_KIND(token, LABEL);
                     /* printf(">>"); */
                     /* _print_token(token); */
                     add_label_reference(label_references, token.value.label,
                                         words.size(), true);
                 } else {
                     EXPECT_NEXT_TOKEN(line_ptr, token);
-                    EXPECT_TOKEN_IS_TAG(token, REGISTER);
+                    EXPECT_TOKEN_IS_KIND(token, REGISTER);
                     const Register addr_reg = token.value.register_;
                     operands |= addr_reg << 6;
                 }
@@ -474,13 +477,13 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                 }
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_TAG(token, REGISTER);
+                EXPECT_TOKEN_IS_KIND(token, REGISTER);
                 const Register ds_reg = token.value.register_;
                 operands |= ds_reg << 9;
-                EXPECT_NEXT_COMMA(line_ptr);
+                EXPECT_COMMA(line_ptr);
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_TAG(token, LABEL);
+                EXPECT_TOKEN_IS_KIND(token, LABEL);
                 add_label_reference(label_references, token.value.label,
                                     words.size(), false);
             }; break;
@@ -491,21 +494,21 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                     instruction == Instruction::LDR ? Opcode::LDR : Opcode::STR;
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_TAG(token, REGISTER);
+                EXPECT_TOKEN_IS_KIND(token, REGISTER);
                 const Register ds_reg = token.value.register_;
                 operands |= ds_reg << 9;
-                EXPECT_NEXT_COMMA(line_ptr);
+                EXPECT_COMMA(line_ptr);
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_TAG(token, REGISTER);
+                EXPECT_TOKEN_IS_KIND(token, REGISTER);
                 const Register base_reg = token.value.register_;
                 operands |= base_reg << 6;
-                EXPECT_NEXT_COMMA(line_ptr);
+                EXPECT_COMMA(line_ptr);
 
                 // TODO: Check should be aware of sign; See `ADD` case
                 EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_TAG(token, LITERAL_INTEGER);
-                const SignedWord immediate = token.value.literal_integer;
+                EXPECT_TOKEN_IS_KIND(token, INTEGER);
+                const SignedWord immediate = token.value.integer;
                 if (immediate >> 6 != 0) {
                     fprintf(stderr, "Immediate too large\n");
                     return ERR_ASM_IMMEDIATE_TOO_LARGE;
@@ -517,13 +520,13 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                 opcode = Opcode::LEA;
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_TAG(token, REGISTER);
+                EXPECT_TOKEN_IS_KIND(token, REGISTER);
                 const Register dest_reg = token.value.register_;
                 operands |= dest_reg << 9;
-                EXPECT_NEXT_COMMA(line_ptr);
+                EXPECT_COMMA(line_ptr);
 
                 EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_TAG(token, LABEL);
+                EXPECT_TOKEN_IS_KIND(token, LABEL);
                 add_label_reference(label_references, token.value.label,
                                     words.size(), false);
             }; break;
@@ -563,9 +566,8 @@ Error read_and_assemble(const char *const filename, vector<Word> &words) {
                         // TODO: Check should be aware of sign; See `ADD`
                         // case
                         EXPECT_NEXT_TOKEN(line_ptr, token);
-                        EXPECT_TOKEN_IS_TAG(token, LITERAL_INTEGER);
-                        const SignedWord immediate =
-                            token.value.literal_integer;
+                        EXPECT_TOKEN_IS_KIND(token, INTEGER);
+                        const SignedWord immediate = token.value.integer;
                         if (immediate >> 8 != 0) {
                             fprintf(stderr, "Immediate too large\n");
                             return ERR_ASM_IMMEDIATE_TOO_LARGE;
@@ -617,7 +619,7 @@ stop_parsing:
 }
 
 // Must ONLY be called with a BR* instruction
-ConditionCode branch_condition_code(Instruction instruction) {
+ConditionCode get_branch_condition_code(Instruction instruction) {
     switch (instruction) {
         case Instruction::BRN:
             return 0b100;
@@ -673,15 +675,15 @@ bool find_label_definition(const LabelString &target,
     return false;
 }
 
-Error get_next_token(const char *&line, Token &token) {
-    token.tag = Token::NONE;
+Error take_next_token(const char *&line, Token &token) {
+    token.kind = Token::NONE;
 
     /* printf("-->%c<\n", line[0]); */
 
     // Ignore leading spaces
     while (isspace(line[0])) ++line;
     // Linebreak, EOF, or comment
-    if (char_is_eol(line[0])) return ERR_OK;
+    if (is_char_eol(line[0])) return ERR_OK;
 
     /* printf("<<%s>>\n", line); */
 
@@ -689,7 +691,7 @@ Error get_next_token(const char *&line, Token &token) {
 
     // Comma
     if (line[0] == ',') {
-        token.tag = Token::COMMA;
+        token.kind = Token::COMMA;
         ++line;
         return ERR_OK;
     }
@@ -697,14 +699,13 @@ Error get_next_token(const char *&line, Token &token) {
     // String literal
     if (line[0] == '"') {
         ++line;
-        token.tag = Token::LITERAL_STRING;
-        token.value.literal_string.pointer = line;
+        token.kind = Token::STRING;
+        token.value.string.pointer = line;
         for (; line[0] != '"'; ++line) {
             if (line[0] == '\n' || line[0] == '\0')
                 return ERR_ASM_UNTERMINATED_STRING;
         }
-        token.value.literal_string.length =
-            line - token.value.literal_string.pointer;
+        token.value.string.length = line - token.value.string.pointer;
         ++line;  // Account for closing quote
         /* _print_string_slice(token.value.literal_string); */
         return ERR_OK;
@@ -713,9 +714,9 @@ Error get_next_token(const char *&line, Token &token) {
     // Register
     // Case-insensitive
     if ((line[0] == 'R' || line[0] == 'r') &&
-        (isdigit(line[1]) && !char_can_be_in_identifier(line[2]))) {
+        (isdigit(line[1]) && !is_char_valid_in_identifier(line[2]))) {
         ++line;
-        token.tag = Token::REGISTER;
+        token.kind = Token::REGISTER;
         token.value.register_ = line[0] - '0';
         ++line;
         return ERR_OK;
@@ -725,23 +726,23 @@ Error get_next_token(const char *&line, Token &token) {
     // Case-insensitive
     if (line[0] == '.') {
         ++line;
-        token.tag = Token::DIRECTIVE;
+        token.kind = Token::DIRECTIVE;
         const char *directive = line;
-        while (char_can_be_in_identifier(tolower(line[0]))) {
+        while (is_char_valid_in_identifier(tolower(line[0]))) {
             ++line;
         }
         return directive_from_string(token, directive);
     }
 
     // Hex literal
-    RETURN_IF_ERR(parse_literal_integer_hex(line, token));
-    if (token.tag != Token::NONE) return ERR_OK;  // Tried to parse, but failed
+    RETURN_IF_ERR(take_integer_hex(line, token));
+    if (token.kind != Token::NONE) return ERR_OK;  // Tried to parse, but failed
     // Decimal literal
-    RETURN_IF_ERR(parse_literal_integer_decimal(line, token));
-    if (token.tag != Token::NONE) return ERR_OK;  // Tried to parse, but failed
+    RETURN_IF_ERR(take_integer_decimal(line, token));
+    if (token.kind != Token::NONE) return ERR_OK;  // Tried to parse, but failed
 
     // Character cannot start an identifier -> invalid
-    if (!char_can_be_identifier_start(line[0])) {
+    if (!is_char_valid_identifier_start(line[0])) {
         return ERR_ASM_INVALID_TOKEN;
     }
 
@@ -750,8 +751,8 @@ Error get_next_token(const char *&line, Token &token) {
     StringSlice identifier;
     identifier.pointer = line;
     ++line;
-    for (; char_can_be_in_identifier(tolower(line[0])); ++line) {
-        if (!char_can_be_in_identifier(tolower(line[0]))) break;
+    for (; is_char_valid_in_identifier(tolower(line[0])); ++line) {
+        if (!is_char_valid_in_identifier(tolower(line[0]))) break;
     }
     identifier.length = line - identifier.pointer;
 
@@ -761,17 +762,17 @@ Error get_next_token(const char *&line, Token &token) {
 
     if (instruction_from_string_slice(token, identifier)) {
         // Instruction -- value already set
-        token.tag = Token::INSTRUCTION;
+        token.kind = Token::INSTRUCTION;
     } else {
         // Label
         // TODO: Check if length > MAX_LABEL
-        token.tag = Token::LABEL;
+        token.kind = Token::LABEL;
         token.value.label = identifier;
     }
     return ERR_OK;
 }
 
-Error parse_literal_integer_hex(const char *&line, Token &token) {
+Error take_integer_hex(const char *&line, Token &token) {
     const char *new_line = line;
 
     bool negative = false;
@@ -804,7 +805,7 @@ Error parse_literal_integer_hex(const char *&line, Token &token) {
     }
 
     line = new_line;  // Skip [x0-] which was just checked
-    token.tag = Token::LITERAL_INTEGER;
+    token.kind = Token::INTEGER;
 
     Word number = 0;
     while (true) {
@@ -812,7 +813,7 @@ Error parse_literal_integer_hex(const char *&line, Token &token) {
         int8_t digit = parse_hex_digit(ch);  // Catches '\0'
         if (digit < 0) {
             // Integer-suffix type situation
-            if (ch != '\0' && char_can_be_in_identifier(ch))
+            if (ch != '\0' && is_char_valid_in_identifier(ch))
                 return ERR_ASM_INVALID_TOKEN;
             break;
         }
@@ -823,12 +824,12 @@ Error parse_literal_integer_hex(const char *&line, Token &token) {
 
     // TODO: Maybe don't set sign here...
     number *= negative ? -1 : 1;
-    token.value.literal_integer = number;
+    token.value.integer = number;
 
     return ERR_OK;
 }
 
-Error parse_literal_integer_decimal(const char *&line, Token &token) {
+Error take_integer_decimal(const char *&line, Token &token) {
     const char *new_line = line;
 
     bool negative = false;
@@ -855,14 +856,14 @@ Error parse_literal_integer_decimal(const char *&line, Token &token) {
     }
 
     line = new_line;  // Skip [#0-] which was just checked
-    token.tag = Token::LITERAL_INTEGER;
+    token.kind = Token::INTEGER;
 
     Word number = 0;
     while (true) {
         char ch = line[0];
         if (!isdigit(line[0])) {  // Catches '\0'
             // Integer-suffix type situation
-            if (ch != '\0' && char_can_be_in_identifier(ch))
+            if (ch != '\0' && is_char_valid_in_identifier(ch))
                 return ERR_ASM_INVALID_TOKEN;
             break;
         }
@@ -873,7 +874,7 @@ Error parse_literal_integer_decimal(const char *&line, Token &token) {
 
     // TODO: Maybe don't set sign here...
     number *= negative ? -1 : 1;
-    token.value.literal_integer = number;
+    token.value.integer = number;
 
     return ERR_OK;
 }
@@ -906,14 +907,14 @@ Error escape_character(char *const ch) {
     return ERR_OK;
 }
 
-bool char_is_eol(const char ch) {
+bool is_char_eol(const char ch) {
     return ch == '\0' || ch == '\n' || ch == ';';
 }
-bool char_can_be_in_identifier(const char ch) {
+bool is_char_valid_in_identifier(const char ch) {
     // TODO: Perhaps `-` and other characters might be allowed ?
     return ch == '_' || isalpha(ch) || isdigit(ch);
 }
-bool char_can_be_identifier_start(const char ch) {
+bool is_char_valid_identifier_start(const char ch) {
     // TODO: Perhaps `-` and other characters might be allowed ?
     return ch == '_' || isalpha(ch);
 }
@@ -1114,7 +1115,7 @@ bool instruction_from_string_slice(Token &token,
 
 void _print_token(const Token &token) {
     printf("Token: ");
-    switch (token.tag) {
+    switch (token.kind) {
         case Token::INSTRUCTION: {
             printf("Instruction: %s\n",
                    instruction_to_string(token.value.instruction));
@@ -1126,19 +1127,19 @@ void _print_token(const Token &token) {
         case Token::REGISTER: {
             printf("Register: R%d\n", token.value.register_);
         }; break;
+        case Token::INTEGER: {
+            printf("Integer: 0x%04hx #%d\n", token.value.integer,
+                   token.value.integer);
+        }; break;
+        case Token::STRING: {
+            printf("String: <");
+            print_string_slice(stdout, token.value.string);
+            printf(">\n");
+        }; break;
         case Token::LABEL: {
             printf("Label: <");
             print_string_slice(stdout, token.value.label);
             printf(">\n");
-        }; break;
-        case Token::LITERAL_STRING: {
-            printf("String: <");
-            print_string_slice(stdout, token.value.literal_string);
-            printf(">\n");
-        }; break;
-        case Token::LITERAL_INTEGER: {
-            printf("Integer: 0x%04hx #%d\n", token.value.literal_integer,
-                   token.value.literal_integer);
         }; break;
         case Token::COMMA: {
             printf("Comma\n");
