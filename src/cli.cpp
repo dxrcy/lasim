@@ -7,7 +7,7 @@
 
 #include "error.hpp"
 
-#define PROGRAM_NAME "lc3"
+#define PROGRAM_NAME "lasim"
 
 #define MAX_FILENAME 255  // NOT including '\0'
 
@@ -140,6 +140,7 @@ void print_usage_hint() {
 
 void print_usage() {
     fprintf(stderr,
+            "LASIM: LC-3 Assembler & Simulator\n"
             "USAGE:\n"
             "    " PROGRAM_NAME "    " PROGRAM_NAME
             " -h"

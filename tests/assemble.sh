@@ -2,7 +2,7 @@
 
 examples='./examples'
 
-alias lc3='./lc3'
+alias lasim='./lasim'
 alias laser='laser'
 
 echo '------'
@@ -13,7 +13,7 @@ for asm in "$examples"/*.asm; do
     laser -a "$asm" >/dev/null || break
 
     printf 'ASSEMBLE    %-18s' "$filename"
-    lc3 -a "$asm" -o "$obj_actual"
+    lasim -a "$asm" -o "$obj_actual"
     if [ "$?" -eq 0 ];
         then echo 'pass'
         else echo 'FAIL'

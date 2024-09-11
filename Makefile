@@ -1,7 +1,7 @@
 CC=g++
 CFLAGS=-Wall -Wpedantic -Wextra
 
-TARGET=lc3
+TARGET=lasim
 
 .PHONY: run watch test
 
@@ -10,7 +10,7 @@ main:
 
 name=hello_world
 run: main
-	@./lc3 examples/$(name).asm
+	@./$(TARGET) examples/$(name).asm
 
 watch:
 	@clear
