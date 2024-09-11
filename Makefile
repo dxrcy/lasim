@@ -3,7 +3,7 @@ CFLAGS=-Wall -Wpedantic -Wextra
 
 TARGET=lc3
 
-.PHONY: example run watch
+.PHONY: run watch test
 
 main:
 	$(CC) $(CFLAGS) src/main.cpp -o $(TARGET)
@@ -16,4 +16,7 @@ watch:
 	@clear
 	@reflex --decoration=none -r 'src/.*|.*\.asm' -s -- zsh -c \
 		'clear; sleep 0.2; $(MAKE) --no-print-directory run'
+
+test:
+	tests/assemble.sh
 
