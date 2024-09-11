@@ -3,7 +3,7 @@
 
 #include <cctype>   // isspace
 #include <cstdio>   // FILE, fprintf, etc
-#include <cstring>  // memcpy
+#include <cstring>  // strcmp, strncmp
 #include <vector>   // std::vector
 
 #include "bitmasks.hpp"
@@ -162,16 +162,14 @@ bool is_char_valid_in_identifier(const char ch);
 bool is_char_valid_identifier_start(const char ch);
 
 bool string_equals_slice(const char *const target, const StringSlice candidate);
+void copy_string_slice_to_string(char *dest, const StringSlice src);
 void print_string_slice(FILE *const &file, const StringSlice &slice);
 
 static const char *directive_to_string(const Directive directive);
-Error directive_from_string(Token &token, const char *const directive);
+Error directive_from_string(Token &token, const StringSlice directive);
 static const char *instruction_to_string(const Instruction instruction);
 bool try_instruction_from_string_slice(Token &token,
                                        const StringSlice &instruction);
-
-// TODO: Replace with standard lib function
-bool string_equals(const char *const candidate, const char *const target);
 
 void _print_token(const Token &token);
 
@@ -253,7 +251,8 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
                 /* printf("> : <"); */
                 /* print_string_slice(stdout, name); */
                 /* printf(">\n"); */
-                if (string_equals(label_definitions[i].name, name.pointer)) {
+                if (!strncmp(label_definitions[i].name, name.pointer,
+                             name.length)) {
                     fprintf(stderr, "Duplicate label '");
                     print_string_slice(stderr, name);
                     fprintf(stderr, "'\n");
@@ -263,7 +262,7 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
 
             label_definitions.push_back({});
             LabelDefinition &def = label_definitions.back();
-            memcpy(def.name, name.pointer, name.length);
+            copy_string_slice_to_string(def.name, name);
             def.index = words.size();
 
             // Continue to instruction/directive after label
@@ -651,7 +650,7 @@ void add_label_reference(vector<LabelReference> &references,
     /* ref.name[i] = 'i'; */
     /* } */
     /* printf("Done!\n"); */
-    memcpy(ref.name, name.pointer, name.length);
+    copy_string_slice_to_string(ref.name, name);
     ref.index = index;
     ref.is_offset11 = is_offset11;
     /* printf("label:<"); */
@@ -665,7 +664,8 @@ bool find_label_definition(const LabelString &target,
                            SignedWord &index) {
     for (size_t j = 0; j < definitions.size(); ++j) {
         const LabelDefinition candidate = definitions[j];
-        if (string_equals(candidate.name, target)) {
+        // Use `strcmp` as both arguments are null-terminated and unknown length
+        if (!strcmp(candidate.name, target)) {
             index = candidate.index;
             return true;
         }
@@ -724,10 +724,12 @@ Error take_next_token(const char *&line, Token &token) {
     // Case-insensitive
     if (line[0] == '.') {
         ++line;
-        const char *const directive = line;
+        StringSlice directive;
+        directive.pointer = line;
         while (is_char_valid_in_identifier(tolower(line[0]))) {
             ++line;
         }
+        directive.length = line - directive.pointer;
         // Sets kind and value
         return directive_from_string(token, directive);
     }
@@ -917,25 +919,20 @@ bool is_char_valid_identifier_start(const char ch) {
     return ch == '_' || isalpha(ch);
 }
 
-// TODO: Replace with standard lib function
-// TODO: Swap argument order
-// Candidate is NOT null-terminated
-// Match is CASE-INSENSITIVE
-bool string_equals(const char *candidate, const char *target) {
-    // Equality will check \0-mismatch, so no worry of reading past string
-    for (; candidate[0] != '\0'; ++candidate, ++target) {
-        if (tolower(candidate[0]) != tolower(target[0])) return false;
-    }
-    return true;
-}
-
 bool string_equals_slice(const char *const target,
                          const StringSlice candidate) {
-    // Equality will check \0-mismatch, so no worry of reading past string
+    // Equality will check \0-mismatch, so no worry of reading past target
     for (size_t i = 0; i < candidate.length; ++i) {
         if (tolower(candidate.pointer[i]) != tolower(target[i])) return false;
     }
     return true;
+}
+
+void copy_string_slice_to_string(char *dest, const StringSlice src) {
+    for (size_t i = 0; i < src.length; ++i) {
+        dest[i] = src.pointer[i];
+    }
+    dest[src.length] = '\0';
 }
 
 void print_string_slice(FILE *const &file, const StringSlice &slice) {
@@ -965,17 +962,17 @@ static const char *directive_to_string(const Directive directive) {
 }
 
 // TODO: Accept `StringSlice` instead of `char *`
-Error directive_from_string(Token &token, const char *const directive) {
+Error directive_from_string(Token &token, const StringSlice directive) {
     token.kind = Token::DIRECTIVE;
-    if (string_equals("orig", directive)) {
+    if (string_equals_slice("orig", directive)) {
         token.value.directive = Directive::ORIG;
-    } else if (string_equals("end", directive)) {
+    } else if (string_equals_slice("end", directive)) {
         token.value.directive = Directive::END;
-    } else if (string_equals("fill", directive)) {
+    } else if (string_equals_slice("fill", directive)) {
         token.value.directive = Directive::FILL;
-    } else if (string_equals("blkw", directive)) {
+    } else if (string_equals_slice("blkw", directive)) {
         token.value.directive = Directive::BLKW;
-    } else if (string_equals("stringz", directive)) {
+    } else if (string_equals_slice("stringz", directive)) {
         token.value.directive = Directive::STRINGZ;
     } else {
         return ERR_ASM_INVALID_DIRECTIVE;
