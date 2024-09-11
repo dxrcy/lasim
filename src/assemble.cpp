@@ -58,6 +58,7 @@ typedef struct StringSlice {
     size_t length;
 } StringSlice;
 
+// Must be a copied string, as `line` is overwritten
 typedef char LabelString[MAX_LABEL];
 
 // TODO: Why is `index` signed ?
@@ -128,6 +129,8 @@ typedef struct Token {
         Directive directive;
         Instruction instruction;
         Register register_;
+        // TODO: Maybe have `integer_positive` and `integer_negative`
+        //     To allow properly check size, which is dependant on instruction
         SignedWord integer;
         // `StringSlice`s are only valid for lifetime of `line`
         StringSlice string;
@@ -137,12 +140,12 @@ typedef struct Token {
 
 // TODO: Document functions
 
-// Note: 'take' here means increment the line pointer and return a token
-
 Error assemble(const char *const asm_filename, const char *const obj_filename);
+// Used by `assemble`
 Error write_obj_file(const char *const filename, const vector<Word> &words);
 Error assemble_file_to_words(const char *const filename, vector<Word> &words);
 
+// Used by `assemble_file_to_words`
 ConditionCode get_branch_condition_code(const Instruction instruction);
 void add_label_reference(vector<LabelReference> &references,
                          const StringSlice &name, const Word index,
@@ -150,33 +153,37 @@ void add_label_reference(vector<LabelReference> &references,
 bool find_label_definition(const LabelString &target,
                            const vector<LabelDefinition> &definitions,
                            SignedWord &index);
+Error escape_character(char *const ch);
 
+// Note: 'take' here means increment the line pointer and return a token
 Error take_next_token(const char *&line, Token &token);
+// Used by `take_next_token`
 Error take_integer_hex(const char *&line, Token &token);
 Error take_integer_decimal(const char *&line, Token &token);
 int8_t parse_hex_digit(const char ch);
-
-Error escape_character(char *const ch);
 bool is_char_eol(const char ch);
 bool is_char_valid_in_identifier(const char ch);
 bool is_char_valid_identifier_start(const char ch);
 
+// For `StringSlice`
 bool string_equals_slice(const char *const target, const StringSlice candidate);
 void copy_string_slice_to_string(char *dest, const StringSlice src);
 void print_string_slice(FILE *const &file, const StringSlice &slice);
 
+// Directive/Instruction to/from string
 static const char *directive_to_string(const Directive directive);
 Error directive_from_string(Token &token, const StringSlice directive);
 static const char *instruction_to_string(const Instruction instruction);
 bool try_instruction_from_string_slice(Token &token,
                                        const StringSlice &instruction);
 
+// Debugging
 void _print_token(const Token &token);
 
 Error assemble(const char *const asm_filename, const char *const obj_filename) {
-    vector<Word> out_words;
-    RETURN_IF_ERR(assemble_file_to_words(asm_filename, out_words));
-    RETURN_IF_ERR(write_obj_file(obj_filename, out_words));
+    vector<Word> words;
+    RETURN_IF_ERR(assemble_file_to_words(asm_filename, words));
+    RETURN_IF_ERR(write_obj_file(obj_filename, words));
     return ERR_OK;
 }
 
@@ -673,6 +680,27 @@ bool find_label_definition(const LabelString &target,
     return false;
 }
 
+// TODO: Maybe return character, and return some sentinel value if invalid ?
+Error escape_character(char *const ch) {
+    switch (*ch) {
+        case 'n':
+            *ch = '\n';
+            break;
+        case 'r':
+            *ch = '\r';
+            break;
+        case 't':
+            *ch = '\t';
+            break;
+        case '0':
+            *ch = '\0';
+            break;
+        default:
+            return ERR_ASM_INVALID_ESCAPE_CHAR;
+    }
+    return ERR_OK;
+}
+
 Error take_next_token(const char *&line, Token &token) {
     token.kind = Token::NONE;
 
@@ -711,6 +739,7 @@ Error take_next_token(const char *&line, Token &token) {
 
     // Register
     // Case-insensitive
+    // Will not match labels starting with /[Rr]\d/, such as `R2foo`
     if ((line[0] == 'R' || line[0] == 'r') &&
         (isdigit(line[1]) && !is_char_valid_in_identifier(line[2]))) {
         ++line;
@@ -726,7 +755,8 @@ Error take_next_token(const char *&line, Token &token) {
         ++line;
         StringSlice directive;
         directive.pointer = line;
-        while (is_char_valid_in_identifier(tolower(line[0]))) {
+        // Use `isalpha` because directives only ever use letters, unlike labels
+        while (isalpha(line[0])) {
             ++line;
         }
         directive.length = line - directive.pointer;
@@ -810,7 +840,8 @@ Error take_integer_hex(const char *&line, Token &token) {
         const char ch = line[0];
         const int8_t digit = parse_hex_digit(ch);  // Catches '\0'
         if (digit < 0) {
-            // Integer-suffix type situation
+            // Checks if number is immediately followed by identifier character
+            //     (like a suffix), which is invalid
             if (ch != '\0' && is_char_valid_in_identifier(ch))
                 return ERR_ASM_INVALID_TOKEN;
             break;
@@ -860,7 +891,8 @@ Error take_integer_decimal(const char *&line, Token &token) {
     while (true) {
         const char ch = line[0];
         if (!isdigit(line[0])) {  // Catches '\0'
-            // Integer-suffix type situation
+            // Checks if number is immediately followed by identifier character
+            //     (like a suffix), which is invalid
             if (ch != '\0' && is_char_valid_in_identifier(ch))
                 return ERR_ASM_INVALID_TOKEN;
             break;
@@ -883,27 +915,6 @@ int8_t parse_hex_digit(const char ch) {
     if (ch >= 'A' && ch <= 'Z') return ch - 'A' + 10;
     if (ch >= 'a' && ch <= 'z') return ch - 'a' + 10;
     return -1;
-}
-
-// TODO: Maybe return character, and return some sentinel value if invalid ?
-Error escape_character(char *const ch) {
-    switch (*ch) {
-        case 'n':
-            *ch = '\n';
-            break;
-        case 'r':
-            *ch = '\r';
-            break;
-        case 't':
-            *ch = '\t';
-            break;
-        case '0':
-            *ch = '\0';
-            break;
-        default:
-            return ERR_ASM_INVALID_ESCAPE_CHAR;
-    }
-    return ERR_OK;
 }
 
 bool is_char_eol(const char ch) {
