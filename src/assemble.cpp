@@ -126,69 +126,56 @@ typedef struct Token {
         Directive directive;
         Instruction instruction;
         Register register_;
+        // `StringSlice`s are only valid for lifetime of `line`
         StringSlice label;  // Gets copied on push to a labels vector
         StringSlice literal_string;
         SignedWord literal_integer;
     } value;
 } Token;
 
-typedef uint8_t OpcodeValue;  // 4 bits
+// TODO: Rename some functions
+// TODO: Make appropriate variables `const`
 
 Error assemble(const char *const asm_filename, const char *const obj_filename);
-Error read_and_assemble(const char *const filename, vector<Word> &words);
 Error write_obj_file(const char *const filename, const vector<Word> &words);
-Error get_next_token(const char *&line, Token &token);
-// TODO: Add other prototypes
+Error read_and_assemble(const char *const filename, vector<Word> &words);
 
-static const char *directive_to_string(Directive directive);
-static const char *instruction_to_string(Instruction instruction);
-
-bool string_equals(const char *const candidate, const char *const target);
-
-void print_string_slice(FILE *const &file, const StringSlice &slice);
-
-void _print_token(const Token &token);
-
-bool find_label_definition(const LabelString &target,
-                           const vector<LabelDefinition> &definitions,
-                           SignedWord &index) {
-    for (size_t j = 0; j < definitions.size(); ++j) {
-        LabelDefinition candidate = definitions[j];
-        if (string_equals(candidate.name, target)) {
-            index = candidate.index;
-            return true;
-        }
-    }
-    return false;
-}
-
+ConditionCode branch_condition_code(Instruction instruction);
 void add_label_reference(vector<LabelReference> &references,
                          const StringSlice &name, const Word index,
-                         const bool is_offset11) {
-    references.push_back({});
-    LabelReference &ref = references.back();
-    /* printf("\nStart:\n"); */
-    /* for (size_t i = 0; i < name.length; ++i) { */
-    /* printf("%ld\t", i); */
-    /* fflush(stdout); */
-    /* printf("%c\n", name.pointer[i]); */
-    /* ref.name[i] = 'i'; */
-    /* } */
-    /* printf("Done!\n"); */
-    memcpy(ref.name, name.pointer, name.length);
-    ref.index = index;
-    ref.is_offset11 = is_offset11;
-    /* printf("label:<"); */
-    /* _print_string_slice(name); */
-    /* printf(">\n"); */
-}
+                         const bool is_offset11);
+bool find_label_definition(const LabelString &target,
+                           const vector<LabelDefinition> &definitions,
+                           SignedWord &index);
+
+Error get_next_token(const char *&line, Token &token);
+Error parse_literal_integer_hex(const char *&line, Token &token);
+Error parse_literal_integer_decimal(const char *&line, Token &token);
+int8_t parse_hex_digit(const char ch);
+
+Error escape_character(char *const ch);
+bool char_is_eol(const char ch);
+bool char_can_be_in_identifier(const char ch);
+bool char_can_be_identifier_start(const char ch);
+
+bool string_equals_slice(const char *target, const StringSlice candidate);
+void print_string_slice(FILE *const &file, const StringSlice &slice);
+
+static const char *directive_to_string(Directive directive);
+Error directive_from_string(Token &token, const char *const directive);
+static const char *instruction_to_string(Instruction instruction);
+bool instruction_from_string_slice(Token &token,
+                                   const StringSlice &instruction);
+
+// TODO: Replace with standard lib function
+bool string_equals(const char *const candidate, const char *const target);
+
+void _print_token(const Token &token);
 
 Error assemble(const char *const asm_filename, const char *const obj_filename) {
     vector<Word> out_words;
     RETURN_IF_ERR(read_and_assemble(asm_filename, out_words));
-
     RETURN_IF_ERR(write_obj_file(obj_filename, out_words));
-
     return ERR_OK;
 }
 
@@ -209,49 +196,6 @@ Error write_obj_file(const char *const filename, const vector<Word> &words) {
 
     fclose(obj_file);
     return ERR_OK;
-}
-
-Error escape_character(char *const ch) {
-    switch (*ch) {
-        case 'n':
-            *ch = '\n';
-            break;
-        case 'r':
-            *ch = '\r';
-            break;
-        case 't':
-            *ch = '\t';
-            break;
-        case '0':
-            *ch = '\0';
-            break;
-        default:
-            return ERR_ASM_INVALID_ESCAPE_CHAR;
-    }
-    return ERR_OK;
-}
-
-// Must ONLY be called with a BR* instruction
-ConditionCode branch_condition_code(Instruction instruction) {
-    switch (instruction) {
-        case Instruction::BRN:
-            return 0b100;
-        case Instruction::BRZ:
-            return 0b010;
-        case Instruction::BRP:
-            return 0b001;
-        case Instruction::BRNZ:
-            return 0b110;
-        case Instruction::BRZP:
-            return 0b011;
-        case Instruction::BRNP:
-            return 0b101;
-        case Instruction::BR:
-        case Instruction::BRNZP:
-            return 0b111;
-        default:
-            UNREACHABLE();
-    }
 }
 
 Error read_and_assemble(const char *const filename, vector<Word> &words) {
@@ -672,12 +616,299 @@ stop_parsing:
     return ERR_OK;
 }
 
-#define EXPECT_CHAR_RETURN_ERR(ch, file)             \
-    {                                                \
-        const Error error = read_char((ch), (file)); \
-        if (error != ERR_OK) return error;           \
+// Must ONLY be called with a BR* instruction
+ConditionCode branch_condition_code(Instruction instruction) {
+    switch (instruction) {
+        case Instruction::BRN:
+            return 0b100;
+        case Instruction::BRZ:
+            return 0b010;
+        case Instruction::BRP:
+            return 0b001;
+        case Instruction::BRNZ:
+            return 0b110;
+        case Instruction::BRZP:
+            return 0b011;
+        case Instruction::BRNP:
+            return 0b101;
+        case Instruction::BR:
+        case Instruction::BRNZP:
+            return 0b111;
+        default:
+            UNREACHABLE();
+    }
+}
+
+void add_label_reference(vector<LabelReference> &references,
+                         const StringSlice &name, const Word index,
+                         const bool is_offset11) {
+    references.push_back({});
+    LabelReference &ref = references.back();
+    /* printf("\nStart:\n"); */
+    /* for (size_t i = 0; i < name.length; ++i) { */
+    /* printf("%ld\t", i); */
+    /* fflush(stdout); */
+    /* printf("%c\n", name.pointer[i]); */
+    /* ref.name[i] = 'i'; */
+    /* } */
+    /* printf("Done!\n"); */
+    memcpy(ref.name, name.pointer, name.length);
+    ref.index = index;
+    ref.is_offset11 = is_offset11;
+    /* printf("label:<"); */
+    /* _print_string_slice(name); */
+    /* printf(">\n"); */
+}
+
+bool find_label_definition(const LabelString &target,
+                           const vector<LabelDefinition> &definitions,
+                           SignedWord &index) {
+    for (size_t j = 0; j < definitions.size(); ++j) {
+        LabelDefinition candidate = definitions[j];
+        if (string_equals(candidate.name, target)) {
+            index = candidate.index;
+            return true;
+        }
+    }
+    return false;
+}
+
+Error get_next_token(const char *&line, Token &token) {
+    token.tag = Token::NONE;
+
+    /* printf("-->%c<\n", line[0]); */
+
+    // Ignore leading spaces
+    while (isspace(line[0])) ++line;
+    // Linebreak, EOF, or comment
+    if (char_is_eol(line[0])) return ERR_OK;
+
+    /* printf("<<%s>>\n", line); */
+
+    /* printf("<%c> 0x%04hx\n", line[0], line[0]); */
+
+    // Comma
+    if (line[0] == ',') {
+        token.tag = Token::COMMA;
+        ++line;
+        return ERR_OK;
     }
 
+    // String literal
+    if (line[0] == '"') {
+        ++line;
+        token.tag = Token::LITERAL_STRING;
+        token.value.literal_string.pointer = line;
+        for (; line[0] != '"'; ++line) {
+            if (line[0] == '\n' || line[0] == '\0')
+                return ERR_ASM_UNTERMINATED_STRING;
+        }
+        token.value.literal_string.length =
+            line - token.value.literal_string.pointer;
+        ++line;  // Account for closing quote
+        /* _print_string_slice(token.value.literal_string); */
+        return ERR_OK;
+    }
+
+    // Register
+    // Case-insensitive
+    if ((line[0] == 'R' || line[0] == 'r') &&
+        (isdigit(line[1]) && !char_can_be_in_identifier(line[2]))) {
+        ++line;
+        token.tag = Token::REGISTER;
+        token.value.register_ = line[0] - '0';
+        ++line;
+        return ERR_OK;
+    }
+
+    // Directive
+    // Case-insensitive
+    if (line[0] == '.') {
+        ++line;
+        token.tag = Token::DIRECTIVE;
+        const char *directive = line;
+        while (char_can_be_in_identifier(tolower(line[0]))) {
+            ++line;
+        }
+        return directive_from_string(token, directive);
+    }
+
+    // Hex literal
+    RETURN_IF_ERR(parse_literal_integer_hex(line, token));
+    if (token.tag != Token::NONE) return ERR_OK;  // Tried to parse, but failed
+    // Decimal literal
+    RETURN_IF_ERR(parse_literal_integer_decimal(line, token));
+    if (token.tag != Token::NONE) return ERR_OK;  // Tried to parse, but failed
+
+    // Character cannot start an identifier -> invalid
+    if (!char_can_be_identifier_start(line[0])) {
+        return ERR_ASM_INVALID_TOKEN;
+    }
+
+    // Label or instruction
+    // Case-insensitive
+    StringSlice identifier;
+    identifier.pointer = line;
+    ++line;
+    for (; char_can_be_in_identifier(tolower(line[0])); ++line) {
+        if (!char_can_be_in_identifier(tolower(line[0]))) break;
+    }
+    identifier.length = line - identifier.pointer;
+
+    /* printf("IDENT: <"); */
+    /* _print_string_slice(identifier); */
+    /* printf(">\n"); */
+
+    if (instruction_from_string_slice(token, identifier)) {
+        // Instruction -- value already set
+        token.tag = Token::INSTRUCTION;
+    } else {
+        // Label
+        // TODO: Check if length > MAX_LABEL
+        token.tag = Token::LABEL;
+        token.value.label = identifier;
+    }
+    return ERR_OK;
+}
+
+Error parse_literal_integer_hex(const char *&line, Token &token) {
+    const char *new_line = line;
+
+    bool negative = false;
+    if (new_line[0] == '-') {
+        ++new_line;
+        negative = true;
+    }
+    // Only allow one 0 in prefixx
+    if (new_line[0] == '0') ++new_line;
+    // Must have prefix
+    if (new_line[0] != 'x' && new_line[0] != 'X') {
+        return ERR_OK;
+    }
+    ++new_line;
+
+    if (new_line[0] == '-') {
+        ++new_line;
+        // Don't allow `-x-`
+        if (negative) {
+            return ERR_ASM_INVALID_TOKEN;
+        }
+        negative = true;
+    }
+    while (new_line[0] == '0' && isdigit(new_line[1])) ++new_line;
+
+    // Not an integer
+    // Continue to next token
+    if (parse_hex_digit(new_line[0]) < 0) {
+        return ERR_OK;
+    }
+
+    line = new_line;  // Skip [x0-] which was just checked
+    token.tag = Token::LITERAL_INTEGER;
+
+    Word number = 0;
+    while (true) {
+        char ch = line[0];
+        int8_t digit = parse_hex_digit(ch);  // Catches '\0'
+        if (digit < 0) {
+            // Integer-suffix type situation
+            if (ch != '\0' && char_can_be_in_identifier(ch))
+                return ERR_ASM_INVALID_TOKEN;
+            break;
+        }
+        number <<= 4;
+        number += digit;
+        ++line;
+    }
+
+    // TODO: Maybe don't set sign here...
+    number *= negative ? -1 : 1;
+    token.value.literal_integer = number;
+
+    return ERR_OK;
+}
+
+Error parse_literal_integer_decimal(const char *&line, Token &token) {
+    const char *new_line = line;
+
+    bool negative = false;
+    if (new_line[0] == '-') {
+        ++new_line;
+        negative = true;
+    }
+    // Don't allow any 0's before prefix
+    if (new_line[0] == '#') ++new_line;  // Optional
+    if (new_line[0] == '-') {
+        ++new_line;
+        // Don't allow `-#-`
+        if (negative) {
+            return ERR_ASM_INVALID_TOKEN;
+        }
+        negative = true;
+    }
+    while (new_line[0] == '0' && isdigit(new_line[1])) ++new_line;
+
+    // Not an integer
+    // Continue to next token
+    if (!isdigit(new_line[0])) {
+        return ERR_OK;
+    }
+
+    line = new_line;  // Skip [#0-] which was just checked
+    token.tag = Token::LITERAL_INTEGER;
+
+    Word number = 0;
+    while (true) {
+        char ch = line[0];
+        if (!isdigit(line[0])) {  // Catches '\0'
+            // Integer-suffix type situation
+            if (ch != '\0' && char_can_be_in_identifier(ch))
+                return ERR_ASM_INVALID_TOKEN;
+            break;
+        }
+        number *= 10;
+        number += ch - '0';
+        ++line;
+    }
+
+    // TODO: Maybe don't set sign here...
+    number *= negative ? -1 : 1;
+    token.value.literal_integer = number;
+
+    return ERR_OK;
+}
+
+// Returns -1 if not a valid hex digit
+int8_t parse_hex_digit(const char ch) {
+    if (ch >= '0' && ch <= '9') return ch - '0';
+    if (ch >= 'A' && ch <= 'Z') return ch - 'A' + 10;
+    if (ch >= 'a' && ch <= 'z') return ch - 'a' + 10;
+    return -1;
+}
+
+Error escape_character(char *const ch) {
+    switch (*ch) {
+        case 'n':
+            *ch = '\n';
+            break;
+        case 'r':
+            *ch = '\r';
+            break;
+        case 't':
+            *ch = '\t';
+            break;
+        case '0':
+            *ch = '\0';
+            break;
+        default:
+            return ERR_ASM_INVALID_ESCAPE_CHAR;
+    }
+    return ERR_OK;
+}
+
+bool char_is_eol(const char ch) {
+    return ch == '\0' || ch == '\n' || ch == ';';
+}
 bool char_can_be_in_identifier(const char ch) {
     // TODO: Perhaps `-` and other characters might be allowed ?
     return ch == '_' || isalpha(ch) || isdigit(ch);
@@ -685,17 +916,6 @@ bool char_can_be_in_identifier(const char ch) {
 bool char_can_be_identifier_start(const char ch) {
     // TODO: Perhaps `-` and other characters might be allowed ?
     return ch == '_' || isalpha(ch);
-}
-
-bool char_is_eol(const char ch) {
-    return ch == '\0' || ch == '\n' || ch == ';';
-}
-
-int8_t parse_hex_digit(const char ch) {
-    if (ch >= '0' && ch <= '9') return ch - '0';
-    if (ch >= 'A' && ch <= 'Z') return ch - 'A' + 10;
-    if (ch >= 'a' && ch <= 'z') return ch - 'a' + 10;
-    return -1;
 }
 
 // TODO: Replace with standard lib function
@@ -718,6 +938,12 @@ bool string_equals_slice(const char *target, const StringSlice candidate) {
     return true;
 }
 
+void print_string_slice(FILE *const &file, const StringSlice &slice) {
+    for (size_t i = 0; i < slice.length; ++i) {
+        fprintf(file, "%c", slice.pointer[i]);
+    }
+}
+
 static const char *directive_to_string(Directive directive) {
     switch (directive) {
         case Directive::ORIG:
@@ -734,6 +960,7 @@ static const char *directive_to_string(Directive directive) {
     UNREACHABLE();
 }
 
+// TODO: Accept `StringSlice` instead of `char *`
 Error directive_from_string(Token &token, const char *const directive) {
     if (string_equals("orig", directive)) {
         token.value.directive = Directive::ORIG;
@@ -883,217 +1110,6 @@ bool instruction_from_string_slice(Token &token,
         return false;
     }
     return true;
-}
-
-Error parse_literal_integer_hex(const char *&line, Token &token) {
-    const char *new_line = line;
-
-    bool negative = false;
-    if (new_line[0] == '-') {
-        ++new_line;
-        negative = true;
-    }
-    // Only allow one 0 in prefixx
-    if (new_line[0] == '0') ++new_line;
-    // Must have prefix
-    if (new_line[0] != 'x' && new_line[0] != 'X') {
-        return ERR_OK;
-    }
-    ++new_line;
-
-    if (new_line[0] == '-') {
-        ++new_line;
-        // Don't allow `-x-`
-        if (negative) {
-            return ERR_ASM_INVALID_TOKEN;
-        }
-        negative = true;
-    }
-    while (new_line[0] == '0' && isdigit(new_line[1])) ++new_line;
-
-    // Not an integer
-    // Continue to next token
-    if (parse_hex_digit(new_line[0]) < 0) {
-        return ERR_OK;
-    }
-
-    line = new_line;  // Skip [x0-] which was just checked
-    token.tag = Token::LITERAL_INTEGER;
-
-    Word number = 0;
-    while (true) {
-        char ch = line[0];
-        int8_t digit = parse_hex_digit(ch);  // Catches '\0'
-        if (digit < 0) {
-            // Integer-suffix type situation
-            if (ch != '\0' && char_can_be_in_identifier(ch))
-                return ERR_ASM_INVALID_TOKEN;
-            break;
-        }
-        number <<= 4;
-        number += digit;
-        ++line;
-    }
-
-    // TODO: Maybe don't set sign here...
-    number *= negative ? -1 : 1;
-    token.value.literal_integer = number;
-
-    return ERR_OK;
-}
-
-Error parse_literal_integer_decimal(const char *&line, Token &token) {
-    const char *new_line = line;
-
-    bool negative = false;
-    if (new_line[0] == '-') {
-        ++new_line;
-        negative = true;
-    }
-    // Don't allow any 0's before prefix
-    if (new_line[0] == '#') ++new_line;  // Optional
-    if (new_line[0] == '-') {
-        ++new_line;
-        // Don't allow `-#-`
-        if (negative) {
-            return ERR_ASM_INVALID_TOKEN;
-        }
-        negative = true;
-    }
-    while (new_line[0] == '0' && isdigit(new_line[1])) ++new_line;
-
-    // Not an integer
-    // Continue to next token
-    if (!isdigit(new_line[0])) {
-        return ERR_OK;
-    }
-
-    line = new_line;  // Skip [#0-] which was just checked
-    token.tag = Token::LITERAL_INTEGER;
-
-    Word number = 0;
-    while (true) {
-        char ch = line[0];
-        if (!isdigit(line[0])) {  // Catches '\0'
-            // Integer-suffix type situation
-            if (ch != '\0' && char_can_be_in_identifier(ch))
-                return ERR_ASM_INVALID_TOKEN;
-            break;
-        }
-        number *= 10;
-        number += ch - '0';
-        ++line;
-    }
-
-    // TODO: Maybe don't set sign here...
-    number *= negative ? -1 : 1;
-    token.value.literal_integer = number;
-
-    return ERR_OK;
-}
-
-Error get_next_token(const char *&line, Token &token) {
-    token.tag = Token::NONE;
-
-    /* printf("-->%c<\n", line[0]); */
-
-    // Ignore leading spaces
-    while (isspace(line[0])) ++line;
-    // Linebreak, EOF, or comment
-    if (char_is_eol(line[0])) return ERR_OK;
-
-    /* printf("<<%s>>\n", line); */
-
-    /* printf("<%c> 0x%04hx\n", line[0], line[0]); */
-
-    // Comma
-    if (line[0] == ',') {
-        token.tag = Token::COMMA;
-        ++line;
-        return ERR_OK;
-    }
-
-    // String literal
-    if (line[0] == '"') {
-        ++line;
-        token.tag = Token::LITERAL_STRING;
-        token.value.literal_string.pointer = line;
-        for (; line[0] != '"'; ++line) {
-            if (line[0] == '\n' || line[0] == '\0')
-                return ERR_ASM_UNTERMINATED_STRING;
-        }
-        token.value.literal_string.length =
-            line - token.value.literal_string.pointer;
-        ++line;  // Account for closing quote
-        /* _print_string_slice(token.value.literal_string); */
-        return ERR_OK;
-    }
-
-    // Register
-    // Case-insensitive
-    if ((line[0] == 'R' || line[0] == 'r') &&
-        (isdigit(line[1]) && !char_can_be_in_identifier(line[2]))) {
-        ++line;
-        token.tag = Token::REGISTER;
-        token.value.register_ = line[0] - '0';
-        ++line;
-        return ERR_OK;
-    }
-
-    // Directive
-    // Case-insensitive
-    if (line[0] == '.') {
-        ++line;
-        token.tag = Token::DIRECTIVE;
-        const char *directive = line;
-        while (char_can_be_in_identifier(tolower(line[0]))) {
-            ++line;
-        }
-        return directive_from_string(token, directive);
-    }
-
-    // Hex literal
-    RETURN_IF_ERR(parse_literal_integer_hex(line, token));
-    if (token.tag != Token::NONE) return ERR_OK;  // Tried to parse, but failed
-    // Decimal literal
-    RETURN_IF_ERR(parse_literal_integer_decimal(line, token));
-    if (token.tag != Token::NONE) return ERR_OK;  // Tried to parse, but failed
-
-    // Character cannot start an identifier -> invalid
-    if (!char_can_be_identifier_start(line[0])) {
-        return ERR_ASM_INVALID_TOKEN;
-    }
-
-    // Label or instruction
-    // Case-insensitive
-    StringSlice identifier;
-    identifier.pointer = line;
-    ++line;
-    for (; char_can_be_in_identifier(tolower(line[0])); ++line) {
-        if (!char_can_be_in_identifier(tolower(line[0]))) break;
-    }
-    identifier.length = line - identifier.pointer;
-
-    /* printf("IDENT: <"); */
-    /* _print_string_slice(identifier); */
-    /* printf(">\n"); */
-
-    if (instruction_from_string_slice(token, identifier)) {
-        // Instruction -- value already set
-        token.tag = Token::INSTRUCTION;
-    } else {
-        // Label
-        // TODO: Check if length > MAX_LABEL
-        token.tag = Token::LABEL;
-        token.value.label = identifier;
-    }
-    return ERR_OK;
-}
-
-void print_string_slice(FILE *const &file, const StringSlice &slice) {
-    for (size_t i = 0; i < slice.length; ++i) {
-        fprintf(file, "%c", slice.pointer[i]);
-    }
 }
 
 void _print_token(const Token &token) {
