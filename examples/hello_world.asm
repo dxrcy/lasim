@@ -1,11 +1,11 @@
 .ORIG x3000
 
-    LEA R0, HELLO_WORLD
-    PUTS
+    lea r0, HelloWorld
+    puts
 
     HALT
 
-HELLO_WORLD
+HelloWorld
     .STRINGZ "Hello world!\n"
 
 .END
