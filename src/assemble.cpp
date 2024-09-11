@@ -15,6 +15,9 @@ using std::vector;
 #define MAX_LINE 512  // This can be large as it is not aggregated
 #define MAX_LABEL 32
 
+// All 1's for sizeof(Word)
+#define WORD_MAX_UNSIGNED ((Word)(~0))
+
 // Used by `assemble_file_to_words`
 #define EXPECT_NEXT_TOKEN(line_ptr, token)               \
     {                                                    \
@@ -333,6 +336,8 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
                 case Directive::FILL: {
                     EXPECT_NEXT_TOKEN(line_ptr, token);
                     EXPECT_TOKEN_IS_INTEGER(token);
+                    // Don't check integer size -- it should have been checked
+                    //     to fit in a word when being
                     // Sign is ignored
                     // TODO: Confirm this is correct
                     words.push_back(token.value.integer);
@@ -341,6 +346,7 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
                 case Directive::BLKW: {
                     EXPECT_NEXT_TOKEN(line_ptr, token);
                     EXPECT_TOKEN_IS_KIND(token, INTEGER_POSITIVE);
+                    // Don't check integer size
                     // TODO: Replace with better vector function
                     for (Word i = 0; i < token.value.integer; ++i) {
                         words.push_back(0x0000);
@@ -871,7 +877,7 @@ Error take_integer_hex(const char *&line, Token &token) {
     token.kind = negative ? Token::INTEGER_NEGATIVE : Token::INTEGER_POSITIVE;
 
     Word number = 0;
-    while (true) {
+    for (size_t i = 0;; ++i) {
         const char ch = line[0];
         const int8_t digit = parse_hex_digit(ch);  // Catches '\0'
         if (digit < 0) {
@@ -880,6 +886,12 @@ Error take_integer_hex(const char *&line, Token &token) {
             if (ch != '\0' && is_char_valid_in_identifier(ch))
                 return ERR_ASM_INVALID_TOKEN;
             break;
+        }
+        // Hex literals cannot be more than 4 digits
+        // Leading zeros have already been skipped
+        if (i >= 4) {
+            fprintf(stderr, "Immediate too large\n");
+            return ERR_ASM_IMMEDIATE_TOO_LARGE;
         }
         number <<= 4;
         number += digit;
