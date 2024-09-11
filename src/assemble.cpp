@@ -211,10 +211,10 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
     vector<LabelDefinition> label_definitions;
     vector<LabelReference> label_references;
 
-    char line_buf[MAX_LINE];          // Buffer gets overwritten
-    const char *line_ptr = line_buf;  // Pointer address is mutated
-
+    char line_buf[MAX_LINE];  // Buffer gets overwritten
     while (true) {
+        const char *line_ptr = line_buf;  // Pointer address is mutated
+
         if (fgets(line_buf, MAX_LINE, asm_file) == NULL) break;
         if (ferror(asm_file)) return ERR_FILE_READ;
 
@@ -270,7 +270,7 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
             RETURN_IF_ERR(take_next_token(line_ptr, token));
         }
 
-        _print_token(token);
+        /* _print_token(token); */
 
         if (token.kind == Token::DIRECTIVE) {
             switch (token.value.directive) {
@@ -676,7 +676,7 @@ bool find_label_definition(const LabelString &target,
 Error take_next_token(const char *&line, Token &token) {
     token.kind = Token::NONE;
 
-    /* printf("-->%c<\n", line[0]); */
+    /* printf("-- <%s>\n", line); */
 
     // Ignore leading spaces
     while (isspace(line[0])) ++line;
