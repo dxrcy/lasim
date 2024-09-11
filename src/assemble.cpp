@@ -15,6 +15,7 @@ using std::vector;
 #define MAX_LINE 512  // This can be large as it is not aggregated
 #define MAX_LABEL 32
 
+// Used by `assemble_file_to_words`
 #define EXPECT_NEXT_TOKEN(line_ptr, token)               \
     {                                                    \
         RETURN_IF_ERR(take_next_token(line_ptr, token)); \
@@ -23,7 +24,6 @@ using std::vector;
             return ERR_ASM_EXPECTED_OPERAND;             \
         }                                                \
     }
-
 #define EXPECT_TOKEN_IS_KIND(token, kind)         \
     {                                             \
         if (token.kind != Token::kind) {          \
@@ -31,7 +31,14 @@ using std::vector;
             return ERR_ASM_INVALID_OPERAND;       \
         }                                         \
     }
-
+#define EXPECT_TOKEN_IS_INTEGER(token)               \
+    {                                                \
+        if (token.kind != Token::INTEGER_POSITIVE && \
+            token.kind != Token::INTEGER_NEGATIVE) { \
+            fprintf(stderr, "Invalid operand\n");    \
+            return ERR_ASM_INVALID_OPERAND;          \
+        }                                            \
+    }
 #define EXPECT_COMMA(line_ptr)                                     \
     {                                                              \
         RETURN_IF_ERR(take_next_token(line_ptr, token));           \
@@ -40,7 +47,6 @@ using std::vector;
             return ERR_ASM_EXPECTED_COMMA;                         \
         }                                                          \
     }
-
 #define EXPECT_EOL(line_ptr)                                           \
     {                                                                  \
         Token token;                                                   \
@@ -49,6 +55,13 @@ using std::vector;
             fprintf(stderr, "Unexpected operand after instruction\n"); \
             return ERR_ASM_UNEXPECTED_OPERAND;                         \
         }                                                              \
+    }
+#define EXPECT_INTEGER_FITS_SIZE(value, is_negative, size_bits)      \
+    {                                                                \
+        if (!does_integer_fit_size(value, is_negative, size_bits)) { \
+            fprintf(stderr, "Immediate too large\n");                \
+            return ERR_ASM_IMMEDIATE_TOO_LARGE;                      \
+        }                                                            \
     }
 
 // Temporary reference to a substring of a line
@@ -119,7 +132,8 @@ typedef struct Token {
         DIRECTIVE,
         INSTRUCTION,
         REGISTER,
-        INTEGER,
+        INTEGER_POSITIVE,
+        INTEGER_NEGATIVE,
         STRING,
         LABEL,
         COMMA,
@@ -129,9 +143,12 @@ typedef struct Token {
         Directive directive;
         Instruction instruction;
         Register register_;
-        // TODO: Maybe have `integer_positive` and `integer_negative`
-        //     To allow properly check size, which is dependant on instruction
-        SignedWord integer;
+        // Sign depends on if `-` character is present in asm file
+        // Intended sign needs to be known to check if integer is too large for
+        //     a particular instruction
+        // Value is always stored unsigned in `Token`, but must be converted
+        //     based on `kind`
+        Word integer;
         // `StringSlice`s are only valid for lifetime of `line`
         StringSlice string;
         StringSlice label;  // Gets copied on push to a labels vector
@@ -154,6 +171,8 @@ bool find_label_definition(const LabelString &target,
                            const vector<LabelDefinition> &definitions,
                            SignedWord &index);
 Error escape_character(char *const ch);
+bool does_integer_fit_size(const Word value, const bool is_negative,
+                           const uint8_t size_bits);
 
 // Note: 'take' here means increment the line pointer and return a token
 Error take_next_token(const char *&line, Token &token);
@@ -240,8 +259,9 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
                 return ERR_ASM_EXPECTED_ORIG;
             }
             RETURN_IF_ERR(take_next_token(line_ptr, token));
-            if (token.kind != Token::INTEGER) {
-                fprintf(stderr, "Integer literal required after `.ORIG`\n");
+            if (token.kind != Token::INTEGER_POSITIVE) {
+                fprintf(stderr,
+                        "Positive integer literal required after `.ORIG`\n");
                 return ERR_ASM_EXPECTED_OPERAND;
             }
             words.push_back(token.value.integer);
@@ -278,6 +298,8 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
 
         /* _print_token(token); */
 
+        // TODO: Move directive parsing to another function
+
         if (token.kind == Token::DIRECTIVE) {
             switch (token.value.directive) {
                 case Directive::END:
@@ -310,13 +332,15 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
 
                 case Directive::FILL: {
                     EXPECT_NEXT_TOKEN(line_ptr, token);
-                    EXPECT_TOKEN_IS_KIND(token, INTEGER);
+                    EXPECT_TOKEN_IS_INTEGER(token);
+                    // Sign is ignored
+                    // TODO: Confirm this is correct
                     words.push_back(token.value.integer);
                 }; break;
 
                 case Directive::BLKW: {
                     EXPECT_NEXT_TOKEN(line_ptr, token);
-                    EXPECT_TOKEN_IS_KIND(token, INTEGER);
+                    EXPECT_TOKEN_IS_KIND(token, INTEGER_POSITIVE);
                     // TODO: Replace with better vector function
                     for (Word i = 0; i < token.value.integer; ++i) {
                         words.push_back(0x0000);
@@ -346,6 +370,8 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
         const Instruction instruction = token.value.instruction;
         /* printf("Instruction: %s\n", instruction_to_string(instruction)); */
 
+        // TODO: Move instruction parsing to another function
+
         Opcode opcode;
         Word operands = 0x0000;
 
@@ -371,17 +397,14 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
                 if (token.kind == Token::REGISTER) {
                     const Register src_reg_b = token.value.register_;
                     operands |= src_reg_b;
-                } else if (token.kind == Token::INTEGER) {
-                    const SignedWord immediate = token.value.integer;
+                } else {
+                    EXPECT_TOKEN_IS_INTEGER(token);
+                    const Word immediate = token.value.integer;
                     /* _print_token(token); */
-                    // TODO: This currently treats all integers as unsigned!
-                    // Ideally, if the integer is meant to be signed (it
-                    //      has a minus sign), the last 5 bits may be 1s,
-                    //      otherwise only the last 4 bits may be 1s
-                    if (immediate >> 5 != 0) {
-                        fprintf(stderr, "Immediate too large\n");
-                        /* return ERR_ASM_IMMEDIATE_TOO_LARGE; */
-                    }
+                    /* printf(" = 0x%04x\n", immediate); */
+                    // 5 bits
+                    EXPECT_INTEGER_FITS_SIZE(
+                        immediate, token.kind == Token::INTEGER_NEGATIVE, 5);
                     operands |= 1 << 5;  // Flag
                     operands |= immediate & BITMASK_LOW_5;
                 }
@@ -510,12 +533,12 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
 
                 // TODO: Check should be aware of sign; See `ADD` case
                 EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_KIND(token, INTEGER);
+                EXPECT_TOKEN_IS_INTEGER(token);
+
                 const SignedWord immediate = token.value.integer;
-                if (immediate >> 6 != 0) {
-                    fprintf(stderr, "Immediate too large\n");
-                    return ERR_ASM_IMMEDIATE_TOO_LARGE;
-                }
+                // 6 bits
+                EXPECT_INTEGER_FITS_SIZE(
+                    immediate, token.kind == Token::INTEGER_NEGATIVE, 6);
                 operands |= immediate & BITMASK_LOW_6;
             }; break;
 
@@ -566,15 +589,12 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
 
                     // Trap instruction with explicit code
                     case Instruction::TRAP: {
-                        // TODO: Check should be aware of sign; See `ADD`
-                        // case
                         EXPECT_NEXT_TOKEN(line_ptr, token);
-                        EXPECT_TOKEN_IS_KIND(token, INTEGER);
+                        // Don't allow explicit sign
+                        EXPECT_TOKEN_IS_KIND(token, INTEGER_POSITIVE);
                         const SignedWord immediate = token.value.integer;
-                        if (immediate >> 8 != 0) {
-                            fprintf(stderr, "Immediate too large\n");
-                            return ERR_ASM_IMMEDIATE_TOO_LARGE;
-                        }
+                        // 8 bits -- always positive
+                        EXPECT_INTEGER_FITS_SIZE(immediate, false, 8);
                         trap_vector = static_cast<TrapVector>(immediate);
                     }; break;
 
@@ -699,6 +719,21 @@ Error escape_character(char *const ch) {
             return ERR_ASM_INVALID_ESCAPE_CHAR;
     }
     return ERR_OK;
+}
+
+bool does_integer_fit_size(const Word value, const bool is_negative,
+                           const uint8_t size_bits) {
+    // TODO: There has to be a better way to do this...
+    if (is_negative) {
+        // Flip sign and check against largest allowed negative value
+        // Eg. size = 5
+        //     Largest positive value: 0000'1111
+        //     Largest negative value: 0001'0000 = max
+        const Word max = 1 << (size_bits - 1);
+        return (Word)(-value) <= max;
+    }
+    // Check if any bits above --and including-- sign bit are set
+    return value >> (size_bits - 1) == 0;
 }
 
 Error take_next_token(const char *&line, Token &token) {
@@ -833,7 +868,7 @@ Error take_integer_hex(const char *&line, Token &token) {
     }
 
     line = new_line;  // Skip [x0-] which was just checked
-    token.kind = Token::INTEGER;
+    token.kind = negative ? Token::INTEGER_NEGATIVE : Token::INTEGER_POSITIVE;
 
     Word number = 0;
     while (true) {
@@ -851,9 +886,8 @@ Error take_integer_hex(const char *&line, Token &token) {
         ++line;
     }
 
-    // TODO: Maybe don't set sign here...
-    number *= negative ? -1 : 1;
-    token.value.integer = number;
+    if (negative) number *= -1;    // Store negative number in unsigned word
+    token.value.integer = number;  // Set same union member for both sign kinds
 
     return ERR_OK;
 }
@@ -885,7 +919,7 @@ Error take_integer_decimal(const char *&line, Token &token) {
     }
 
     line = new_line;  // Skip [#0-] which was just checked
-    token.kind = Token::INTEGER;
+    token.kind = negative ? Token::INTEGER_NEGATIVE : Token::INTEGER_POSITIVE;
 
     Word number = 0;
     while (true) {
@@ -902,9 +936,8 @@ Error take_integer_decimal(const char *&line, Token &token) {
         ++line;
     }
 
-    // TODO: Maybe don't set sign here...
-    number *= negative ? -1 : 1;
-    token.value.integer = number;
+    if (negative) number *= -1;    // Store negative number in unsigned word
+    token.value.integer = number;  // Set same union member for both sign kinds
 
     return ERR_OK;
 }
@@ -1140,8 +1173,12 @@ void _print_token(const Token &token) {
         case Token::REGISTER: {
             printf("Register: R%d\n", token.value.register_);
         }; break;
-        case Token::INTEGER: {
-            printf("Integer: 0x%04hx #%d\n", token.value.integer,
+        case Token::INTEGER_POSITIVE: {
+            printf("Integer: 0x%04hx #+%hu\n", token.value.integer,
+                   token.value.integer);
+        }; break;
+        case Token::INTEGER_NEGATIVE: {
+            printf("Integer: 0x%04hx #%hd\n", token.value.integer,
                    token.value.integer);
         }; break;
         case Token::STRING: {
