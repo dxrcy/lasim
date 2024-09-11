@@ -1,6 +1,6 @@
 .ORIG x3000
 
-    lea r0, #6
+    lea r0, HelloWorld
     puts
 
     HALT

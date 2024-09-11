@@ -184,6 +184,8 @@ Error take_next_token(const char *&line, Token &token);
 Error take_integer_hex(const char *&line, Token &token);
 Error take_integer_decimal(const char *&line, Token &token);
 int8_t parse_hex_digit(const char ch);
+bool append_decimal_digit_checked(Word &number, uint8_t digit,
+                                  bool is_negative);
 bool is_char_eol(const char ch);
 bool is_char_valid_in_identifier(const char ch);
 bool is_char_valid_identifier_start(const char ch);
@@ -890,6 +892,7 @@ Error take_integer_hex(const char *&line, Token &token) {
         }
         // Hex literals cannot be more than 4 digits
         // Leading zeros have already been skipped
+        // Ignore sign
         if (i >= 4) {
             fprintf(stderr, "Immediate too large\n");
             return ERR_ASM_IMMEDIATE_TOO_LARGE;
@@ -944,8 +947,10 @@ Error take_integer_decimal(const char *&line, Token &token) {
                 return ERR_ASM_INVALID_TOKEN;
             break;
         }
-        number *= 10;
-        number += ch - '0';
+        if (!append_decimal_digit_checked(number, ch - '0', negative)) {
+            fprintf(stderr, "Immediate too large\n");
+            return ERR_ASM_IMMEDIATE_TOO_LARGE;
+        }
         ++line;
     }
 
@@ -961,6 +966,17 @@ int8_t parse_hex_digit(const char ch) {
     if (ch >= 'A' && ch <= 'Z') return ch - 'A' + 10;
     if (ch >= 'a' && ch <= 'z') return ch - 'a' + 10;
     return -1;
+}
+
+bool append_decimal_digit_checked(Word &number, uint8_t digit,
+                                  bool is_negative) {
+    if (number > WORD_MAX_UNSIGNED / 10) return false;
+    number *= 10;
+    // Largest negative integer is 1 larger than largest positive integer
+    if (number > WORD_MAX_UNSIGNED - digit + (is_negative ? 1 : 0))
+        return false;
+    number += digit;
+    return true;
 }
 
 bool is_char_eol(const char ch) {
