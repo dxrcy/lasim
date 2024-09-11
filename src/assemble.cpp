@@ -135,7 +135,6 @@ typedef struct Token {
     } value;
 } Token;
 
-// TODO: Make appropriate variables `const`
 // TODO: Document functions
 
 // Note: 'take' here means increment the line pointer and return a token
@@ -144,7 +143,7 @@ Error assemble(const char *const asm_filename, const char *const obj_filename);
 Error write_obj_file(const char *const filename, const vector<Word> &words);
 Error assemble_file_to_words(const char *const filename, vector<Word> &words);
 
-ConditionCode get_branch_condition_code(Instruction instruction);
+ConditionCode get_branch_condition_code(const Instruction instruction);
 void add_label_reference(vector<LabelReference> &references,
                          const StringSlice &name, const Word index,
                          const bool is_offset11);
@@ -162,14 +161,14 @@ bool is_char_eol(const char ch);
 bool is_char_valid_in_identifier(const char ch);
 bool is_char_valid_identifier_start(const char ch);
 
-bool string_equals_slice(const char *target, const StringSlice candidate);
+bool string_equals_slice(const char *const target, const StringSlice candidate);
 void print_string_slice(FILE *const &file, const StringSlice &slice);
 
-static const char *directive_to_string(Directive directive);
+static const char *directive_to_string(const Directive directive);
 Error directive_from_string(Token &token, const char *const directive);
-static const char *instruction_to_string(Instruction instruction);
-bool instruction_from_string_slice(Token &token,
-                                   const StringSlice &instruction);
+static const char *instruction_to_string(const Instruction instruction);
+bool try_instruction_from_string_slice(Token &token,
+                                       const StringSlice &instruction);
 
 // TODO: Replace with standard lib function
 bool string_equals(const char *const candidate, const char *const target);
@@ -184,7 +183,7 @@ Error assemble(const char *const asm_filename, const char *const obj_filename) {
 }
 
 Error write_obj_file(const char *const filename, const vector<Word> &words) {
-    FILE *obj_file = fopen(filename, "wb");
+    FILE *const obj_file = fopen(filename, "wb");
     if (obj_file == nullptr) {
         fprintf(stderr, "Could not open file %s\n", filename);
         return ERR_FILE_OPEN;
@@ -193,7 +192,7 @@ Error write_obj_file(const char *const filename, const vector<Word> &words) {
     /* printf("Size: %lu words\n", words.size()); */
 
     for (size_t i = 0; i < words.size(); ++i) {
-        Word word = swap_endian(words[i]);
+        const Word word = swap_endian(words[i]);
         fwrite(&word, sizeof(Word), 1, obj_file);
         if (ferror(obj_file)) return ERR_FILE_WRITE;
     }
@@ -203,7 +202,7 @@ Error write_obj_file(const char *const filename, const vector<Word> &words) {
 }
 
 Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
-    FILE *asm_file = fopen(filename, "r");
+    FILE *const asm_file = fopen(filename, "r");
     if (asm_file == nullptr) {
         fprintf(stderr, "Could not open file %s\n", filename);
         return ERR_FILE_OPEN;
@@ -212,9 +211,10 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
     vector<LabelDefinition> label_definitions;
     vector<LabelReference> label_references;
 
+    char line_buf[MAX_LINE];          // Buffer gets overwritten
+    const char *line_ptr = line_buf;  // Pointer address is mutated
+
     while (true) {
-        char line_buf[MAX_LINE];
-        const char *line_ptr = line_buf;  // Pointer address is mutated
         if (fgets(line_buf, MAX_LINE, asm_file) == NULL) break;
         if (ferror(asm_file)) return ERR_FILE_READ;
 
@@ -260,16 +260,17 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
                     return ERR_ASM_DUPLICATE_LABEL;
                 }
             }
+
             label_definitions.push_back({});
             LabelDefinition &def = label_definitions.back();
             memcpy(def.name, name.pointer, name.length);
             def.index = words.size();
 
-            /* _print_string_slice(name); */
+            // Continue to instruction/directive after label
             RETURN_IF_ERR(take_next_token(line_ptr, token));
         }
 
-        /* _print_token(token); */
+        _print_token(token);
 
         if (token.kind == Token::DIRECTIVE) {
             switch (token.value.directive) {
@@ -286,9 +287,6 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
                         return ERR_ASM_EXPECTED_OPERAND;
                     }
                     const char *string = token.value.string.pointer;
-                    /* printf("("); */
-                    /* _print_string_slice(token.value.literal_string); */
-                    /* printf(")\n"); */
                     for (size_t i = 0; i < token.value.string.length; ++i) {
                         char ch = string[i];
                         if (ch == '\\') {
@@ -340,11 +338,10 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
         }
 
         const Instruction instruction = token.value.instruction;
-        /* printf("Instruction: %s\n", instruction_to_string(instruction));
-         */
+        /* printf("Instruction: %s\n", instruction_to_string(instruction)); */
 
         Opcode opcode;
-        Word operands = 0;
+        Word operands = 0x0000;
 
         switch (instruction) {
             case Instruction::ADD:
@@ -588,14 +585,14 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
 
         EXPECT_EOL(line_ptr);
 
-        Word word = static_cast<Word>(opcode) << 12 | operands;
+        const Word word = static_cast<Word>(opcode) << 12 | operands;
         words.push_back(word);
     }
 stop_parsing:
 
     // Replace label references with PC offsets based on label definitions
     for (size_t i = 0; i < label_references.size(); ++i) {
-        LabelReference &ref = label_references[i];
+        const LabelReference &ref = label_references[i];
         /* printf("Resolving '%s' at 0x%04x\n", ref.name, ref.index); */
 
         SignedWord index;
@@ -606,10 +603,10 @@ stop_parsing:
         /* printf("Found definition at 0x%04lx\n", index); */
 
         /* printf("0x%04x -> 0x%04x\n", ref.index, index); */
-        SignedWord pc_offset = index - ref.index - 1;
+        const SignedWord pc_offset = index - ref.index - 1;
         /* printf("PC offset: 0x%04lx\n", pc_offset); */
 
-        Word mask = (1U << (ref.is_offset11 ? 11 : 9)) - 1;
+        const Word mask = (1U << (ref.is_offset11 ? 11 : 9)) - 1;
 
         words[ref.index] |= pc_offset & mask;
     }
@@ -619,7 +616,7 @@ stop_parsing:
 }
 
 // Must ONLY be called with a BR* instruction
-ConditionCode get_branch_condition_code(Instruction instruction) {
+ConditionCode get_branch_condition_code(const Instruction instruction) {
     switch (instruction) {
         case Instruction::BRN:
             return 0b100;
@@ -662,11 +659,12 @@ void add_label_reference(vector<LabelReference> &references,
     /* printf(">\n"); */
 }
 
+// TODO: Maybe return index, and return -1 if not found ?
 bool find_label_definition(const LabelString &target,
                            const vector<LabelDefinition> &definitions,
                            SignedWord &index) {
     for (size_t j = 0; j < definitions.size(); ++j) {
-        LabelDefinition candidate = definitions[j];
+        const LabelDefinition candidate = definitions[j];
         if (string_equals(candidate.name, target)) {
             index = candidate.index;
             return true;
@@ -726,11 +724,11 @@ Error take_next_token(const char *&line, Token &token) {
     // Case-insensitive
     if (line[0] == '.') {
         ++line;
-        token.kind = Token::DIRECTIVE;
-        const char *directive = line;
+        const char *const directive = line;
         while (is_char_valid_in_identifier(tolower(line[0]))) {
             ++line;
         }
+        // Sets kind and value
         return directive_from_string(token, directive);
     }
 
@@ -746,24 +744,22 @@ Error take_next_token(const char *&line, Token &token) {
         return ERR_ASM_INVALID_TOKEN;
     }
 
+    // TODO: First character is already checked.
+
     // Label or instruction
     // Case-insensitive
     StringSlice identifier;
     identifier.pointer = line;
     ++line;
-    for (; is_char_valid_in_identifier(tolower(line[0])); ++line) {
-        if (!is_char_valid_in_identifier(tolower(line[0]))) break;
-    }
+    while (is_char_valid_in_identifier(tolower(line[0]))) ++line;
     identifier.length = line - identifier.pointer;
 
     /* printf("IDENT: <"); */
     /* _print_string_slice(identifier); */
     /* printf(">\n"); */
 
-    if (instruction_from_string_slice(token, identifier)) {
-        // Instruction -- value already set
-        token.kind = Token::INSTRUCTION;
-    } else {
+    // Sets kind and value, if is valid instruction
+    if (!try_instruction_from_string_slice(token, identifier)) {
         // Label
         // TODO: Check if length > MAX_LABEL
         token.kind = Token::LABEL;
@@ -809,8 +805,8 @@ Error take_integer_hex(const char *&line, Token &token) {
 
     Word number = 0;
     while (true) {
-        char ch = line[0];
-        int8_t digit = parse_hex_digit(ch);  // Catches '\0'
+        const char ch = line[0];
+        const int8_t digit = parse_hex_digit(ch);  // Catches '\0'
         if (digit < 0) {
             // Integer-suffix type situation
             if (ch != '\0' && is_char_valid_in_identifier(ch))
@@ -860,7 +856,7 @@ Error take_integer_decimal(const char *&line, Token &token) {
 
     Word number = 0;
     while (true) {
-        char ch = line[0];
+        const char ch = line[0];
         if (!isdigit(line[0])) {  // Catches '\0'
             // Integer-suffix type situation
             if (ch != '\0' && is_char_valid_in_identifier(ch))
@@ -887,6 +883,7 @@ int8_t parse_hex_digit(const char ch) {
     return -1;
 }
 
+// TODO: Maybe return character, and return some sentinel value if invalid ?
 Error escape_character(char *const ch) {
     switch (*ch) {
         case 'n':
@@ -908,7 +905,8 @@ Error escape_character(char *const ch) {
 }
 
 bool is_char_eol(const char ch) {
-    return ch == '\0' || ch == '\n' || ch == ';';
+    // EOF, EOL, or comment
+    return ch == '\0' || ch == '\r' || ch == '\n' || ch == ';';
 }
 bool is_char_valid_in_identifier(const char ch) {
     // TODO: Perhaps `-` and other characters might be allowed ?
@@ -931,7 +929,8 @@ bool string_equals(const char *candidate, const char *target) {
     return true;
 }
 
-bool string_equals_slice(const char *target, const StringSlice candidate) {
+bool string_equals_slice(const char *const target,
+                         const StringSlice candidate) {
     // Equality will check \0-mismatch, so no worry of reading past string
     for (size_t i = 0; i < candidate.length; ++i) {
         if (tolower(candidate.pointer[i]) != tolower(target[i])) return false;
@@ -945,7 +944,11 @@ void print_string_slice(FILE *const &file, const StringSlice &slice) {
     }
 }
 
-static const char *directive_to_string(Directive directive) {
+// TODO: Maybe make a `directive_names` array and index with the directive value
+//     as int ? -- to get names as static strings.
+//     Same with instructions
+
+static const char *directive_to_string(const Directive directive) {
     switch (directive) {
         case Directive::ORIG:
             return "ORIG";
@@ -963,6 +966,7 @@ static const char *directive_to_string(Directive directive) {
 
 // TODO: Accept `StringSlice` instead of `char *`
 Error directive_from_string(Token &token, const char *const directive) {
+    token.kind = Token::DIRECTIVE;
     if (string_equals("orig", directive)) {
         token.value.directive = Directive::ORIG;
     } else if (string_equals("end", directive)) {
@@ -979,7 +983,7 @@ Error directive_from_string(Token &token, const char *const directive) {
     return ERR_OK;
 }
 
-static const char *instruction_to_string(Instruction instruction) {
+static const char *instruction_to_string(const Instruction instruction) {
     switch (instruction) {
         case Instruction::ADD:
             return "ADD";
@@ -1045,8 +1049,8 @@ static const char *instruction_to_string(Instruction instruction) {
     UNREACHABLE();
 }
 
-bool instruction_from_string_slice(Token &token,
-                                   const StringSlice &instruction) {
+bool try_instruction_from_string_slice(Token &token,
+                                       const StringSlice &instruction) {
     if (string_equals_slice("add", instruction)) {
         token.value.instruction = Instruction::ADD;
     } else if (string_equals_slice("and", instruction)) {
@@ -1110,6 +1114,7 @@ bool instruction_from_string_slice(Token &token,
     } else {
         return false;
     }
+    token.kind = Token::INSTRUCTION;
     return true;
 }
 
