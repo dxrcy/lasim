@@ -18,17 +18,6 @@
 #define low_11_bits_signed(_instr) \
     (to_signed_word((_instr) & BITMASK_LOW_11, 11))
 
-// TODO(feat): Handle non-ascii words being printed
-#define EXPECT_WORD_IS_ASCII(_word)                          \
-    {                                                        \
-        if ((_word) & ~BITMASK_LOW_7) {                      \
-            fprintf(stderr,                                  \
-                    "String contains non-ASCII characters, " \
-                    "which are not supported.");             \
-            UNIMPLEMENTED();                                 \
-        }                                                    \
-    }
-
 // TODO(refactor): Re-order functions
 
 void execute(const char *const obj_filename);
@@ -433,8 +422,8 @@ void execute_trap_instruction(const Word instr, bool &do_halt) {
 
         case TrapVector::OUT: {
             const Word word = registers.general_purpose[0];
-            EXPECT_WORD_IS_ASCII(word);
-            print_char(static_cast<char>(word));
+            const char ch = static_cast<char>(word & BITMASK_LOW_8);
+            print_char(ch);
         }; break;
 
         case TrapVector::PUTS: {
@@ -444,9 +433,8 @@ void execute_trap_instruction(const Word instr, bool &do_halt) {
                 if (ERROR != ERR_OK) return;
 
                 if (word == 0x0000) break;
-                EXPECT_WORD_IS_ASCII(word);
-                if (ERROR != ERR_OK) return;
-                print_char(static_cast<char>(word));
+                const char ch = static_cast<char>(word & BITMASK_LOW_8);
+                print_char(ch);
             }
         } break;
 
@@ -458,13 +446,11 @@ void execute_trap_instruction(const Word instr, bool &do_halt) {
                 const Word word = memory_checked(i);
                 if (ERROR != ERR_OK) return;
 
-                const uint8_t high = bits_high(word);
-                const uint8_t low = bits_low(word);
-                if (high == 0x0000) break;
-                EXPECT_WORD_IS_ASCII(high);
+                const char high = static_cast<char>(bits_high(word));
+                const char low = static_cast<char>(bits_low(word));
+                if (high == 0x00) break;
                 print_char(high);
-                if (low == 0x0000) break;
-                EXPECT_WORD_IS_ASCII(low);
+                if (low == 0x00) break;
                 print_char(low);
             }
         }; break;
