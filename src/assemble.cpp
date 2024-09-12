@@ -620,6 +620,10 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
         const Word word = static_cast<Word>(opcode) << 12 | operands;
         words.push_back(word);
     }
+
+    fprintf(stderr, "Missing `.END` directive\n");
+    return ERR_ASM_EXPECTED_END;
+
 stop_parsing:
 
     // Replace label references with PC offsets based on label definitions
