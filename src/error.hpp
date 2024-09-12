@@ -23,7 +23,7 @@
         if (error != ERR_OK) return error;   \
     }
 
-// TODO: Maybe change to `enum class` ?
+// This should not be `enum class`
 typedef enum Error {
     // Ok
     ERR_OK = 0x00,
@@ -55,6 +55,7 @@ typedef enum Error {
     ERR_ASM_UNDEFINED_LABEL = 0x3f,
     ERR_ASM_INVALID_ESCAPE_CHAR = 0x40,
     ERR_ASM_IMMEDIATE_TOO_LARGE = 0x41,
+    ERR_ASM_LABEL_TOO_LONG = 0x42,
     // Malformed instructions
     ERR_MALFORMED_INSTR = 0x50,     // Invalid/unsupported/reserved instruction
     ERR_MALFORMED_PADDING = 0x51,   // Expected correct padding in instruction

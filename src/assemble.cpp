@@ -12,6 +12,7 @@
 
 using std::vector;
 
+// These include '\0'
 #define MAX_LINE 512  // This can be large as it is not aggregated
 #define MAX_LABEL 32
 
@@ -292,6 +293,7 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
 
             label_definitions.push_back({});
             LabelDefinition &def = label_definitions.back();
+            // Label length has already been checked
             copy_string_slice_to_string(def.name, name);
             def.index = words.size();
 
@@ -537,7 +539,6 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
                 operands |= base_reg << 6;
                 EXPECT_COMMA(line_ptr);
 
-                // TODO: Check should be aware of sign; See `ADD` case
                 EXPECT_NEXT_TOKEN(line_ptr, token);
                 EXPECT_TOKEN_IS_INTEGER(token);
 
@@ -687,9 +688,12 @@ void add_label_reference(vector<LabelReference> &references,
     /* ref.name[i] = 'i'; */
     /* } */
     /* printf("Done!\n"); */
+
+    // Label length has already been checked
     copy_string_slice_to_string(ref.name, name);
     ref.index = index;
     ref.is_offset11 = is_offset11;
+
     /* printf("label:<"); */
     /* _print_string_slice(name); */
     /* printf(">\n"); */
@@ -838,7 +842,10 @@ Error take_next_token(const char *&line, Token &token) {
     // Sets kind and value, if is valid instruction
     if (!try_instruction_from_string_slice(token, identifier)) {
         // Label
-        // TODO: Check if length > MAX_LABEL
+        if (identifier.length >= MAX_LABEL) {
+            fprintf(stderr, "Label too long.\n");
+            return ERR_ASM_LABEL_TOO_LONG;
+        }
         token.kind = Token::LABEL;
         token.value.label = identifier;
     }
@@ -1002,6 +1009,7 @@ bool string_equals_slice(const char *const target,
     return true;
 }
 
+// Assumes `dest` can hold src.length+1 characters
 void copy_string_slice_to_string(char *dest, const StringSlice src) {
     for (size_t i = 0; i < src.length; ++i) {
         dest[i] = src.pointer[i];
@@ -1035,7 +1043,6 @@ static const char *directive_to_string(const Directive directive) {
     UNREACHABLE();
 }
 
-// TODO: Accept `StringSlice` instead of `char *`
 Error directive_from_string(Token &token, const StringSlice directive) {
     token.kind = Token::DIRECTIVE;
     if (string_equals_slice("orig", directive)) {
