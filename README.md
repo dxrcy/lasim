@@ -16,17 +16,15 @@ Dependencies:
 git clone https://github.com/dxrcy/lasim lasim
 cd lasim
 
-# Compile
+# Compile and install
 make
-
-# Assemble and execute examples/hello_world.asm
-make example
+sudo make install
 
 # Assemble and execute a specific file
-./lasim examples/checkerboard.asm
+lasim examples/checkerboard.asm
 # Or assemble and execute in separate steps
-./lasim -a examples/checkerboard.asm -o examples/checkerboard.obj
-./lasim -x examples/checkerboard.obj
+lasim -a examples/checkerboard.asm -o examples/checkerboard.obj
+lasim -x examples/checkerboard.obj
 ```
 
 # Examples
