@@ -1,8 +1,10 @@
-# LASIM : LC-3 Assembler & Simulator
+# *LASIM* : LC-3 Assembler & Simulator
 
-An attempt at implementing an LC-3 assembler and simulator in C++.
+An attempt at implementing an
+[LC-3](https://en.wikipedia.org/wiki/Little_Computer_3) assembler and simulator
+in C++.
 
-Only *nix systems are supported. Use WSL or something if you need.
+> Only *nix systems are supported. Use WSL or similar if you need.
 
 # Usage
 
@@ -50,8 +52,8 @@ This project only uses the following C++ features (to keep it simple):
 
 # TODO
 
-- Commas optional
 - Add debugger mode
-- Use static error value
 - Move all error-reporting to a function in `main.cpp`
+- Add options to read from stdin, write to stdout
+
 
