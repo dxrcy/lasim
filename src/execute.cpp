@@ -473,6 +473,7 @@ void read_obj_filename_to_memory(const char *const obj_filename) {
 
     FILE *obj_file;
     if (obj_filename[0] == '\0') {
+        // Already checked for stdin-input in assemble+execute mode
         obj_file = stdin;
     } else {
         obj_file = fopen(obj_filename, "rb");

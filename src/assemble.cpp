@@ -272,7 +272,7 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words) {
     bool is_end = false;  // Set to `true` by `.END`
 
     char line_buf[MAX_LINE];  // Buffer gets overwritten
-    while (true) {
+    while (!is_end) {
         const char *line_ptr = line_buf;  // Pointer address is mutated
 
         if (fgets(line_buf, MAX_LINE, asm_file) == NULL) break;
