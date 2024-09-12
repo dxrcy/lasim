@@ -25,6 +25,7 @@ enum class Mode {
 
 struct Options {
     Mode mode;
+    // Empty string (file[0]=='\0') refers to stdin/stdout respectively
     char in_file[FILENAME_MAX];
     char out_file[FILENAME_MAX];
 };
@@ -47,10 +48,21 @@ void parse_options(Options &options, const int argc,
     for (int i = 1; i < argc; ++i) {
         const char *arg = argv[i];
 
-        if (arg[0] != '-') {
+        if (arg[0] == '\0') {
+            fprintf(stderr, "Argument cannot be empty\n");
+            print_usage_hint();
+            exit(ERR_CLI);
+        }
+
+        // `-` as input file for stdin
+        if (arg[0] != '-' || arg[1] == '\0') {
             if (!in_file_set) {
                 in_file_set = true;
-                strcpy_max_size(options.in_file, arg, FILENAME_MAX - 1);
+                if (arg[0] == '-') {
+                    options.in_file[0] = '\0';
+                } else {
+                    strcpy_max_size(options.in_file, arg, FILENAME_MAX - 1);
+                }
             } else {
                 fprintf(stderr, "Unexpected argument: `%s`\n", arg);
                 print_usage_hint();
@@ -83,8 +95,18 @@ void parse_options(Options &options, const int argc,
                         exit(ERR_CLI);
                     }
                     const char *next_arg = argv[++i];
-                    strcpy_max_size(options.out_file, next_arg,
-                                    FILENAME_MAX - 1);
+                    // `-` as output filename for stdout
+                    if (next_arg[0] == '-') {
+                        if (next_arg[1] != '\0') {
+                            fprintf(stderr, "Expected argument for `-o`\n");
+                            print_usage_hint();
+                            exit(ERR_CLI);
+                        }
+                        options.out_file[0] = '\0';
+                    } else {
+                        strcpy_max_size(options.out_file, next_arg,
+                                        FILENAME_MAX - 1);
+                    }
                 }; break;
 
                 // Assemble
@@ -92,7 +114,10 @@ void parse_options(Options &options, const int argc,
                     if (options.mode == Mode::ASSEMBLE_EXECUTE) {
                         options.mode = Mode::ASSEMBLE_ONLY;
                     } else {
-                        fprintf(stderr, "Cannot specify `-a` with `-x`\n");
+                        fprintf(
+                            stderr,
+                            "Cannot specify `-a` with `-x`. Omit both options "
+                            "for default (assemble+execute) mode.\n");
                         print_usage_hint();
                         exit(ERR_CLI);
                     }
@@ -103,7 +128,10 @@ void parse_options(Options &options, const int argc,
                     if (options.mode == Mode::ASSEMBLE_EXECUTE) {
                         options.mode = Mode::EXECUTE_ONLY;
                     } else {
-                        fprintf(stderr, "Cannot specify `-x` with `-a`\n");
+                        fprintf(
+                            stderr,
+                            "Cannot specify `-x` with `-a`. Omit both options "
+                            "for default (assemble+execute) mode.\n");
                         print_usage_hint();
                         exit(ERR_CLI);
                     }
@@ -124,6 +152,8 @@ void parse_options(Options &options, const int argc,
         exit(ERR_CLI);
     }
 
+    // TODO(refactor): Make this `if` chain nicer
+
     if (options.mode == Mode::EXECUTE_ONLY) {
         if (out_file_set) {
             fprintf(stderr, "Cannot specify output file with `-x`\n");
@@ -134,6 +164,18 @@ void parse_options(Options &options, const int argc,
         // Default output filename based on input filename
         if (!out_file_set) {
             copy_filename_with_extension(options.out_file, options.in_file);
+        } else {
+            // An intermediate file is required
+            // Cannot use `-o -` without `-a`
+            // `-x` case is checked above
+            if (options.mode == Mode::ASSEMBLE_EXECUTE &&
+                options.out_file[0] == '\0') {
+                fprintf(stderr,
+                        "Cannot write output to stdout in default "
+                        "(assemble+execute) mode\n");
+                print_usage_hint();
+                exit(ERR_CLI);
+            }
         }
     }
 }
@@ -145,17 +187,19 @@ void print_usage_hint() {
 void print_usage() {
     fprintf(stderr,
             "LASIM: LC-3 Assembler & Simulator\n"
+            "\n"
             "USAGE:\n"
-            "    " PROGRAM_NAME "    " PROGRAM_NAME
-            " -h"
-            " [-ax] [INPUT] [-o OUTPUT]\n"
+            "    " PROGRAM_NAME
+            " -h [-ax] [INPUT] [-o OUTPUT]\n"
             "MODE:\n"
-            "    (default)      Assemble and execute\n"
+            "    (default)      Assemble + Execute\n"
             "    -a             Assembly only\n"
             "    -x             Execute only\n"
             "ARGUMENTS:\n"
-            "        [INPUT]    Input filename (.asm, or for .obj for -x)\n"
+            "        [INPUT]    Input filename (.asm, or .obj for -x)\n"
+            "                   Use '-' to read input from stdin\n"
             "    -o [OUTPUT]    Output filename\n"
+            "                   Use '-' to write output to stdout (with -a)\n"
             "OPTIONS:\n"
             "    -h             Print usage\n"
             "");

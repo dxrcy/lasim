@@ -471,11 +471,16 @@ void execute_trap_instruction(const Word instr, bool &do_halt) {
 void read_obj_filename_to_memory(const char *const obj_filename) {
     size_t words_read;
 
-    FILE *const obj_file = fopen(obj_filename, "rb");
-    if (obj_file == nullptr) {
-        fprintf(stderr, "Could not open file %s\n", obj_filename);
-        ERROR = ERR_FILE_OPEN;
-        return;
+    FILE *obj_file;
+    if (obj_filename[0] == '\0') {
+        obj_file = stdin;
+    } else {
+        obj_file = fopen(obj_filename, "rb");
+        if (obj_file == nullptr) {
+            fprintf(stderr, "Could not open file %s\n", obj_filename);
+            ERROR = ERR_FILE_OPEN;
+            return;
+        }
     }
 
     Word origin;

@@ -178,6 +178,7 @@ void parse_directive(vector<Word> &words, const char *&line_ptr,
 void parse_instruction(Word &word, const char *&line_ptr,
                        const Instruction &instruction, const size_t word_count,
                        vector<LabelReference> &label_references);
+bool is_line_eol(const char *line_ptr);
 ConditionCode get_branch_condition_code(const Instruction instruction);
 void add_label_reference(vector<LabelReference> &references,
                          const StringSlice &name, const Word index,
@@ -225,11 +226,17 @@ void assemble(const char *const asm_filename, const char *const obj_filename) {
 }
 
 void write_obj_file(const char *const filename, const vector<Word> &words) {
-    FILE *const obj_file = fopen(filename, "wb");
-    if (obj_file == nullptr) {
-        fprintf(stderr, "Could not open file %s\n", filename);
-        ERROR = ERR_FILE_OPEN;
-        return;
+    FILE *obj_file;
+    if (filename[0] == '\0') {
+        // Already checked for stdout-output in assemble+execute mode
+        obj_file = stdout;
+    } else {
+        obj_file = fopen(filename, "wb");
+        if (obj_file == nullptr) {
+            fprintf(stderr, "Could not open file %s\n", filename);
+            ERROR = ERR_FILE_OPEN;
+            return;
+        }
     }
 
     /* printf("Size: %lu words\n", words.size()); */
@@ -246,23 +253,17 @@ void write_obj_file(const char *const filename, const vector<Word> &words) {
     fclose(obj_file);
 }
 
-bool is_line_eol(const char *line_ptr) {
-    Token token;
-    take_next_token(line_ptr, token);
-    if (ERROR != ERR_OK) return false;
-    if (token.kind != Token::NONE) {
-        fprintf(stderr, "Unexpected operand after instruction\n");
-        return false;
-    }
-    return true;
-}
-
 void assemble_file_to_words(const char *const filename, vector<Word> &words) {
-    FILE *const asm_file = fopen(filename, "r");
-    if (asm_file == nullptr) {
-        fprintf(stderr, "Could not open file %s\n", filename);
-        ERROR = ERR_FILE_OPEN;
-        return;
+    FILE *asm_file;
+    if (filename[0] == '\0') {
+        asm_file = stdin;
+    } else {
+        asm_file = fopen(filename, "r");
+        if (asm_file == nullptr) {
+            fprintf(stderr, "Could not open file %s\n", filename);
+            ERROR = ERR_FILE_OPEN;
+            return;
+        }
     }
 
     vector<LabelDefinition> label_definitions;
@@ -707,6 +708,17 @@ void parse_instruction(Word &word, const char *&line_ptr,
     }
 
     word = static_cast<Word>(opcode) << 12 | operands;
+}
+
+bool is_line_eol(const char *line_ptr) {
+    Token token;
+    take_next_token(line_ptr, token);
+    if (ERROR != ERR_OK) return false;
+    if (token.kind != Token::NONE) {
+        fprintf(stderr, "Unexpected operand after instruction\n");
+        return false;
+    }
+    return true;
 }
 
 // Must ONLY be called with a BR* instruction

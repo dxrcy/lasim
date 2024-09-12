@@ -54,6 +54,6 @@ This project only uses the following C++ features (to keep it simple):
 
 - Add debugger mode
 - Move all error-reporting to a function in `main.cpp`
-- Add options to read from stdin, write to stdout
+- Assemble+execute mode: avoid an intermediate file? How?
 
 
