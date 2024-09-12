@@ -2,11 +2,15 @@ CC=g++
 CFLAGS=-Wall -Wpedantic -Wextra
 
 TARGET=lasim
+BINDIR = /usr/local/bin
 
 .PHONY: run watch test clean
 
 main:
 	$(CC) $(CFLAGS) src/main.cpp -o $(TARGET)
+
+install:
+	sudo install -m 755 $(TARGET) $(BINDIR)
 
 name=hello_world
 run: main
@@ -21,6 +25,6 @@ test: main
 	tests/assemble.sh
 
 clean:
-	rm ./lasim
+	rm -f ./lasim
 	rm -f examples/*.{obj,sym}
 
