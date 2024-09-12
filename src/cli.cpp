@@ -9,7 +9,10 @@
 
 #define PROGRAM_NAME "lasim"
 
-#define MAX_FILENAME 255  // NOT including '\0'
+// A standard `FILENAME_MAX` of 4kB is a bit large.
+// Perhaps it's for the best if this program does not allow such large filenames
+#undef FILENAME_MAX
+#define FILENAME_MAX 256  // Includes '\0'
 
 #define DEFAULT_OUT_EXTENSION "obj"
 #define DEFAULT_OUT_EXTENSION_SIZE (sizeof(DEFAULT_OUT_EXTENSION))
@@ -22,8 +25,8 @@ enum class Mode {
 
 struct Options {
     Mode mode;
-    char in_file[MAX_FILENAME + 1];
-    char out_file[MAX_FILENAME + 1];
+    char in_file[FILENAME_MAX];
+    char out_file[FILENAME_MAX];
 };
 
 void parse_options(Options &options, const int argc,
@@ -47,7 +50,7 @@ void parse_options(Options &options, const int argc,
         if (arg[0] != '-') {
             if (!in_file_set) {
                 in_file_set = true;
-                strcpy_max_size(options.in_file, arg, MAX_FILENAME);
+                strcpy_max_size(options.in_file, arg, FILENAME_MAX - 1);
             } else {
                 fprintf(stderr, "Unexpected argument: `%s`\n", arg);
                 print_usage_hint();
@@ -80,7 +83,8 @@ void parse_options(Options &options, const int argc,
                         exit(ERR_CLI);
                     }
                     const char *next_arg = argv[++i];
-                    strcpy_max_size(options.out_file, next_arg, MAX_FILENAME);
+                    strcpy_max_size(options.out_file, next_arg,
+                                    FILENAME_MAX - 1);
                 }; break;
 
                 // Assemble
@@ -171,15 +175,15 @@ void strcpy_max_size(char *const dest, const char *const src,
 void copy_filename_with_extension(char *const dest, const char *const src) {
     size_t last_period = 0;
     size_t i = 0;
-    for (; i < MAX_FILENAME; ++i) {
+    for (; i < FILENAME_MAX - 1; ++i) {
         char ch = src[i];
         if (ch == '\0') break;
         dest[i] = ch;
         if (ch == '.') last_period = i;
     }
     if (last_period == 0) last_period = i;
-    if (last_period + DEFAULT_OUT_EXTENSION_SIZE >= MAX_FILENAME) {
-        last_period = MAX_FILENAME - DEFAULT_OUT_EXTENSION_SIZE;
+    if (last_period + DEFAULT_OUT_EXTENSION_SIZE > FILENAME_MAX) {
+        last_period = FILENAME_MAX - 1 - DEFAULT_OUT_EXTENSION_SIZE;
     }
     dest[last_period] = '.';
     strcpy(dest + last_period + 1, DEFAULT_OUT_EXTENSION);
