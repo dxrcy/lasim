@@ -3,7 +3,7 @@
 #include "error.hpp"
 #include "execute.cpp"
 
-Error try_run(Options &options);
+void try_run(Options &options);
 
 int main(const int argc, const char *const *const argv) {
     Options options;
@@ -11,32 +11,35 @@ int main(const int argc, const char *const *const argv) {
 
     // TODO: Print out different message for each error
 
-    const Error error = try_run(options);
-    switch (error) {
+    try_run(options);
+    switch (ERROR) {
         case ERR_OK:
             break;
         default:
-            printf("ERROR: 0x%04x\n", error);
-            return error;
+            printf("ERROR: 0x%04x\n", ERROR);
+            return ERROR;
     }
 
     return ERR_OK;
 }
 
-Error try_run(Options &options) {
+void try_run(Options &options) {
     switch (options.mode) {
         case Mode::ASSEMBLE_ONLY:
-            RETURN_IF_ERR(assemble(options.in_file, options.out_file));
+            assemble(options.in_file, options.out_file);
+            if (ERROR != ERR_OK) return;
             break;
 
         case Mode::EXECUTE_ONLY:
-            RETURN_IF_ERR(execute(options.in_file));
+            execute(options.in_file);
+            if (ERROR != ERR_OK) return;
             break;
 
         case Mode::ASSEMBLE_EXECUTE:
-            RETURN_IF_ERR(assemble(options.in_file, options.out_file));
-            RETURN_IF_ERR(execute(options.out_file));
+            assemble(options.in_file, options.out_file);
+            if (ERROR != ERR_OK) return;
+            execute(options.out_file);
+            if (ERROR != ERR_OK) return;
             break;
     }
-    return ERR_OK;
 }

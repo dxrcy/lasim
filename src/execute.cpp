@@ -6,7 +6,7 @@
 
 #include "bitmasks.hpp"
 #include "error.hpp"
-#include "globals.cpp"
+#include "globals.hpp"
 #include "tty.cpp"
 #include "types.hpp"
 
@@ -18,7 +18,11 @@
 #define low_11_bits_signed(_instr) \
     (to_signed_word((_instr) & BITMASK_LOW_11, 11))
 
-#define EXPECT_MEMORY_CHECK(_addr) RETURN_IF_ERR(memory_check(_addr))
+#define EXPECT_MEMORY_CHECK(_addr)   \
+    {                                \
+        memory_check(_addr);         \
+        if (ERROR != ERR_OK) return; \
+    }
 
 #define EXPECT_WORD_IS_ASCII(_word)                          \
     {                                                        \
@@ -30,24 +34,27 @@
         }                                                    \
     }
 
+// TODO(refactor): Return `Word &addr`
+// TODO(refactor): Move this function
 // Check memory address is within the 'allocated' file memory
-Error memory_check(Word addr) {
+void memory_check(Word addr) {
     if (addr < memory_file_bounds.start) {
         fprintf(stderr, "Cannot access non-user memory (before user memory)\n");
-        return ERR_ADDRESS_TOO_LOW;
+        ERROR = ERR_ADDRESS_TOO_LOW;
+        return;
     }
     if (addr > MEMORY_USER_MAX) {
         fprintf(stderr, "Cannot access non-user memory (after user memory)\n");
-        return ERR_ADDRESS_TOO_HIGH;
+        ERROR = ERR_ADDRESS_TOO_HIGH;
+        return;
     }
-    return ERR_OK;
 }
 
-Error execute(const char *const obj_filename);
-Error execute_next_instrution(bool &do_halt);
-Error execute_trap_instruction(const Word instr, bool &do_halt);
+void execute(const char *const obj_filename);
+void execute_next_instrution(bool &do_halt);
+void execute_trap_instruction(const Word instr, bool &do_halt);
 
-Error read_obj_filename_to_memory(const char *const obj_filename);
+void read_obj_filename_to_memory(const char *const obj_filename);
 
 SignedWord sign_extend(SignedWord value, const size_t size);
 void set_condition_codes(const Word result);
@@ -57,8 +64,9 @@ static char *halfbyte_string(const Word word);
 
 void _print_registers(void);
 
-Error execute(const char *const obj_filename) {
-    RETURN_IF_ERR(read_obj_filename_to_memory(obj_filename));
+void execute(const char *const obj_filename) {
+    read_obj_filename_to_memory(obj_filename);
+    if (ERROR != ERR_OK) return;
 
     // GP and condition registers are already initialized to 0
     registers.program_counter = memory_file_bounds.start;
@@ -68,18 +76,17 @@ Error execute(const char *const obj_filename) {
     // Loop until `true` is returned, indicating a HALT (TRAP 0x25)
     bool do_halt = false;
     while (!do_halt) {
-        RETURN_IF_ERR(execute_next_instrution(do_halt));
+        execute_next_instrution(do_halt);
+        if (ERROR != ERR_OK) return;
     }
 
     if (!stdout_on_new_line) {
         printf("\n");
     }
-
-    return ERR_OK;
 }
 
 // `true` return value indicates that program should end
-Error execute_next_instrution(bool &do_halt) {
+void execute_next_instrution(bool &do_halt) {
     EXPECT_MEMORY_CHECK(registers.program_counter);
     const Word instr = memory[registers.program_counter];
     ++registers.program_counter;
@@ -92,13 +99,15 @@ Error execute_next_instrution(bool &do_halt) {
         fprintf(stderr,
                 "DEBUG: Attempt to execute sentinal word 0xdddd."
                 " You probably screwed up.\n");
-        return ERR_ADDRESS_TOO_LOW;
+        ERROR = ERR_ADDRESS_TOO_LOW;
+        return;
     }
     if (instr == 0xeeee) {
         fprintf(stderr,
                 "DEBUG: Attempt to execute sentinal word 0xeeee."
                 " You probably screwed up.\n");
-        return ERR_ADDRESS_TOO_HIGH;
+        ERROR = ERR_ADDRESS_TOO_HIGH;
+        return;
     }
 
     // May be invalid enum variant
@@ -124,7 +133,8 @@ Error execute_next_instrution(bool &do_halt) {
                 if (padding != 0b00) {
                     fprintf(stderr,
                             "Expected padding 0b00 for ADD instruction\n");
-                    return ERR_MALFORMED_PADDING;
+                    ERROR = ERR_MALFORMED_PADDING;
+                    return;
                 }
                 const Register src_reg_b = bits_0_2(instr);
                 value_b = static_cast<SignedWord>(
@@ -159,7 +169,8 @@ Error execute_next_instrution(bool &do_halt) {
                 if (padding != 0b00) {
                     fprintf(stderr,
                             "Expected padding 0b00 for AND instruction\n");
-                    return ERR_MALFORMED_PADDING;
+                    ERROR = ERR_MALFORMED_PADDING;
+                    return;
                 }
                 const Register src_reg_b = bits_0_2(instr);
                 value_b = registers.general_purpose[src_reg_b];
@@ -190,7 +201,8 @@ Error execute_next_instrution(bool &do_halt) {
             if (padding != BITMASK_LOW_5) {
                 fprintf(stderr,
                         "Expected padding 0x11111 for NOT instruction\n");
-                return ERR_MALFORMED_PADDING;
+                ERROR = ERR_MALFORMED_PADDING;
+                return;
             }
 
             /* printf(">NOT R%d = NOT R%d\n", dest_reg, src_reg1); */
@@ -238,7 +250,8 @@ Error execute_next_instrution(bool &do_halt) {
             if (padding_1 != 0b000) {
                 fprintf(stderr,
                         "Expected padding 0b000 for JMP/RET instruction\n");
-                return ERR_MALFORMED_PADDING;
+                ERROR = ERR_MALFORMED_PADDING;
+                return;
             }
             // 6 bits padding
             // After base register
@@ -246,7 +259,8 @@ Error execute_next_instrution(bool &do_halt) {
             if (padding_2 != 0b000000) {
                 fprintf(stderr,
                         "Expected padding 0b000000 for JMP/RET instruction\n");
-                return ERR_MALFORMED_PADDING;
+                ERROR = ERR_MALFORMED_PADDING;
+                return;
             }
             const Register base_reg = bits_6_8(instr);
             const Word base = registers.general_purpose[base_reg];
@@ -271,7 +285,8 @@ Error execute_next_instrution(bool &do_halt) {
                 if (padding != 0b00) {
                     fprintf(stderr,
                             "Expected padding 0b00 for JSRR instruction\n");
-                    return ERR_MALFORMED_PADDING;
+                    ERROR = ERR_MALFORMED_PADDING;
+                    return;
                 }
                 const Register base_reg = bits_6_8(instr);
                 const Word base = registers.general_purpose[base_reg];
@@ -370,7 +385,8 @@ Error execute_next_instrution(bool &do_halt) {
 
         // TRAP
         case Opcode::TRAP: {
-            RETURN_IF_ERR(execute_trap_instruction(instr, do_halt));
+            execute_trap_instruction(instr, do_halt);
+            if (ERROR != ERR_OK) return;
         }; break;
 
         // RTI (supervisor-only)
@@ -378,7 +394,8 @@ Error execute_next_instrution(bool &do_halt) {
             fprintf(stderr,
                     "Invalid use of RTI opcode: 0b%s in non-supervisor mode\n",
                     halfbyte_string(static_cast<Word>(opcode)));
-            return ERR_UNAUTHORIZED_INSTR;
+            ERROR = ERR_UNAUTHORIZED_INSTR;
+            return;
             break;
 
         // Invalid enum variant
@@ -386,18 +403,18 @@ Error execute_next_instrution(bool &do_halt) {
             fprintf(stderr, "Invalid opcode: 0b%s (0x%04x)\n",
                     halfbyte_string(static_cast<Word>(opcode)),
                     static_cast<Word>(opcode));
-            return ERR_MALFORMED_INSTR;
+            ERROR = ERR_MALFORMED_INSTR;
+            return;
     }
-
-    return ERR_OK;
 }
 
-Error execute_trap_instruction(const Word instr, bool &do_halt) {
+void execute_trap_instruction(const Word instr, bool &do_halt) {
     // 4 bits padding
     const uint8_t padding = bits_8_12(instr);
     if (padding != 0b0000) {
         fprintf(stderr, "Expected padding 0x00 for TRAP instruction\n");
-        return ERR_MALFORMED_PADDING;
+        ERROR = ERR_MALFORMED_PADDING;
+        return;
     }
 
     // May be invalid enum variant
@@ -465,25 +482,25 @@ Error execute_trap_instruction(const Word instr, bool &do_halt) {
 
         case TrapVector::HALT:
             do_halt = true;
-            return ERR_OK;
+            return;
             break;
 
         default:
             fprintf(stderr, "Invalid trap vector 0x%02x\n",
                     static_cast<Word>(trap_vector));
-            return ERR_MALFORMED_TRAP;
+            ERROR = ERR_MALFORMED_TRAP;
+            return;
     }
-
-    return ERR_OK;
 }
 
-Error read_obj_filename_to_memory(const char *const obj_filename) {
+void read_obj_filename_to_memory(const char *const obj_filename) {
     size_t words_read;
 
     FILE *const obj_file = fopen(obj_filename, "rb");
     if (obj_file == nullptr) {
         fprintf(stderr, "Could not open file %s\n", obj_filename);
-        return ERR_FILE_OPEN;
+        ERROR = ERR_FILE_OPEN;
+        return;
     }
 
     Word origin;
@@ -492,11 +509,13 @@ Error read_obj_filename_to_memory(const char *const obj_filename) {
 
     if (ferror(obj_file)) {
         fprintf(stderr, "Could not read file %s\n", obj_filename);
-        return ERR_FILE_READ;
+        ERROR = ERR_FILE_READ;
+        return;
     }
     if (words_read < 1) {
         fprintf(stderr, "File is too short %s\n", obj_filename);
-        return ERR_FILE_TOO_SHORT;
+        ERROR = ERR_FILE_TOO_SHORT;
+        return;
     }
 
     Word start = swap_endian(origin);
@@ -509,15 +528,18 @@ Error read_obj_filename_to_memory(const char *const obj_filename) {
 
     if (ferror(obj_file)) {
         fprintf(stderr, "Could not read file %s\n", obj_filename);
-        return ERR_FILE_READ;
+        ERROR = ERR_FILE_READ;
+        return;
     }
     if (words_read < 1) {
         fprintf(stderr, "File is too short %s\n", obj_filename);
-        return ERR_FILE_TOO_SHORT;
+        ERROR = ERR_FILE_TOO_SHORT;
+        return;
     }
     if (!feof(obj_file)) {
         fprintf(stderr, "File is too long %s\n", obj_filename);
-        return ERR_FILE_TOO_LONG;
+        ERROR = ERR_FILE_TOO_LONG;
+        return;
     }
 
     Word end = start + words_read;
@@ -539,8 +561,6 @@ Error read_obj_filename_to_memory(const char *const obj_filename) {
     memory_file_bounds.end = end;
 
     fclose(obj_file);
-
-    return ERR_OK;
 }
 
 SignedWord sign_extend(SignedWord value, const size_t size) {

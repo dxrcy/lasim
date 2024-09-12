@@ -1,9 +1,12 @@
-#ifndef GLOBALS_CPP
-#define GLOBALS_CPP
+#ifndef GLOBALS_HPP
+#define GLOBALS_HPP
 
 #include <cstdlib>  // exit
 
+#include "error.hpp"
 #include "types.hpp"
+
+static Error ERROR;  // Global error value
 
 static Word memory[MEMORY_SIZE];
 

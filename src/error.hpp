@@ -12,16 +12,6 @@
         exit(ERR_UNREACHABLE);                                 \
     }
 
-#define IGNORE_ERR(_result) (_result)
-
-// Note that other files contain wrappers around this macro
-#define RETURN_IF_ERR(_result)               \
-    {                                        \
-        /* `input` may be a function call */ \
-        const Error error = (_result);       \
-        if (error != ERR_OK) return error;   \
-    }
-
 // This should not be `enum class`
 typedef enum Error {
     // Ok
