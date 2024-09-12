@@ -18,6 +18,8 @@ using std::vector;
 #define MAX_LABEL 32
 
 // Used by `assemble_file_to_words`
+
+// Get next token, or return on error
 #define EXPECT_NEXT_TOKEN(_line_ptr, _token)       \
     {                                              \
         take_next_token((_line_ptr), (_token));    \
@@ -28,6 +30,22 @@ using std::vector;
             return;                                \
         }                                          \
     }
+// Same as `EXPECT_NEXT_TOKEN`, but skips first `Token::COMMA` (optionally)
+#define EXPECT_NEXT_TOKEN_AFTER_COMMA(_line_ptr, _token) \
+    {                                                    \
+        take_next_token((_line_ptr), (_token));          \
+        if (ERROR != ERR_OK) return;                     \
+        if ((_token).kind == Token::COMMA) {             \
+            take_next_token((_line_ptr), (_token));      \
+            if (ERROR != ERR_OK) return;                 \
+        }                                                \
+        if ((_token).kind == Token::NONE) {              \
+            fprintf(stderr, "Expected operand\n");       \
+            ERROR = ERR_ASM_EXPECTED_OPERAND;            \
+            return;                                      \
+        }                                                \
+    }
+// Set error and return if token kind does not match
 #define EXPECT_TOKEN_IS_KIND(_token, _kind)       \
     {                                             \
         if ((_token).kind != Token::_kind) {      \
@@ -36,6 +54,7 @@ using std::vector;
             return;                               \
         }                                         \
     }
+// Set error and return if token kind is not positive or negative integer
 #define EXPECT_TOKEN_IS_INTEGER(_token)                 \
     {                                                   \
         if ((_token).kind != Token::INTEGER_POSITIVE && \
@@ -45,18 +64,7 @@ using std::vector;
             return;                                     \
         }                                               \
     }
-#define EXPECT_COMMA(_line_ptr)                                    \
-    {                                                              \
-        Token token;                                               \
-        take_next_token((_line_ptr), token);                       \
-        if (ERROR != ERR_OK) return;                               \
-        if (token.kind != Token::COMMA) {                          \
-            fprintf(stderr, "Expected comma following operand\n"); \
-            ERROR = ERR_ASM_EXPECTED_COMMA;                        \
-            return;                                                \
-        }                                                          \
-    }
-/* #define EXPECT_EOL(_line_ptr)                                          \ */
+// Set error and return if an integer will not fit in a given amount of bits
 #define EXPECT_INTEGER_FITS_SIZE(_value, _is_negative, _size_bits)            \
     {                                                                         \
         if (!does_integer_fit_size((_value), (_is_negative), (_size_bits))) { \
@@ -157,6 +165,7 @@ typedef struct Token {
 } Token;
 
 // TODO(chore): Document functions
+// TODO(chore): Move all function doc comments to prototypes ?
 
 void assemble(const char *const asm_filename, const char *const obj_filename);
 // Used by `assemble`
@@ -481,15 +490,13 @@ void parse_instruction(Word &word, const char *&line_ptr,
             EXPECT_TOKEN_IS_KIND(token, REGISTER);
             const Register dest_reg = token.value.register_;
             operands |= dest_reg << 9;
-            EXPECT_COMMA(line_ptr);
 
-            EXPECT_NEXT_TOKEN(line_ptr, token);
+            EXPECT_NEXT_TOKEN_AFTER_COMMA(line_ptr, token);
             EXPECT_TOKEN_IS_KIND(token, REGISTER);
             const Register src_reg_a = token.value.register_;
             operands |= src_reg_a << 6;
-            EXPECT_COMMA(line_ptr);
 
-            EXPECT_NEXT_TOKEN(line_ptr, token);
+            EXPECT_NEXT_TOKEN_AFTER_COMMA(line_ptr, token);
             if (token.kind == Token::REGISTER) {
                 const Register src_reg_b = token.value.register_;
                 operands |= src_reg_b;
@@ -513,9 +520,8 @@ void parse_instruction(Word &word, const char *&line_ptr,
             EXPECT_TOKEN_IS_KIND(token, REGISTER);
             const Register dest_reg = token.value.register_;
             operands |= dest_reg << 9;
-            EXPECT_COMMA(line_ptr);
 
-            EXPECT_NEXT_TOKEN(line_ptr, token);
+            EXPECT_NEXT_TOKEN_AFTER_COMMA(line_ptr, token);
             EXPECT_TOKEN_IS_KIND(token, REGISTER);
             const Register src_reg = token.value.register_;
             operands |= src_reg << 6;
@@ -602,9 +608,8 @@ void parse_instruction(Word &word, const char *&line_ptr,
             EXPECT_TOKEN_IS_KIND(token, REGISTER);
             const Register ds_reg = token.value.register_;
             operands |= ds_reg << 9;
-            EXPECT_COMMA(line_ptr);
 
-            EXPECT_NEXT_TOKEN(line_ptr, token);
+            EXPECT_NEXT_TOKEN_AFTER_COMMA(line_ptr, token);
             EXPECT_TOKEN_IS_KIND(token, LABEL);
             add_label_reference(label_references, token.value.label, word_count,
                                 false);
@@ -619,15 +624,13 @@ void parse_instruction(Word &word, const char *&line_ptr,
             EXPECT_TOKEN_IS_KIND(token, REGISTER);
             const Register ds_reg = token.value.register_;
             operands |= ds_reg << 9;
-            EXPECT_COMMA(line_ptr);
 
-            EXPECT_NEXT_TOKEN(line_ptr, token);
+            EXPECT_NEXT_TOKEN_AFTER_COMMA(line_ptr, token);
             EXPECT_TOKEN_IS_KIND(token, REGISTER);
             const Register base_reg = token.value.register_;
             operands |= base_reg << 6;
-            EXPECT_COMMA(line_ptr);
 
-            EXPECT_NEXT_TOKEN(line_ptr, token);
+            EXPECT_NEXT_TOKEN_AFTER_COMMA(line_ptr, token);
             EXPECT_TOKEN_IS_INTEGER(token);
 
             const SignedWord immediate = token.value.integer;
@@ -644,9 +647,8 @@ void parse_instruction(Word &word, const char *&line_ptr,
             EXPECT_TOKEN_IS_KIND(token, REGISTER);
             const Register dest_reg = token.value.register_;
             operands |= dest_reg << 9;
-            EXPECT_COMMA(line_ptr);
 
-            EXPECT_NEXT_TOKEN(line_ptr, token);
+            EXPECT_NEXT_TOKEN_AFTER_COMMA(line_ptr, token);
             EXPECT_TOKEN_IS_KIND(token, LABEL);
             add_label_reference(label_references, token.value.label, word_count,
                                 false);
