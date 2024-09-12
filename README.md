@@ -1,17 +1,17 @@
-# *LASIM* : LC-3 Assembler & Simulator
+# **LASIM** : LC-3 Assembler & Simulator
 
-An attempt at implementing an
-[LC-3](https://en.wikipedia.org/wiki/Little_Computer_3) assembler and simulator
-in C++.
-
-> Only *nix systems are supported. Use WSL or similar if you need.
+A simple [LC-3](https://en.wikipedia.org/wiki/Little_Computer_3) assembler and
+simulator in C++.
 
 # Usage
+
+> Only *nix systems are supported currently.
 
 Dependencies:
 
 - `g++` to compile
-- [`laser`](https://github.com/PaperFanz/laser) for test script
+- [`laser`](https://github.com/PaperFanz/laser) for test script (to check
+    against)
 
 ```sh
 # Download
@@ -32,9 +32,9 @@ lasim -x examples/checkerboard.obj
 # Examples
 
 - `checkerboard`: Prints an ASCII checkerboard
-- `count_bits`: Counts the '1' bits in an inputted number 0-9
-- `hello_world`: Take a wild guess
-- `store_number`: Reads a 5-digit number and stores it in memory
+- `count_bits`: Counts the '1' bits of an inputted number from 0-9
+- `hello_world`: Take a wild guess...
+- `store_number`: Reads a 5-digit number and stores it in memory (no output)
 - `string_array`: Prints an array of static-memory strings
 
 Some of the examples are taken from
@@ -46,14 +46,12 @@ This project only uses the following C++ features (to keep it simple):
 
 - References
 - `nullptr`
-- `static_cast` / `reinterpret_cast`
+- `static_cast`/`reinterpret_cast`
 - `std::vector`
 - `enum class`
 
-# TODO
+# Features to Implement
 
-- Add debugger mode
-- Move all error-reporting to a function in `main.cpp`
-- Assemble+execute mode: avoid an intermediate file? How?
+- [ ] Add debugger mode
 
 
