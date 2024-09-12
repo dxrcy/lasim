@@ -12,7 +12,6 @@
         exit(ERR_UNREACHABLE);                                 \
     }
 
-// TODO: Maybe this can print some log in debug mode ?
 #define IGNORE_ERR(_result) (_result)
 
 // Note that other files contain wrappers around this macro

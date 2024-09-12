@@ -76,15 +76,14 @@ typedef struct StringSlice {
 // Must be a copied string, as `line` is overwritten
 typedef char LabelString[MAX_LABEL];
 
-// TODO: Why is `index` signed ?
 typedef struct LabelDefinition {
     LabelString name;
-    SignedWord index;
+    Word index;
 } LabelDefinition;
 
 typedef struct LabelReference {
     LabelString name;
-    SignedWord index;
+    Word index;
     bool is_offset11;  // Used for `JSR` only
 } LabelReference;
 
@@ -157,7 +156,7 @@ typedef struct Token {
     } value;
 } Token;
 
-// TODO: Document functions
+// TODO(chore): Document functions
 
 Error assemble(const char *const asm_filename, const char *const obj_filename);
 // Used by `assemble`
@@ -272,8 +271,8 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
             continue;
         }
 
-        // TODO: Parsing label before directive *might* have bad effects,
-        //     although I cannot think of any off the top of my head.
+        // TODO(correctness): Parsing label before directive *might* have bad
+        //     effects, although I cannot think of any off the top of my head.
         if (token.kind == Token::LABEL) {
             const StringSlice &name = token.value.label;
             for (size_t i = 0; i < label_definitions.size(); ++i) {
@@ -303,7 +302,7 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
 
         /* _print_token(token); */
 
-        // TODO: Move directive parsing to another function
+        // TODO(refactor): Move directive parsing to another function
 
         if (token.kind == Token::DIRECTIVE) {
             switch (token.value.directive) {
@@ -341,7 +340,6 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
                     // Don't check integer size -- it should have been checked
                     //     to fit in a word when being
                     // Sign is ignored
-                    // TODO: Confirm this is correct
                     words.push_back(token.value.integer);
                 }; break;
 
@@ -349,7 +347,7 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
                     EXPECT_NEXT_TOKEN(line_ptr, token);
                     EXPECT_TOKEN_IS_KIND(token, INTEGER_POSITIVE);
                     // Don't check integer size
-                    // TODO: Replace with better vector function
+                    // Don't reserve space -- it's not worth it
                     for (Word i = 0; i < token.value.integer; ++i) {
                         words.push_back(0x0000);
                     }
@@ -378,7 +376,7 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
         const Instruction instruction = token.value.instruction;
         /* printf("Instruction: %s\n", instruction_to_string(instruction)); */
 
-        // TODO: Move instruction parsing to another function
+        // TODO(refactor): Move instruction parsing to another function
 
         Opcode opcode;
         Word operands = 0x0000;
@@ -699,7 +697,6 @@ void add_label_reference(vector<LabelReference> &references,
     /* printf(">\n"); */
 }
 
-// TODO: Maybe return index, and return -1 if not found ?
 bool find_label_definition(const LabelString &target,
                            const vector<LabelDefinition> &definitions,
                            SignedWord &index) {
@@ -714,7 +711,6 @@ bool find_label_definition(const LabelString &target,
     return false;
 }
 
-// TODO: Maybe return character, and return some sentinel value if invalid ?
 Error escape_character(char *const ch) {
     switch (*ch) {
         case 'n':
@@ -737,7 +733,7 @@ Error escape_character(char *const ch) {
 
 bool does_integer_fit_size(const Word value, const bool is_negative,
                            const uint8_t size_bits) {
-    // TODO: There has to be a better way to do this...
+    // TODO(rewrite): There has to be a better way to do this...
     if (is_negative) {
         // Flip sign and check against largest allowed negative value
         // Eg. size = 5
@@ -824,8 +820,6 @@ Error take_next_token(const char *&line, Token &token) {
     if (!is_char_valid_identifier_start(line[0])) {
         return ERR_ASM_INVALID_TOKEN;
     }
-
-    // TODO: First character is already checked.
 
     // Label or instruction
     // Case-insensitive
@@ -992,11 +986,9 @@ bool is_char_eol(const char ch) {
     return ch == '\0' || ch == '\r' || ch == '\n' || ch == ';';
 }
 bool is_char_valid_in_identifier(const char ch) {
-    // TODO: Perhaps `-` and other characters might be allowed ?
     return ch == '_' || isalpha(ch) || isdigit(ch);
 }
 bool is_char_valid_identifier_start(const char ch) {
-    // TODO: Perhaps `-` and other characters might be allowed ?
     return ch == '_' || isalpha(ch);
 }
 
@@ -1023,8 +1015,8 @@ void print_string_slice(FILE *const &file, const StringSlice &slice) {
     }
 }
 
-// TODO: Maybe make a `directive_names` array and index with the directive value
-//     as int ? -- to get names as static strings.
+// TODO(refactor): Maybe make a `directive_names` array and index with the
+//     directive value as int ? -- to get names as static strings.
 //     Same with instructions
 
 static const char *directive_to_string(const Directive directive) {

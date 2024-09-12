@@ -58,8 +58,6 @@ static char *halfbyte_string(const Word word);
 void _print_registers(void);
 
 Error execute(const char *const obj_filename) {
-    // TODO: Allocate `memory` here
-
     RETURN_IF_ERR(read_obj_filename_to_memory(obj_filename));
 
     // GP and condition registers are already initialized to 0
@@ -89,7 +87,7 @@ Error execute_next_instrution(bool &do_halt) {
     // printf("INSTR at 0x%04x: 0x%04x  %016b\n", registers.program_counter - 1,
     //        instr, instr);
 
-    // TODO: Maybe only run in debug mode ?
+    // TODO(debugger): Executing sentinel words
     if (instr == 0xdddd) {
         fprintf(stderr,
                 "DEBUG: Attempt to execute sentinal word 0xdddd."
@@ -107,7 +105,8 @@ Error execute_next_instrution(bool &do_halt) {
     // Handled in default switch branch
     const Opcode opcode = static_cast<Opcode>(bits_12_15(instr));
 
-    // TODO: Check all operands for whether they need to be sign-extended !!!!
+    // TODO(correctness): Check all operands for whether they need to be
+    //     sign-extended !!!!
 
     switch (opcode) {
         // ADD*
@@ -211,8 +210,6 @@ Error execute_next_instrution(bool &do_halt) {
                 break;
             }
 
-            // TODO: This might never branch if given CC=0b000 ????
-
             /* printf("0x%04x\t0b%016b\n", instr, instr); */
             const ConditionCode condition = bits_9_11(instr);
             const SignedWord offset = low_9_bits_signed(instr);
@@ -225,7 +222,10 @@ Error execute_next_instrution(bool &do_halt) {
             /* _dbg_print_registers(); */
 
             // If any bits of the condition codes match
-            if ((condition & registers.condition) != 0b000) {
+            // Instruction `BR` is equivalent to `BRnzp`, but 0b000 is checked
+            //     here for completeness (as if 0b111)
+            if (condition == 0b000 ||
+                (condition & registers.condition) != 0b000) {
                 registers.program_counter += offset;
                 /* printf("branched to 0x%04x\n", registers.program_counter); */
             }
@@ -527,8 +527,8 @@ Error read_obj_filename_to_memory(const char *const obj_filename) {
     memset(memory + end, 0xee,
            (MEMORY_SIZE - end) * WORD_SIZE);  // After file
 
-    // TODO: Make this better !!
-    // ^ Read file word-by-word, and swap endianess in the same loop
+    // TODO(refactor): There may be a better way to write this loop
+    //     Not very urgent
     for (size_t i = start; i < end; ++i) {
         memory[i] = swap_endian(memory[i]);
     }
