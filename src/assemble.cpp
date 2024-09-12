@@ -164,6 +164,11 @@ Error write_obj_file(const char *const filename, const vector<Word> &words);
 Error assemble_file_to_words(const char *const filename, vector<Word> &words);
 
 // Used by `assemble_file_to_words`
+Error parse_directive(vector<Word> &words, const char *&line_ptr,
+                      const Directive directive, bool &is_end);
+Error parse_instruction(Word &word, const char *&line_ptr,
+                        const Instruction &instruction, const size_t word_count,
+                        vector<LabelReference> &label_references);
 ConditionCode get_branch_condition_code(const Instruction instruction);
 void add_label_reference(vector<LabelReference> &references,
                          const StringSlice &name, const Word index,
@@ -238,6 +243,8 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
     vector<LabelDefinition> label_definitions;
     vector<LabelReference> label_references;
 
+    bool is_end = false;  // Set to `true` by `.END`
+
     char line_buf[MAX_LINE];  // Buffer gets overwritten
     while (true) {
         const char *line_ptr = line_buf;  // Pointer address is mutated
@@ -302,64 +309,8 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
 
         /* _print_token(token); */
 
-        // TODO(refactor): Move directive parsing to another function
-
         if (token.kind == Token::DIRECTIVE) {
-            switch (token.value.directive) {
-                case Directive::END:
-                    goto stop_parsing;
-
-                case Directive::STRINGZ: {
-                    /* printf("%s\n", line_ptr); */
-                    RETURN_IF_ERR(take_next_token(line_ptr, token));
-                    /* _print_token(token); */
-                    if (token.kind != Token::STRING) {
-                        fprintf(stderr,
-                                "String literal required after `.STRINGZ`\n");
-                        return ERR_ASM_EXPECTED_OPERAND;
-                    }
-                    const char *string = token.value.string.pointer;
-                    for (size_t i = 0; i < token.value.string.length; ++i) {
-                        char ch = string[i];
-                        if (ch == '\\') {
-                            ++i;
-                            // "... \" is treated as unterminated
-                            if (i > token.value.string.length)
-                                return ERR_ASM_UNTERMINATED_STRING;
-                            ch = string[i];
-                            RETURN_IF_ERR(escape_character(&ch));
-                        }
-                        words.push_back(static_cast<Word>(ch));
-                    }
-                    words.push_back(0x0000);  // Null-termination
-                }; break;
-
-                case Directive::FILL: {
-                    EXPECT_NEXT_TOKEN(line_ptr, token);
-                    EXPECT_TOKEN_IS_INTEGER(token);
-                    // Don't check integer size -- it should have been checked
-                    //     to fit in a word when being
-                    // Sign is ignored
-                    words.push_back(token.value.integer);
-                }; break;
-
-                case Directive::BLKW: {
-                    EXPECT_NEXT_TOKEN(line_ptr, token);
-                    EXPECT_TOKEN_IS_KIND(token, INTEGER_POSITIVE);
-                    // Don't check integer size
-                    // Don't reserve space -- it's not worth it
-                    for (Word i = 0; i < token.value.integer; ++i) {
-                        words.push_back(0x0000);
-                    }
-                }; break;
-
-                default:
-                    // Includes `ORIG`
-                    fprintf(stderr, "Unexpected directive `%s`\n",
-                            directive_to_string(token.value.directive));
-                    return ERR_ASM_UNEXPECTED_DIRECTIVE;
-            }
-
+            parse_directive(words, line_ptr, token.value.directive, is_end);
             EXPECT_EOL(line_ptr);
             continue;
         }
@@ -374,256 +325,17 @@ Error assemble_file_to_words(const char *const filename, vector<Word> &words) {
         }
 
         const Instruction instruction = token.value.instruction;
-        /* printf("Instruction: %s\n", instruction_to_string(instruction)); */
-
-        // TODO(refactor): Move instruction parsing to another function
-
-        Opcode opcode;
-        Word operands = 0x0000;
-
-        switch (instruction) {
-            case Instruction::ADD:
-            case Instruction::AND: {
-                opcode =
-                    instruction == Instruction::ADD ? Opcode::ADD : Opcode::AND;
-
-                EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_KIND(token, REGISTER);
-                const Register dest_reg = token.value.register_;
-                operands |= dest_reg << 9;
-                EXPECT_COMMA(line_ptr);
-
-                EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_KIND(token, REGISTER);
-                const Register src_reg_a = token.value.register_;
-                operands |= src_reg_a << 6;
-                EXPECT_COMMA(line_ptr);
-
-                EXPECT_NEXT_TOKEN(line_ptr, token);
-                if (token.kind == Token::REGISTER) {
-                    const Register src_reg_b = token.value.register_;
-                    operands |= src_reg_b;
-                } else {
-                    EXPECT_TOKEN_IS_INTEGER(token);
-                    const Word immediate = token.value.integer;
-                    /* _print_token(token); */
-                    /* printf(" = 0x%04x\n", immediate); */
-                    // 5 bits
-                    EXPECT_INTEGER_FITS_SIZE(
-                        immediate, token.kind == Token::INTEGER_NEGATIVE, 5);
-                    operands |= 1 << 5;  // Flag
-                    operands |= immediate & BITMASK_LOW_5;
-                }
-            }; break;
-
-            case Instruction::NOT: {
-                opcode = Opcode::NOT;
-
-                EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_KIND(token, REGISTER);
-                const Register dest_reg = token.value.register_;
-                operands |= dest_reg << 9;
-                EXPECT_COMMA(line_ptr);
-
-                EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_KIND(token, REGISTER);
-                const Register src_reg = token.value.register_;
-                operands |= src_reg << 6;
-
-                operands |= BITMASK_LOW_6;  // Padding
-            }; break;
-
-            case Instruction::BR:
-            case Instruction::BRN:
-            case Instruction::BRZ:
-            case Instruction::BRP:
-            case Instruction::BRNZ:
-            case Instruction::BRZP:
-            case Instruction::BRNP:
-            case Instruction::BRNZP: {
-                opcode = Opcode::BR;
-                const ConditionCode condition =
-                    get_branch_condition_code(instruction);
-                operands |= condition << 9;
-
-                EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_KIND(token, LABEL);
-                add_label_reference(label_references, token.value.label,
-                                    words.size(), false);
-            }; break;
-
-            case Instruction::JMP:
-            case Instruction::RET: {
-                opcode = Opcode::JMP_RET;
-
-                Register addr_reg = 7;  // Default R7 for `RET`
-                if (instruction == Instruction::JMP) {
-                    EXPECT_NEXT_TOKEN(line_ptr, token);
-                    EXPECT_TOKEN_IS_KIND(token, REGISTER);
-                    addr_reg = token.value.register_;
-                }
-                operands |= addr_reg << 6;
-            }; break;
-
-            case Instruction::JSR:
-            case Instruction::JSRR: {
-                opcode = Opcode::JSR_JSRR;
-
-                if (instruction == Instruction::JSR) {
-                    operands |= 1 << 11;  // Flag
-
-                    // PCOffset11
-                    EXPECT_NEXT_TOKEN(line_ptr, token);
-                    EXPECT_TOKEN_IS_KIND(token, LABEL);
-                    /* printf(">>"); */
-                    /* _print_token(token); */
-                    add_label_reference(label_references, token.value.label,
-                                        words.size(), true);
-                } else {
-                    EXPECT_NEXT_TOKEN(line_ptr, token);
-                    EXPECT_TOKEN_IS_KIND(token, REGISTER);
-                    const Register addr_reg = token.value.register_;
-                    operands |= addr_reg << 6;
-                }
-            }; break;
-
-            case Instruction::LD:
-            case Instruction::LDI:
-            case Instruction::ST:
-            case Instruction::STI: {
-                switch (instruction) {
-                    case Instruction::LD:
-                        opcode = Opcode::LD;
-                        break;
-                    case Instruction::LDI:
-                        opcode = Opcode::LDI;
-                        break;
-                    case Instruction::ST:
-                        opcode = Opcode::ST;
-                        break;
-                    case Instruction::STI:
-                        opcode = Opcode::STI;
-                        break;
-                    default:
-                        UNREACHABLE();
-                }
-
-                EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_KIND(token, REGISTER);
-                const Register ds_reg = token.value.register_;
-                operands |= ds_reg << 9;
-                EXPECT_COMMA(line_ptr);
-
-                EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_KIND(token, LABEL);
-                add_label_reference(label_references, token.value.label,
-                                    words.size(), false);
-            }; break;
-
-            case Instruction::LDR:
-            case Instruction::STR: {
-                opcode =
-                    instruction == Instruction::LDR ? Opcode::LDR : Opcode::STR;
-
-                EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_KIND(token, REGISTER);
-                const Register ds_reg = token.value.register_;
-                operands |= ds_reg << 9;
-                EXPECT_COMMA(line_ptr);
-
-                EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_KIND(token, REGISTER);
-                const Register base_reg = token.value.register_;
-                operands |= base_reg << 6;
-                EXPECT_COMMA(line_ptr);
-
-                EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_INTEGER(token);
-
-                const SignedWord immediate = token.value.integer;
-                // 6 bits
-                EXPECT_INTEGER_FITS_SIZE(
-                    immediate, token.kind == Token::INTEGER_NEGATIVE, 6);
-                operands |= immediate & BITMASK_LOW_6;
-            }; break;
-
-            case Instruction::LEA: {
-                opcode = Opcode::LEA;
-
-                EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_KIND(token, REGISTER);
-                const Register dest_reg = token.value.register_;
-                operands |= dest_reg << 9;
-                EXPECT_COMMA(line_ptr);
-
-                EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_KIND(token, LABEL);
-                add_label_reference(label_references, token.value.label,
-                                    words.size(), false);
-            }; break;
-
-            case Instruction::TRAP:
-            case Instruction::GETC:
-            case Instruction::OUT:
-            case Instruction::PUTS:
-            case Instruction::IN:
-            case Instruction::PUTSP:
-            case Instruction::HALT: {
-                opcode = Opcode::TRAP;
-
-                TrapVector trap_vector;
-                switch (instruction) {
-                    case Instruction::GETC:
-                        trap_vector = TrapVector::GETC;
-                        break;
-                    case Instruction::OUT:
-                        trap_vector = TrapVector::OUT;
-                        break;
-                    case Instruction::PUTS:
-                        trap_vector = TrapVector::PUTS;
-                        break;
-                    case Instruction::IN:
-                        trap_vector = TrapVector::IN;
-                        break;
-                    case Instruction::PUTSP:
-                        trap_vector = TrapVector::PUTSP;
-                        break;
-                    case Instruction::HALT:
-                        trap_vector = TrapVector::HALT;
-                        break;
-
-                    // Trap instruction with explicit code
-                    case Instruction::TRAP: {
-                        EXPECT_NEXT_TOKEN(line_ptr, token);
-                        // Don't allow explicit sign
-                        EXPECT_TOKEN_IS_KIND(token, INTEGER_POSITIVE);
-                        const SignedWord immediate = token.value.integer;
-                        // 8 bits -- always positive
-                        EXPECT_INTEGER_FITS_SIZE(immediate, false, 8);
-                        trap_vector = static_cast<TrapVector>(immediate);
-                    }; break;
-
-                    default:
-                        UNREACHABLE();
-                }
-                operands = static_cast<Word>(trap_vector);
-            }; break;
-
-            case Instruction::RTI: {
-                opcode = Opcode::RTI;
-            }; break;
-        }
-
+        Word word;
+        parse_instruction(word, line_ptr, instruction, words.size(),
+                          label_references);
         EXPECT_EOL(line_ptr);
-
-        const Word word = static_cast<Word>(opcode) << 12 | operands;
         words.push_back(word);
     }
 
-    fprintf(stderr, "Missing `.END` directive\n");
-    return ERR_ASM_EXPECTED_END;
-
-stop_parsing:
+    if (!is_end) {
+        fprintf(stderr, "Missing `.END` directive\n");
+        return ERR_ASM_EXPECTED_END;
+    }
 
     // Replace label references with PC offsets based on label definitions
     for (size_t i = 0; i < label_references.size(); ++i) {
@@ -647,6 +359,312 @@ stop_parsing:
     }
 
     fclose(asm_file);
+    return ERR_OK;
+}
+
+Error parse_directive(vector<Word> &words, const char *&line_ptr,
+                      const Directive directive, bool &is_end) {
+    Token token;
+
+    switch (directive) {
+        case Directive::END:
+            // TODO(correctness): Maybe `.END` cannot be followed by tokens
+            is_end = true;
+            return ERR_OK;
+
+        case Directive::STRINGZ: {
+            /* printf("%s\n", line_ptr); */
+            RETURN_IF_ERR(take_next_token(line_ptr, token));
+            /* _print_token(token); */
+            if (token.kind != Token::STRING) {
+                fprintf(stderr, "String literal required after `.STRINGZ`\n");
+                return ERR_ASM_EXPECTED_OPERAND;
+            }
+            const char *string = token.value.string.pointer;
+            for (size_t i = 0; i < token.value.string.length; ++i) {
+                char ch = string[i];
+                if (ch == '\\') {
+                    ++i;
+                    // "... \" is treated as unterminated
+                    if (i > token.value.string.length)
+                        return ERR_ASM_UNTERMINATED_STRING;
+                    ch = string[i];
+                    RETURN_IF_ERR(escape_character(&ch));
+                }
+                words.push_back(static_cast<Word>(ch));
+            }
+            words.push_back(0x0000);  // Null-termination
+        }; break;
+
+        case Directive::FILL: {
+            EXPECT_NEXT_TOKEN(line_ptr, token);
+            EXPECT_TOKEN_IS_INTEGER(token);
+            // Don't check integer size -- it should have been checked
+            //     to fit in a word when being
+            // Sign is ignored
+            words.push_back(token.value.integer);
+        }; break;
+
+        case Directive::BLKW: {
+            EXPECT_NEXT_TOKEN(line_ptr, token);
+            EXPECT_TOKEN_IS_KIND(token, INTEGER_POSITIVE);
+            // Don't check integer size
+            // Don't reserve space -- it's not worth it
+            for (Word i = 0; i < token.value.integer; ++i) {
+                words.push_back(0x0000);
+            }
+        }; break;
+
+        default:
+            // Includes second `.ORIG`
+            fprintf(stderr, "Unexpected directive `%s`\n",
+                    directive_to_string(directive));
+            return ERR_ASM_UNEXPECTED_DIRECTIVE;
+    }
+    return ERR_OK;
+}
+
+Error parse_instruction(Word &word, const char *&line_ptr,
+                        const Instruction &instruction, const size_t word_count,
+                        vector<LabelReference> &label_references) {
+    Token token;
+    Opcode opcode;
+    Word operands = 0x0000;
+
+    switch (instruction) {
+        case Instruction::ADD:
+        case Instruction::AND: {
+            opcode =
+                instruction == Instruction::ADD ? Opcode::ADD : Opcode::AND;
+
+            EXPECT_NEXT_TOKEN(line_ptr, token);
+            EXPECT_TOKEN_IS_KIND(token, REGISTER);
+            const Register dest_reg = token.value.register_;
+            operands |= dest_reg << 9;
+            EXPECT_COMMA(line_ptr);
+
+            EXPECT_NEXT_TOKEN(line_ptr, token);
+            EXPECT_TOKEN_IS_KIND(token, REGISTER);
+            const Register src_reg_a = token.value.register_;
+            operands |= src_reg_a << 6;
+            EXPECT_COMMA(line_ptr);
+
+            EXPECT_NEXT_TOKEN(line_ptr, token);
+            if (token.kind == Token::REGISTER) {
+                const Register src_reg_b = token.value.register_;
+                operands |= src_reg_b;
+            } else {
+                EXPECT_TOKEN_IS_INTEGER(token);
+                const Word immediate = token.value.integer;
+                /* _print_token(token); */
+                /* printf(" = 0x%04x\n", immediate); */
+                // 5 bits
+                EXPECT_INTEGER_FITS_SIZE(
+                    immediate, token.kind == Token::INTEGER_NEGATIVE, 5);
+                operands |= 1 << 5;  // Flag
+                operands |= immediate & BITMASK_LOW_5;
+            }
+        }; break;
+
+        case Instruction::NOT: {
+            opcode = Opcode::NOT;
+
+            EXPECT_NEXT_TOKEN(line_ptr, token);
+            EXPECT_TOKEN_IS_KIND(token, REGISTER);
+            const Register dest_reg = token.value.register_;
+            operands |= dest_reg << 9;
+            EXPECT_COMMA(line_ptr);
+
+            EXPECT_NEXT_TOKEN(line_ptr, token);
+            EXPECT_TOKEN_IS_KIND(token, REGISTER);
+            const Register src_reg = token.value.register_;
+            operands |= src_reg << 6;
+
+            operands |= BITMASK_LOW_6;  // Padding
+        }; break;
+
+        case Instruction::BR:
+        case Instruction::BRN:
+        case Instruction::BRZ:
+        case Instruction::BRP:
+        case Instruction::BRNZ:
+        case Instruction::BRZP:
+        case Instruction::BRNP:
+        case Instruction::BRNZP: {
+            opcode = Opcode::BR;
+            const ConditionCode condition =
+                get_branch_condition_code(instruction);
+            operands |= condition << 9;
+
+            EXPECT_NEXT_TOKEN(line_ptr, token);
+            EXPECT_TOKEN_IS_KIND(token, LABEL);
+            add_label_reference(label_references, token.value.label, word_count,
+                                false);
+        }; break;
+
+        case Instruction::JMP:
+        case Instruction::RET: {
+            opcode = Opcode::JMP_RET;
+
+            Register addr_reg = 7;  // Default R7 for `RET`
+            if (instruction == Instruction::JMP) {
+                EXPECT_NEXT_TOKEN(line_ptr, token);
+                EXPECT_TOKEN_IS_KIND(token, REGISTER);
+                addr_reg = token.value.register_;
+            }
+            operands |= addr_reg << 6;
+        }; break;
+
+        case Instruction::JSR:
+        case Instruction::JSRR: {
+            opcode = Opcode::JSR_JSRR;
+
+            if (instruction == Instruction::JSR) {
+                operands |= 1 << 11;  // Flag
+
+                // PCOffset11
+                EXPECT_NEXT_TOKEN(line_ptr, token);
+                EXPECT_TOKEN_IS_KIND(token, LABEL);
+                /* printf(">>"); */
+                /* _print_token(token); */
+                add_label_reference(label_references, token.value.label,
+                                    word_count, true);
+            } else {
+                EXPECT_NEXT_TOKEN(line_ptr, token);
+                EXPECT_TOKEN_IS_KIND(token, REGISTER);
+                const Register addr_reg = token.value.register_;
+                operands |= addr_reg << 6;
+            }
+        }; break;
+
+        case Instruction::LD:
+        case Instruction::LDI:
+        case Instruction::ST:
+        case Instruction::STI: {
+            switch (instruction) {
+                case Instruction::LD:
+                    opcode = Opcode::LD;
+                    break;
+                case Instruction::LDI:
+                    opcode = Opcode::LDI;
+                    break;
+                case Instruction::ST:
+                    opcode = Opcode::ST;
+                    break;
+                case Instruction::STI:
+                    opcode = Opcode::STI;
+                    break;
+                default:
+                    UNREACHABLE();
+            }
+
+            EXPECT_NEXT_TOKEN(line_ptr, token);
+            EXPECT_TOKEN_IS_KIND(token, REGISTER);
+            const Register ds_reg = token.value.register_;
+            operands |= ds_reg << 9;
+            EXPECT_COMMA(line_ptr);
+
+            EXPECT_NEXT_TOKEN(line_ptr, token);
+            EXPECT_TOKEN_IS_KIND(token, LABEL);
+            add_label_reference(label_references, token.value.label, word_count,
+                                false);
+        }; break;
+
+        case Instruction::LDR:
+        case Instruction::STR: {
+            opcode =
+                instruction == Instruction::LDR ? Opcode::LDR : Opcode::STR;
+
+            EXPECT_NEXT_TOKEN(line_ptr, token);
+            EXPECT_TOKEN_IS_KIND(token, REGISTER);
+            const Register ds_reg = token.value.register_;
+            operands |= ds_reg << 9;
+            EXPECT_COMMA(line_ptr);
+
+            EXPECT_NEXT_TOKEN(line_ptr, token);
+            EXPECT_TOKEN_IS_KIND(token, REGISTER);
+            const Register base_reg = token.value.register_;
+            operands |= base_reg << 6;
+            EXPECT_COMMA(line_ptr);
+
+            EXPECT_NEXT_TOKEN(line_ptr, token);
+            EXPECT_TOKEN_IS_INTEGER(token);
+
+            const SignedWord immediate = token.value.integer;
+            // 6 bits
+            EXPECT_INTEGER_FITS_SIZE(immediate,
+                                     token.kind == Token::INTEGER_NEGATIVE, 6);
+            operands |= immediate & BITMASK_LOW_6;
+        }; break;
+
+        case Instruction::LEA: {
+            opcode = Opcode::LEA;
+
+            EXPECT_NEXT_TOKEN(line_ptr, token);
+            EXPECT_TOKEN_IS_KIND(token, REGISTER);
+            const Register dest_reg = token.value.register_;
+            operands |= dest_reg << 9;
+            EXPECT_COMMA(line_ptr);
+
+            EXPECT_NEXT_TOKEN(line_ptr, token);
+            EXPECT_TOKEN_IS_KIND(token, LABEL);
+            add_label_reference(label_references, token.value.label, word_count,
+                                false);
+        }; break;
+
+        case Instruction::TRAP:
+        case Instruction::GETC:
+        case Instruction::OUT:
+        case Instruction::PUTS:
+        case Instruction::IN:
+        case Instruction::PUTSP:
+        case Instruction::HALT: {
+            opcode = Opcode::TRAP;
+
+            TrapVector trap_vector;
+            switch (instruction) {
+                case Instruction::GETC:
+                    trap_vector = TrapVector::GETC;
+                    break;
+                case Instruction::OUT:
+                    trap_vector = TrapVector::OUT;
+                    break;
+                case Instruction::PUTS:
+                    trap_vector = TrapVector::PUTS;
+                    break;
+                case Instruction::IN:
+                    trap_vector = TrapVector::IN;
+                    break;
+                case Instruction::PUTSP:
+                    trap_vector = TrapVector::PUTSP;
+                    break;
+                case Instruction::HALT:
+                    trap_vector = TrapVector::HALT;
+                    break;
+
+                // Trap instruction with explicit code
+                case Instruction::TRAP: {
+                    EXPECT_NEXT_TOKEN(line_ptr, token);
+                    // Don't allow explicit sign
+                    EXPECT_TOKEN_IS_KIND(token, INTEGER_POSITIVE);
+                    const SignedWord immediate = token.value.integer;
+                    // 8 bits -- always positive
+                    EXPECT_INTEGER_FITS_SIZE(immediate, false, 8);
+                    trap_vector = static_cast<TrapVector>(immediate);
+                }; break;
+
+                default:
+                    UNREACHABLE();
+            }
+            operands = static_cast<Word>(trap_vector);
+        }; break;
+
+        case Instruction::RTI: {
+            opcode = Opcode::RTI;
+        }; break;
+    }
+
+    word = static_cast<Word>(opcode) << 12 | operands;
     return ERR_OK;
 }
 

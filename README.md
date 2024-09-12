@@ -51,6 +51,6 @@ This project only uses the following C++ features (to keep it simple):
 # TODO
 
 - Add debugger mode
-
+- Use static error value
 - Move all error-reporting to a function in `main.cpp`
 
