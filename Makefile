@@ -3,7 +3,7 @@ CFLAGS=-Wall -Wpedantic -Wextra
 
 TARGET=lasim
 
-.PHONY: run watch test
+.PHONY: run watch test clean
 
 main:
 	$(CC) $(CFLAGS) src/main.cpp -o $(TARGET)
@@ -17,6 +17,10 @@ watch:
 	@reflex --decoration=none -r 'src/.*|.*\.asm' -s -- zsh -c \
 		'clear; sleep 0.2; $(MAKE) --no-print-directory run'
 
-test:
+test: main
 	tests/assemble.sh
+
+clean:
+	rm ./lasim
+	rm -f examples/*.{obj,sym}
 
