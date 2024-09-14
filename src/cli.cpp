@@ -152,31 +152,26 @@ void parse_options(Options &options, const int argc,
         exit(ERR_CLI);
     }
 
-    // TODO(refactor): Make this `if` chain nicer
-
     if (options.mode == Mode::EXECUTE_ONLY) {
         if (out_file_set) {
             fprintf(stderr, "Cannot specify output file with `-x`\n");
             print_usage_hint();
             exit(ERR_CLI);
         }
-    } else {
+    } else if (!out_file_set) {
+        // Mode is a|ax, but no output file was specified
         // Default output filename based on input filename
-        if (!out_file_set) {
-            copy_filename_with_extension(options.out_file, options.in_file);
-        } else {
-            // An intermediate file is required
-            // Cannot use `-o -` without `-a`
-            // `-x` case is checked above
-            if (options.mode == Mode::ASSEMBLE_EXECUTE &&
-                options.out_file[0] == '\0') {
-                fprintf(stderr,
-                        "Cannot write output to stdout in default "
-                        "(assemble+execute) mode\n");
-                print_usage_hint();
-                exit(ERR_CLI);
-            }
-        }
+        copy_filename_with_extension(options.out_file, options.in_file);
+    } else if (options.mode == Mode::ASSEMBLE_EXECUTE &&
+               options.out_file[0] == '\0') {
+        // Mode is ax, but output file was set as stdout (using `-`)
+        // An intermediate file is required
+        // Cannot use `-o -` in ax|x mode (x mode checked above)
+        fprintf(stderr,
+                "Cannot write output to stdout in default "
+                "(assemble+execute) mode\n");
+        print_usage_hint();
+        exit(ERR_CLI);
     }
 }
 
