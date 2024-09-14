@@ -3,7 +3,7 @@
 examples='./examples'
 
 alias lasim='./lasim'
-alias laser='laser'
+alias lc3as='lc3as'
 
 echo '------'
 for asm in "$examples"/*.asm; do
@@ -12,7 +12,7 @@ for asm in "$examples"/*.asm; do
 
     printf 'ASSEMBLE    %-18s' "$filename"
 
-    laser -a "$asm" >/dev/null
+    lc3as "$asm" >/dev/null
     if [ "$?" -ne 0 ]; then
         echo 'Bad assembly file. Skipping.'
         continue

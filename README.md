@@ -7,11 +7,9 @@ simulator in C++.
 
 > Only *nix systems are supported currently.
 
-Dependencies:
-
 - `g++` to compile
-- [`laser`](https://github.com/PaperFanz/laser) for test script (to check
-    against)
+- [`lc3as` from `lc3tools`](https://github.com/chiragsakhuja/lc3tools) only for
+    running `make test`
 
 ```sh
 # Download

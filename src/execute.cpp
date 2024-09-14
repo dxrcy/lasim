@@ -411,8 +411,6 @@ void execute_trap_instruction(const Word instr, bool &do_halt) {
             tty_nobuffer_noecho();
             const char input = getchar() & BITMASK_LOW_8;  // Zero high 8 bits
             tty_restore();
-            // Echo, follow with newline if not already printed
-            // Don't check if input is ASCII, it doesn't matter
             print_char(input);
             registers.general_purpose[0] = input;
         }; break;
