@@ -9,7 +9,7 @@
 #include "bitmasks.hpp"
 #include "error.hpp"
 #include "globals.hpp"
-#include "types.hpp"
+/* #include "types.hpp" */
 
 using std::vector;
 
@@ -152,6 +152,7 @@ typedef struct Token {
         STRING,
         LABEL,
         COMMA,
+        COLON,
         NONE,
     } kind;
     union {
@@ -343,6 +344,11 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words) {
             // Continue to instruction/directive after label
             take_next_token(line_ptr, token);
             if (ERROR != ERR_OK) return;
+            // Skip if colon following label name
+            if (token.kind == Token::COLON) {
+                take_next_token(line_ptr, token);
+                if (ERROR != ERR_OK) return;
+            }
         }
 
         /* _print_token(token); */
@@ -877,9 +883,15 @@ void take_next_token(const char *&line, Token &token) {
 
     /* printf("<%c> 0x%04hx\n", line[0], line[0]); */
 
-    // Comma
+    // Comma can appear between operands
     if (line[0] == ',') {
         token.kind = Token::COMMA;
+        ++line;
+        return;
+    }
+    // Colon can appear following label declaration
+    if (line[0] == ':') {
+        token.kind = Token::COLON;
         ++line;
         return;
     }
@@ -1326,18 +1338,18 @@ bool try_instruction_from_string_slice(Token &token,
 void _print_token(const Token &token) {
     printf("Token: ");
     switch (token.kind) {
-        case Token::INSTRUCTION: {
+        case Token::INSTRUCTION:
             printf("Instruction: %s\n",
                    instruction_to_string(token.value.instruction));
-        }; break;
-        case Token::DIRECTIVE: {
+            break;
+        case Token::DIRECTIVE:
             printf("Directive: %s\n",
                    directive_to_string(token.value.directive));
-        }; break;
-        case Token::REGISTER: {
+            break;
+        case Token::REGISTER:
             printf("Register: R%d\n", token.value.register_);
-        }; break;
-        case Token::INTEGER: {
+            break;
+        case Token::INTEGER:
             if (token.value.integer.is_signed) {
                 printf("Integer: 0x%04hx #%hd\n", token.value.integer.value,
                        token.value.integer.value);
@@ -1345,23 +1357,26 @@ void _print_token(const Token &token) {
                 printf("Integer: 0x%04hx #+%hu\n", token.value.integer.value,
                        token.value.integer.value);
             }
-        }; break;
-        case Token::STRING: {
+            break;
+        case Token::STRING:
             printf("String: <");
             print_string_slice(stdout, token.value.string);
             printf(">\n");
-        }; break;
-        case Token::LABEL: {
+            break;
+        case Token::LABEL:
             printf("Label: <");
             print_string_slice(stdout, token.value.label);
             printf(">\n");
-        }; break;
-        case Token::COMMA: {
+            break;
+        case Token::COMMA:
             printf("Comma\n");
-        }; break;
-        case Token::NONE: {
+            break;
+        case Token::COLON:
+            printf("Colon\n");
+            break;
+        case Token::NONE:
             printf("NONE!\n");
-        }; break;
+            break;
     }
 }
 
