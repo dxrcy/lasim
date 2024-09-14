@@ -39,8 +39,7 @@ void print_registers(void);
 
 void execute(const char *const obj_filename) {
     read_obj_filename_to_memory(obj_filename);
-    if (ERROR != ERR_OK)
-        return;
+    OK_OR_RETURN();
 
     // GP and condition registers are already initialized to 0
     registers.program_counter = memory_file_bounds.start;
@@ -49,8 +48,7 @@ void execute(const char *const obj_filename) {
     bool do_halt = false;
     while (!do_halt) {
         execute_next_instrution(do_halt);
-        if (ERROR != ERR_OK)
-            return;
+        OK_OR_RETURN();
     }
 
     if (!stdout_on_new_line) {
@@ -61,8 +59,7 @@ void execute(const char *const obj_filename) {
 // `true` return value indicates that program should end
 void execute_next_instrution(bool &do_halt) {
     memory_checked(registers.program_counter);
-    if (ERROR != ERR_OK)
-        return;
+    OK_OR_RETURN();
 
     const Word instr = memory[registers.program_counter];
     ++registers.program_counter;
@@ -262,8 +259,7 @@ void execute_next_instrution(bool &do_halt) {
 
             const Word value =
                 memory_checked(registers.program_counter + offset);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
 
             registers.general_purpose[dest_reg] = value;
             set_condition_codes(value);
@@ -278,8 +274,7 @@ void execute_next_instrution(bool &do_halt) {
             const Word value = registers.general_purpose[src_reg];
 
             memory_checked(registers.program_counter + offset) = value;
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
         }; break;
 
         // LDR*
@@ -290,8 +285,7 @@ void execute_next_instrution(bool &do_halt) {
             const Word base = registers.general_purpose[base_reg];
 
             const Word value = memory_checked(base + offset);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
 
             registers.general_purpose[dest_reg] = value;
             set_condition_codes(value);
@@ -306,8 +300,7 @@ void execute_next_instrution(bool &do_halt) {
             const Word base = registers.general_purpose[base_reg];
 
             memory_checked(base + offset) = value;
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
         }; break;
 
         // LDI+
@@ -317,11 +310,9 @@ void execute_next_instrution(bool &do_halt) {
 
             const Word pointer =
                 memory_checked(registers.program_counter + offset);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             const Word value = memory_checked(pointer);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
 
             registers.general_purpose[dest_reg] = value;
             set_condition_codes(value);
@@ -334,11 +325,9 @@ void execute_next_instrution(bool &do_halt) {
             const Word pointer = registers.general_purpose[src_reg];
 
             const Word value = memory_checked(pointer);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             memory_checked(registers.program_counter + offset) = value;
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
         }; break;
 
         // LEA*
@@ -356,8 +345,7 @@ void execute_next_instrution(bool &do_halt) {
         // TRAP
         case Opcode::TRAP: {
             execute_trap_instruction(instr, do_halt);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
         }; break;
 
         // RTI (supervisor-only)
@@ -421,8 +409,7 @@ void execute_trap_instruction(const Word instr, bool &do_halt) {
             print_on_new_line();
             for (Word i = registers.general_purpose[0];; ++i) {
                 const Word word = memory_checked(i);
-                if (ERROR != ERR_OK)
-                    return;
+                OK_OR_RETURN();
 
                 if (word == 0x0000)
                     break;
@@ -437,8 +424,7 @@ void execute_trap_instruction(const Word instr, bool &do_halt) {
             // This is done to ensure the memory check is sound
             for (Word i = registers.general_purpose[0];; ++i) {
                 const Word word = memory_checked(i);
-                if (ERROR != ERR_OK)
-                    return;
+                OK_OR_RETURN();
 
                 const char high = static_cast<char>(bits_high(word));
                 const char low = static_cast<char>(bits_low(word));

@@ -12,6 +12,12 @@
         exit(ERR_UNREACHABLE);                                 \
     }
 
+#define OK_OR_RETURN()       \
+    {                        \
+        if (ERROR != ERR_OK) \
+            return;          \
+    }
+
 // This should not be `enum class`
 typedef enum Error {
     // Ok

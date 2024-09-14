@@ -13,13 +13,6 @@
 
 using std::vector;
 
-// TODO(refactor): Move to `error.hpp`
-#define OK_OR_RETURN()       \
-    {                        \
-        if (ERROR != ERR_OK) \
-            return;          \
-    }
-
 // This can be large as it is never aggregated
 #define MAX_LINE 512  // Includes '\0'
 #define MAX_LABEL 32  // Includes '\0'
