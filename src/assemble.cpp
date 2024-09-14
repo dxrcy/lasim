@@ -171,10 +171,10 @@ bool is_char_valid_identifier_start(const char ch);
 
 // Directive/Instruction to/from string
 static const char *directive_to_string(const Directive directive);
-void directive_from_string(Token &token, const StringSlice directive);
+bool directive_from_string(Token &token, const StringSlice directive);
 static const char *instruction_to_string(const Instruction instruction);
-bool try_instruction_from_string_slice(Token &token,
-                                       const StringSlice &instruction);
+bool instruction_from_string_slice(Token &token,
+                                   const StringSlice &instruction);
 
 // Debugging
 void _print_token(const Token &token);
@@ -979,7 +979,7 @@ void take_next_token(const char *&line, Token &token) {
     /* printf(">\n"); */
 
     // Sets kind and value, if is valid instruction
-    if (!try_instruction_from_string_slice(token, identifier)) {
+    if (!instruction_from_string_slice(token, identifier)) {
         // Label
         if (identifier.length >= MAX_LABEL) {
             fprintf(stderr, "Label too long.\n");
@@ -1024,8 +1024,9 @@ void take_directive(const char *&line, Token &token) {
     directive.length = line - directive.pointer;
 
     // Sets kind and value
-    directive_from_string(token, directive);
-    // ^ This can fail, but `ERROR` should be checked by caller
+    if (!directive_from_string(token, directive)) {
+        ERROR = ERR_ASM_INVALID_DIRECTIVE;
+    }
 }
 
 void take_register(const char *&line, Token &token) {
@@ -1211,26 +1212,22 @@ bool is_char_valid_identifier_start(const char ch) {
 static const char *directive_to_string(const Directive directive) {
     return DIRECTIVE_NAMES[static_cast<size_t>(directive)];
 }
-
-void directive_from_string(Token &token, const StringSlice directive) {
-    token.kind = TokenKind::DIRECTIVE;
+bool directive_from_string(Token &token, const StringSlice directive) {
     for (size_t i = 0; i < sizeof(DIRECTIVE_NAMES) / sizeof(char *); ++i) {
         if (string_equals_slice(DIRECTIVE_NAMES[i], directive)) {
+            token.kind = TokenKind::DIRECTIVE;
             token.value.directive = static_cast<Directive>(i);
-            return;
+            return true;
         }
     }
-    ERROR = ERR_ASM_INVALID_DIRECTIVE;
+    return false;
 }
 
 static const char *instruction_to_string(const Instruction instruction) {
     return INSTRUCTION_NAMES[static_cast<size_t>(instruction)];
 }
-
-// TODO(refactor): Maybe return void and check .kind==TokenKind::Instruction
-//     in caller
-bool try_instruction_from_string_slice(Token &token,
-                                       const StringSlice &instruction) {
+bool instruction_from_string_slice(Token &token,
+                                   const StringSlice &instruction) {
     const size_t count =
         sizeof(INSTRUCTION_NAMES) / sizeof(INSTRUCTION_NAMES[0]);
     for (size_t i = 0; i < count; ++i) {
