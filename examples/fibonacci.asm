@@ -19,7 +19,7 @@ FibLoop
     add r1, r1, #-1
     BRp FibLoop
 
-    ; TODO: Print output
+    REG
 
     HALT
 

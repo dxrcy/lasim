@@ -41,8 +41,6 @@ void execute(const char *const obj_filename) {
 
     // GP and condition registers are already initialized to 0
     registers.program_counter = memory_file_bounds.start;
-    registers.stack_pointer = memory_file_bounds.end;
-    registers.frame_pointer = memory_file_bounds.end;
 
     // Loop until `true` is returned, indicating a HALT (TRAP 0x25)
     bool do_halt = false;
@@ -606,11 +604,9 @@ static char *halfbyte_string(const Word word) {
 
 // TODO(refactor): Rename, this is no longer just used for debugging lasim
 void _print_registers() {
+    print_on_new_line();
     printf("--------------------------\n");
     printf("    PC  0x%04hx\n", registers.program_counter);
-    printf("    SP  0x%04hx\n", registers.stack_pointer);
-    printf("    FP  0x%04hx\n", registers.frame_pointer);
-    printf("..........................\n");
     printf("    N=%x  Z=%x  P=%x\n",
            (registers.condition >> 2),        // Negative
            (registers.condition >> 1) & 0b1,  // Zero

@@ -64,6 +64,9 @@ using std::vector;
         }                                                       \
     }
 
+// TODO(refactor): Maybe move some/all of these types to `types.hpp`.
+//     Perhaps not. These types are only used within this file
+
 // Temporary reference to a substring of a line
 // Must be copied if used after line is overwritten
 typedef struct StringSlice {

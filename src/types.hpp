@@ -35,8 +35,6 @@ typedef struct Registers {
     Word general_purpose[GP_REGISTER_COUNT] = {0};
 
     Word program_counter;
-    Word stack_pointer;
-    Word frame_pointer;
 
     // 3 bits, NZP
     ConditionCode condition = CONDITION_DEFAULT;
