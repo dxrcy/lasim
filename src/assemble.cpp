@@ -165,8 +165,6 @@ typedef struct Token {
 // TODO(chore): Document functions
 // TODO(chore): Move all function doc comments to prototypes ?
 
-// TODO(refactor): Use return value for appropriate functions
-
 void assemble(const char *const asm_filename, const char *const obj_filename);
 // Used by `assemble`
 void write_obj_file(const char *const filename, const vector<Word> &words);
@@ -186,7 +184,7 @@ void add_label_reference(vector<LabelReference> &references,
 bool find_label_definition(const LabelString &target,
                            const vector<LabelDefinition> &definitions,
                            SignedWord &index);
-void escape_character(char *const ch);
+char escape_character(const char ch);
 bool does_integer_fit_size(const SignExplicitWord integer,
                            const uint8_t size_bits);
 
@@ -438,8 +436,7 @@ void parse_directive(vector<Word> &words, const char *&line_ptr,
                         ERROR = ERR_ASM_UNTERMINATED_STRING;
                         return;
                     }
-                    ch = string[i];
-                    escape_character(&ch);
+                    ch = escape_character(string[i]);
                     if (ERROR != ERR_OK) return;
                 }
                 words.push_back(static_cast<Word>(ch));
@@ -827,23 +824,19 @@ bool find_label_definition(const LabelString &target,
 }
 
 // TODO(refactor): return char
-void escape_character(char *const ch) {
-    switch (*ch) {
+char escape_character(const char ch) {
+    switch (ch) {
         case 'n':
-            *ch = '\n';
-            break;
+            return '\n';
         case 'r':
-            *ch = '\r';
-            break;
+            return '\r';
         case 't':
-            *ch = '\t';
-            break;
+            return '\t';
         case '0':
-            *ch = '\0';
-            break;
+            return '\0';
         default:
             ERROR = ERR_ASM_INVALID_ESCAPE_CHAR;
-            return;
+            return 0x7f;
     }
 }
 
