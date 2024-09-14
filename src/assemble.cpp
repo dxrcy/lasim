@@ -136,6 +136,7 @@ enum class Instruction {
     RTI,
 };
 
+// TODO(refactor): Maybe move postive/negative flag for immediates to `value`
 typedef struct Token {
     enum {
         DIRECTIVE,
@@ -544,9 +545,21 @@ void parse_instruction(Word &word, const char *&line_ptr,
             operands |= condition << 9;
 
             EXPECT_NEXT_TOKEN(line_ptr, token);
-            EXPECT_TOKEN_IS_KIND(token, LABEL);
-            add_label_reference(label_references, token.value.label, word_count,
-                                false);
+            if (token.kind == Token::INTEGER_POSITIVE ||
+                token.kind == Token::INTEGER_NEGATIVE) {
+                // 9 bits
+                EXPECT_INTEGER_FITS_SIZE(token.value.integer,
+                                         token.kind == Token::INTEGER_NEGATIVE,
+                                         9);
+                operands |= token.value.integer & BITMASK_LOW_9;
+            } else if (token.kind == Token::LABEL) {
+                add_label_reference(label_references, token.value.label,
+                                    word_count, false);
+            } else {
+                fprintf(stderr, "Invalid operand\n");
+                ERROR = ERR_ASM_INVALID_OPERAND;
+                return;
+            }
         }; break;
 
         case Instruction::JMP:
@@ -571,11 +584,21 @@ void parse_instruction(Word &word, const char *&line_ptr,
 
                 // PCOffset11
                 EXPECT_NEXT_TOKEN(line_ptr, token);
-                EXPECT_TOKEN_IS_KIND(token, LABEL);
-                /* printf(">>"); */
-                /* _print_token(token); */
-                add_label_reference(label_references, token.value.label,
-                                    word_count, true);
+                if (token.kind == Token::INTEGER_POSITIVE ||
+                    token.kind == Token::INTEGER_NEGATIVE) {
+                    // 11 bits
+                    EXPECT_INTEGER_FITS_SIZE(
+                        token.value.integer,
+                        token.kind == Token::INTEGER_NEGATIVE, 11);
+                    operands |= token.value.integer & BITMASK_LOW_11;
+                } else if (token.kind == Token::LABEL) {
+                    add_label_reference(label_references, token.value.label,
+                                        word_count, false);
+                } else {
+                    fprintf(stderr, "Invalid operand\n");
+                    ERROR = ERR_ASM_INVALID_OPERAND;
+                    return;
+                }
             } else {
                 EXPECT_NEXT_TOKEN(line_ptr, token);
                 EXPECT_TOKEN_IS_KIND(token, REGISTER);
@@ -611,9 +634,21 @@ void parse_instruction(Word &word, const char *&line_ptr,
             operands |= ds_reg << 9;
 
             EXPECT_NEXT_TOKEN_AFTER_COMMA(line_ptr, token);
-            EXPECT_TOKEN_IS_KIND(token, LABEL);
-            add_label_reference(label_references, token.value.label, word_count,
-                                false);
+            if (token.kind == Token::INTEGER_POSITIVE ||
+                token.kind == Token::INTEGER_NEGATIVE) {
+                // 9 bits
+                EXPECT_INTEGER_FITS_SIZE(token.value.integer,
+                                         token.kind == Token::INTEGER_NEGATIVE,
+                                         9);
+                operands |= token.value.integer & BITMASK_LOW_9;
+            } else if (token.kind == Token::LABEL) {
+                add_label_reference(label_references, token.value.label,
+                                    word_count, false);
+            } else {
+                fprintf(stderr, "Invalid operand\n");
+                ERROR = ERR_ASM_INVALID_OPERAND;
+                return;
+            }
         }; break;
 
         case Instruction::LDR:
@@ -650,9 +685,21 @@ void parse_instruction(Word &word, const char *&line_ptr,
             operands |= dest_reg << 9;
 
             EXPECT_NEXT_TOKEN_AFTER_COMMA(line_ptr, token);
-            EXPECT_TOKEN_IS_KIND(token, LABEL);
-            add_label_reference(label_references, token.value.label, word_count,
-                                false);
+            if (token.kind == Token::INTEGER_POSITIVE ||
+                token.kind == Token::INTEGER_NEGATIVE) {
+                // 9 bits
+                EXPECT_INTEGER_FITS_SIZE(token.value.integer,
+                                         token.kind == Token::INTEGER_NEGATIVE,
+                                         9);
+                operands |= token.value.integer & BITMASK_LOW_9;
+            } else if (token.kind == Token::LABEL) {
+                add_label_reference(label_references, token.value.label,
+                                    word_count, false);
+            } else {
+                fprintf(stderr, "Invalid operand\n");
+                ERROR = ERR_ASM_INVALID_OPERAND;
+                return;
+            }
         }; break;
 
         case Instruction::TRAP:

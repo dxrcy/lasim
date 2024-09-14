@@ -9,11 +9,6 @@ int main(const int argc, const char *const *const argv) {
     Options options;
     parse_options(options, argc, argv);
 
-    // DEBUG
-    printf("in: <%s>\n", options.in_file);
-    printf("out:<%s>\n", options.out_file);
-    /* return 0; */
-
     // TODO(feat): Print out different message for each error
 
     try_run(options);
