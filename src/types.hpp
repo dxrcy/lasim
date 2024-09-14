@@ -64,12 +64,15 @@ enum class Opcode {
 
 // 8 bits
 enum class TrapVector {
+    // Standard
     GETC = 0x20,
     OUT = 0x21,
     PUTS = 0x22,
     IN = 0x23,
     PUTSP = 0x24,
     HALT = 0x25,
+    // Extension
+    REG = 0x27,
 };
 
 #endif

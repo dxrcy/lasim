@@ -123,7 +123,8 @@ enum class Instruction {
     IN,
     PUTSP,
     HALT,
-    RTI,
+    REG,  // Extension trap
+    RTI,  // Only used in 'supervisor' mode
 };
 
 // Can be signed or unsigned
@@ -693,7 +694,8 @@ void parse_instruction(Word &word, const char *&line_ptr,
         case Instruction::PUTS:
         case Instruction::IN:
         case Instruction::PUTSP:
-        case Instruction::HALT: {
+        case Instruction::HALT:
+        case Instruction::REG: {
             opcode = Opcode::TRAP;
 
             TrapVector trap_vector;
@@ -715,6 +717,9 @@ void parse_instruction(Word &word, const char *&line_ptr,
                     break;
                 case Instruction::HALT:
                     trap_vector = TrapVector::HALT;
+                    break;
+                case Instruction::REG:
+                    trap_vector = TrapVector::REG;
                     break;
 
                 // Trap instruction with explicit code
@@ -1234,6 +1239,8 @@ static const char *instruction_to_string(const Instruction instruction) {
             return "PUTSP";
         case Instruction::HALT:
             return "HALT";
+        case Instruction::REG:
+            return "REG";
         case Instruction::RTI:
             return "RTI";
     }
@@ -1302,6 +1309,8 @@ bool try_instruction_from_string_slice(Token &token,
         token.value.instruction = Instruction::PUTSP;
     } else if (string_equals_slice("halt", instruction)) {
         token.value.instruction = Instruction::HALT;
+    } else if (string_equals_slice("reg", instruction)) {
+        token.value.instruction = Instruction::REG;
     } else if (string_equals_slice("rti", instruction)) {
         token.value.instruction = Instruction::RTI;
     } else {

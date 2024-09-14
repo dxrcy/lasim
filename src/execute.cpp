@@ -460,6 +460,10 @@ void execute_trap_instruction(const Word instr, bool &do_halt) {
             return;
             break;
 
+        case TrapVector::REG:
+            _print_registers();
+            break;
+
         default:
             fprintf(stderr, "Invalid trap vector 0x%02x\n",
                     static_cast<Word>(trap_vector));
@@ -600,6 +604,7 @@ static char *halfbyte_string(const Word word) {
     return str;
 }
 
+// TODO(refactor): Rename, this is no longer just used for debugging lasim
 void _print_registers() {
     printf("--------------------------\n");
     printf("    PC  0x%04hx\n", registers.program_counter);
