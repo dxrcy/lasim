@@ -67,22 +67,6 @@ void execute_next_instrution(bool &do_halt) {
     // printf("INSTR at 0x%04x: 0x%04x  %016b\n", registers.program_counter - 1,
     //        instr, instr);
 
-    // TODO(debugger): Executing sentinel words
-    if (instr == 0xdddd) {
-        fprintf(stderr,
-                "DEBUG: Attempt to execute sentinal word 0xdddd."
-                " You probably screwed up.\n");
-        ERROR = ERR_ADDRESS_TOO_LOW;
-        return;
-    }
-    if (instr == 0xeeee) {
-        fprintf(stderr,
-                "DEBUG: Attempt to execute sentinal word 0xeeee."
-                " You probably screwed up.\n");
-        ERROR = ERR_ADDRESS_TOO_HIGH;
-        return;
-    }
-
     // May be invalid enum variant
     // Handled in default switch branch
     const Opcode opcode = static_cast<Opcode>(bits_12_15(instr));
@@ -524,16 +508,9 @@ void read_obj_filename_to_memory(const char *const obj_filename) {
 
     Word end = start + words_read;
 
-    // Mark undefined bytes for debugging
-    memset(memory, 0xdd, start * WORD_SIZE);  // Before file
-    memset(memory + end, 0xee,
-           (MEMORY_SIZE - end) * WORD_SIZE);  // After file
-
-    // TODO(refactor): There may be a better way to write this loop
-    //     Not very urgent
-    for (size_t i = start; i < end; ++i) {
-        memory[i] = swap_endian(memory[i]);
-    }
+    for (size_t i = 0; i < start; ++i) memory[i] = 0;
+    for (size_t i = start; i < end; ++i) memory[i] = swap_endian(memory[i]);
+    for (size_t i = end; i < MEMORY_SIZE; ++i) memory[i] = 0;
 
     /* printf("words read: %ld\n", words_read); */
 
