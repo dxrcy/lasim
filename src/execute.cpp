@@ -32,8 +32,7 @@ void set_condition_codes(const Word result);
 void print_char(const char ch);
 void print_on_new_line(void);
 static char *halfbyte_string(const Word word);
-
-void _print_registers(void);
+void print_registers(void);
 
 void execute(const char *const obj_filename) {
     read_obj_filename_to_memory(obj_filename);
@@ -459,7 +458,7 @@ void execute_trap_instruction(const Word instr, bool &do_halt) {
             break;
 
         case TrapVector::REG:
-            _print_registers();
+            print_registers();
             break;
 
         default:
@@ -602,8 +601,7 @@ static char *halfbyte_string(const Word word) {
     return str;
 }
 
-// TODO(refactor): Rename, this is no longer just used for debugging lasim
-void _print_registers() {
+void print_registers() {
     const int width = 27;
     const char *const box_h = "─";
     const char *const box_v = "│";
