@@ -190,6 +190,9 @@ bool does_integer_fit_size(const SignExplicitWord integer,
 // Note: 'take' here means increment the line pointer and return a token
 void take_next_token(const char *&line, Token &token);
 // Used by `take_next_token`
+void take_literal_string(const char *&line, Token &token);
+void take_directive(const char *&line, Token &token);
+void take_register(const char *&line, Token &token);
 void take_integer_hex(const char *&line, Token &token);
 void take_integer_decimal(const char *&line, Token &token);
 int8_t parse_hex_digit(const char ch);
@@ -903,50 +906,23 @@ void take_next_token(const char *&line, Token &token) {
     }
 
     // String literal
-    if (line[0] == '"') {
-        ++line;
-        token.kind = Token::STRING;
-        token.value.string.pointer = line;
-        for (; line[0] != '"'; ++line) {
-            if (line[0] == '\n' || line[0] == '\0') {
-                ERROR = ERR_ASM_UNTERMINATED_STRING;
-                return;
-            }
-        }
-        token.value.string.length = line - token.value.string.pointer;
-        ++line;  // Account for closing quote
-        /* _print_string_slice(token.value.literal_string); */
+    take_literal_string(line, token);
+    if (ERROR != ERR_OK)
         return;
-    }
+    if (token.kind != Token::NONE)
+        return;  // Tried to parse, but failed
 
     // Register
-    // Case-insensitive
-    // Will not match labels starting with /[Rr]\d/, such as `R2foo`
-    if ((line[0] == 'R' || line[0] == 'r') &&
-        (isdigit(line[1]) && !is_char_valid_in_identifier(line[2]))) {
-        ++line;
-        token.kind = Token::REGISTER;
-        token.value.register_ = line[0] - '0';
-        ++line;
+    take_register(line, token);  // Cannot fail
+    if (ERROR != ERR_OK)
         return;
-    }
 
     // Directive
-    // Case-insensitive
-    if (line[0] == '.') {
-        ++line;
-        StringSlice directive;
-        directive.pointer = line;
-        // Use `isalpha` because directives only ever use letters, unlike labels
-        while (isalpha(line[0])) {
-            ++line;
-        }
-        directive.length = line - directive.pointer;
-        // Sets kind and value
-        directive_from_string(token, directive);
-        if (ERROR != ERR_OK)
-            return;
-    }
+    take_directive(line, token);
+    if (ERROR != ERR_OK)
+        return;
+    if (token.kind != Token::NONE)
+        return;  // Tried to parse, but failed
 
     // Hex literal
     take_integer_hex(line, token);
@@ -968,7 +944,6 @@ void take_next_token(const char *&line, Token &token) {
     }
 
     // Label or instruction
-    // Case-insensitive
     StringSlice identifier;
     identifier.pointer = line;
     ++line;
@@ -991,6 +966,61 @@ void take_next_token(const char *&line, Token &token) {
         token.kind = Token::LABEL;
         token.value.label = identifier;
     }
+}
+
+void take_literal_string(const char *&line, Token &token) {
+    if (line[0] != '"')
+        return;
+    ++line;  // Opening quote
+
+    token.kind = Token::STRING;
+    token.value.string.pointer = line;
+    for (; line[0] != '"'; ++line) {
+        // String cannot be multi-line, or unclosed within a file
+        if (line[0] == '\n' || line[0] == '\0') {
+            ERROR = ERR_ASM_UNTERMINATED_STRING;
+            return;
+        }
+    }
+
+    token.value.string.length = line - token.value.string.pointer;
+    ++line;  // Closing quote
+}
+
+void take_directive(const char *&line, Token &token) {
+    if (line[0] != '.')
+        return;
+    ++line;  // '.'
+
+    StringSlice directive;
+    directive.pointer = line;
+
+    // Use `isalpha` because directives only ever use letters, unlike labels
+    while (isalpha(line[0]))
+        ++line;
+    directive.length = line - directive.pointer;
+
+    // Sets kind and value
+    directive_from_string(token, directive);
+    // ^ This can fail, but `ERROR` should be checked by caller
+}
+
+void take_register(const char *&line, Token &token) {
+    if (line[0] != 'R' && line[0] != 'r')
+        return;
+
+    if (!isdigit(line[1]) || line[1] - '0' >= GP_REGISTER_COUNT)
+        return;
+
+    // Token is actually the start of a label, such as `R2Foo`
+    if (is_char_valid_in_identifier(line[2]))
+        return;
+
+    ++line;  // [rR]
+    token.kind = Token::REGISTER;
+    token.value.register_ = line[0] - '0';
+    ++line;  // [0-9]
+    return;
 }
 
 void take_integer_hex(const char *&line, Token &token) {
