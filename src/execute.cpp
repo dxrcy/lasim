@@ -39,7 +39,8 @@ void print_registers(void);
 
 void execute(const char *const obj_filename) {
     read_obj_filename_to_memory(obj_filename);
-    if (ERROR != ERR_OK) return;
+    if (ERROR != ERR_OK)
+        return;
 
     // GP and condition registers are already initialized to 0
     registers.program_counter = memory_file_bounds.start;
@@ -48,7 +49,8 @@ void execute(const char *const obj_filename) {
     bool do_halt = false;
     while (!do_halt) {
         execute_next_instrution(do_halt);
-        if (ERROR != ERR_OK) return;
+        if (ERROR != ERR_OK)
+            return;
     }
 
     if (!stdout_on_new_line) {
@@ -59,7 +61,8 @@ void execute(const char *const obj_filename) {
 // `true` return value indicates that program should end
 void execute_next_instrution(bool &do_halt) {
     memory_checked(registers.program_counter);
-    if (ERROR != ERR_OK) return;
+    if (ERROR != ERR_OK)
+        return;
 
     const Word instr = memory[registers.program_counter];
     ++registers.program_counter;
@@ -259,7 +262,8 @@ void execute_next_instrution(bool &do_halt) {
 
             const Word value =
                 memory_checked(registers.program_counter + offset);
-            if (ERROR != ERR_OK) return;
+            if (ERROR != ERR_OK)
+                return;
 
             registers.general_purpose[dest_reg] = value;
             set_condition_codes(value);
@@ -274,7 +278,8 @@ void execute_next_instrution(bool &do_halt) {
             const Word value = registers.general_purpose[src_reg];
 
             memory_checked(registers.program_counter + offset) = value;
-            if (ERROR != ERR_OK) return;
+            if (ERROR != ERR_OK)
+                return;
         }; break;
 
         // LDR*
@@ -285,7 +290,8 @@ void execute_next_instrution(bool &do_halt) {
             const Word base = registers.general_purpose[base_reg];
 
             const Word value = memory_checked(base + offset);
-            if (ERROR != ERR_OK) return;
+            if (ERROR != ERR_OK)
+                return;
 
             registers.general_purpose[dest_reg] = value;
             set_condition_codes(value);
@@ -300,7 +306,8 @@ void execute_next_instrution(bool &do_halt) {
             const Word base = registers.general_purpose[base_reg];
 
             memory_checked(base + offset) = value;
-            if (ERROR != ERR_OK) return;
+            if (ERROR != ERR_OK)
+                return;
         }; break;
 
         // LDI+
@@ -310,9 +317,11 @@ void execute_next_instrution(bool &do_halt) {
 
             const Word pointer =
                 memory_checked(registers.program_counter + offset);
-            if (ERROR != ERR_OK) return;
+            if (ERROR != ERR_OK)
+                return;
             const Word value = memory_checked(pointer);
-            if (ERROR != ERR_OK) return;
+            if (ERROR != ERR_OK)
+                return;
 
             registers.general_purpose[dest_reg] = value;
             set_condition_codes(value);
@@ -325,9 +334,11 @@ void execute_next_instrution(bool &do_halt) {
             const Word pointer = registers.general_purpose[src_reg];
 
             const Word value = memory_checked(pointer);
-            if (ERROR != ERR_OK) return;
+            if (ERROR != ERR_OK)
+                return;
             memory_checked(registers.program_counter + offset) = value;
-            if (ERROR != ERR_OK) return;
+            if (ERROR != ERR_OK)
+                return;
         }; break;
 
         // LEA*
@@ -345,7 +356,8 @@ void execute_next_instrution(bool &do_halt) {
         // TRAP
         case Opcode::TRAP: {
             execute_trap_instruction(instr, do_halt);
-            if (ERROR != ERR_OK) return;
+            if (ERROR != ERR_OK)
+                return;
         }; break;
 
         // RTI (supervisor-only)
@@ -409,9 +421,11 @@ void execute_trap_instruction(const Word instr, bool &do_halt) {
             print_on_new_line();
             for (Word i = registers.general_purpose[0];; ++i) {
                 const Word word = memory_checked(i);
-                if (ERROR != ERR_OK) return;
+                if (ERROR != ERR_OK)
+                    return;
 
-                if (word == 0x0000) break;
+                if (word == 0x0000)
+                    break;
                 const char ch = static_cast<char>(word & BITMASK_LOW_8);
                 print_char(ch);
             }
@@ -423,13 +437,16 @@ void execute_trap_instruction(const Word instr, bool &do_halt) {
             // This is done to ensure the memory check is sound
             for (Word i = registers.general_purpose[0];; ++i) {
                 const Word word = memory_checked(i);
-                if (ERROR != ERR_OK) return;
+                if (ERROR != ERR_OK)
+                    return;
 
                 const char high = static_cast<char>(bits_high(word));
                 const char low = static_cast<char>(bits_low(word));
-                if (high == 0x00) break;
+                if (high == 0x00)
+                    break;
                 print_char(high);
-                if (low == 0x00) break;
+                if (low == 0x00)
+                    break;
                 print_char(low);
             }
         }; break;
@@ -508,9 +525,12 @@ void read_obj_filename_to_memory(const char *const obj_filename) {
 
     Word end = start + words_read;
 
-    for (size_t i = 0; i < start; ++i) memory[i] = 0;
-    for (size_t i = start; i < end; ++i) memory[i] = swap_endian(memory[i]);
-    for (size_t i = end; i < MEMORY_SIZE; ++i) memory[i] = 0;
+    for (size_t i = 0; i < start; ++i)
+        memory[i] = 0;
+    for (size_t i = start; i < end; ++i)
+        memory[i] = swap_endian(memory[i]);
+    for (size_t i = end; i < MEMORY_SIZE; ++i)
+        memory[i] = 0;
 
     /* printf("words read: %ld\n", words_read); */
 
@@ -587,7 +607,8 @@ void print_registers() {
     print_on_new_line();
 
     printf("  %s", box_tl);
-    for (size_t i = 0; i < width; ++i) printf("%s", box_h);
+    for (size_t i = 0; i < width; ++i)
+        printf("%s", box_h);
     printf("%s\n", box_tr);
 
     printf("  %s ", box_v);
@@ -609,7 +630,8 @@ void print_registers() {
     }
 
     printf("  %s", box_bl);
-    for (size_t i = 0; i < width; ++i) printf("%s", box_h);
+    for (size_t i = 0; i < width; ++i)
+        printf("%s", box_h);
     printf("%s\n", box_br);
 
     stdout_on_new_line = true;

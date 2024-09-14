@@ -1,4 +1,8 @@
 ---
 Language: Cpp
 BasedOnStyle: Google
+
 IndentWidth: 4
+
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false

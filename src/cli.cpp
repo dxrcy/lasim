@@ -205,7 +205,8 @@ void strcpy_max_size(char *const dest, const char *const src,
                      const size_t max_size) {
     size_t i = 0;
     for (; i < max_size; ++i) {
-        if (src[i] == '\0') break;
+        if (src[i] == '\0')
+            break;
         dest[i] = src[i];
     }
     dest[i] = '\0';
@@ -216,11 +217,14 @@ void copy_filename_with_extension(char *const dest, const char *const src) {
     size_t i = 0;
     for (; i < FILENAME_MAX - 1; ++i) {
         char ch = src[i];
-        if (ch == '\0') break;
+        if (ch == '\0')
+            break;
         dest[i] = ch;
-        if (ch == '.') last_period = i;
+        if (ch == '.')
+            last_period = i;
     }
-    if (last_period == 0) last_period = i;
+    if (last_period == 0)
+        last_period = i;
     if (last_period + DEFAULT_OUT_EXTENSION_SIZE > FILENAME_MAX) {
         last_period = FILENAME_MAX - 1 - DEFAULT_OUT_EXTENSION_SIZE;
     }

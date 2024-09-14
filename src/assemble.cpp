@@ -23,7 +23,8 @@ using std::vector;
 #define EXPECT_NEXT_TOKEN(_line_ptr, _token)       \
     {                                              \
         take_next_token((_line_ptr), (_token));    \
-        if (ERROR != ERR_OK) return;               \
+        if (ERROR != ERR_OK)                       \
+            return;                                \
         if ((_token).kind == Token::NONE) {        \
             fprintf(stderr, "Expected operand\n"); \
             ERROR = ERR_ASM_EXPECTED_OPERAND;      \
@@ -34,10 +35,12 @@ using std::vector;
 #define EXPECT_NEXT_TOKEN_AFTER_COMMA(_line_ptr, _token) \
     {                                                    \
         take_next_token((_line_ptr), (_token));          \
-        if (ERROR != ERR_OK) return;                     \
+        if (ERROR != ERR_OK)                             \
+            return;                                      \
         if ((_token).kind == Token::COMMA) {             \
             take_next_token((_line_ptr), (_token));      \
-            if (ERROR != ERR_OK) return;                 \
+            if (ERROR != ERR_OK)                         \
+                return;                                  \
         }                                                \
         if ((_token).kind == Token::NONE) {              \
             fprintf(stderr, "Expected operand\n");       \
@@ -223,9 +226,11 @@ void _print_token(const Token &token);
 void assemble(const char *const asm_filename, const char *const obj_filename) {
     vector<Word> words;
     assemble_file_to_words(asm_filename, words);
-    if (ERROR != ERR_OK) return;
+    if (ERROR != ERR_OK)
+        return;
     write_obj_file(obj_filename, words);
-    if (ERROR != ERR_OK) return;
+    if (ERROR != ERR_OK)
+        return;
 }
 
 void write_obj_file(const char *const filename, const vector<Word> &words) {
@@ -278,7 +283,8 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words) {
     while (!is_end) {
         const char *line_ptr = line_buf;  // Pointer address is mutated
 
-        if (fgets(line_buf, MAX_LINE, asm_file) == NULL) break;
+        if (fgets(line_buf, MAX_LINE, asm_file) == NULL)
+            break;
         if (ferror(asm_file)) {
             ERROR = ERR_FILE_READ;
             return;
@@ -288,13 +294,15 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words) {
 
         Token token;
         take_next_token(line_ptr, token);
-        if (ERROR != ERR_OK) return;
+        if (ERROR != ERR_OK)
+            return;
 
         /* printf("----\n"); */
         /* _print_token(token); */
 
         // Empty line
-        if (token.kind == Token::NONE) continue;
+        if (token.kind == Token::NONE)
+            continue;
 
         if (words.size() == 0) {
             /* _print_token(token); */
@@ -304,7 +312,8 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words) {
                 return;
             }
             take_next_token(line_ptr, token);
-            if (ERROR != ERR_OK) return;
+            if (ERROR != ERR_OK)
+                return;
             // Must be unsigned
             if (token.kind != Token::INTEGER || token.value.integer.is_signed) {
                 fprintf(stderr,
@@ -344,11 +353,13 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words) {
 
             // Continue to instruction/directive after label
             take_next_token(line_ptr, token);
-            if (ERROR != ERR_OK) return;
+            if (ERROR != ERR_OK)
+                return;
             // Skip if colon following label name
             if (token.kind == Token::COLON) {
                 take_next_token(line_ptr, token);
-                if (ERROR != ERR_OK) return;
+                if (ERROR != ERR_OK)
+                    return;
             }
         }
 
@@ -364,7 +375,8 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words) {
         }
 
         // Line with only label
-        if (token.kind == Token::NONE) continue;
+        if (token.kind == Token::NONE)
+            continue;
 
         if (token.kind != Token::INSTRUCTION) {
             /* _print_token(token); */
@@ -430,7 +442,8 @@ void parse_directive(vector<Word> &words, const char *&line_ptr,
         case Directive::STRINGZ: {
             /* printf("%s\n", line_ptr); */
             take_next_token(line_ptr, token);
-            if (ERROR != ERR_OK) return;
+            if (ERROR != ERR_OK)
+                return;
             /* _print_token(token); */
             if (token.kind != Token::STRING) {
                 fprintf(stderr, "String literal required after `.STRINGZ`\n");
@@ -448,7 +461,8 @@ void parse_directive(vector<Word> &words, const char *&line_ptr,
                         return;
                     }
                     ch = escape_character(string[i]);
-                    if (ERROR != ERR_OK) return;
+                    if (ERROR != ERR_OK)
+                        return;
                 }
                 words.push_back(static_cast<Word>(ch));
             }
@@ -771,7 +785,8 @@ void parse_instruction(Word &word, const char *&line_ptr,
 bool is_line_eol(const char *line_ptr) {
     Token token;
     take_next_token(line_ptr, token);
-    if (ERROR != ERR_OK) return false;
+    if (ERROR != ERR_OK)
+        return false;
     if (token.kind != Token::NONE) {
         fprintf(stderr, "Unexpected operand after instruction\n");
         return false;
@@ -878,9 +893,11 @@ void take_next_token(const char *&line, Token &token) {
     /* printf("-- <%s>\n", line); */
 
     // Ignore leading spaces
-    while (isspace(line[0])) ++line;
+    while (isspace(line[0]))
+        ++line;
     // Linebreak, EOF, or comment
-    if (is_char_eol(line[0])) return;
+    if (is_char_eol(line[0]))
+        return;
 
     /* printf("<<%s>>\n", line); */
 
@@ -941,17 +958,22 @@ void take_next_token(const char *&line, Token &token) {
         directive.length = line - directive.pointer;
         // Sets kind and value
         directive_from_string(token, directive);
-        if (ERROR != ERR_OK) return;
+        if (ERROR != ERR_OK)
+            return;
     }
 
     // Hex literal
     take_integer_hex(line, token);
-    if (ERROR != ERR_OK) return;
-    if (token.kind != Token::NONE) return;  // Tried to parse, but failed
+    if (ERROR != ERR_OK)
+        return;
+    if (token.kind != Token::NONE)
+        return;  // Tried to parse, but failed
     // Decimal literal
     take_integer_decimal(line, token);
-    if (ERROR != ERR_OK) return;
-    if (token.kind != Token::NONE) return;  // Tried to parse, but failed
+    if (ERROR != ERR_OK)
+        return;
+    if (token.kind != Token::NONE)
+        return;  // Tried to parse, but failed
 
     // Character cannot start an identifier -> invalid
     if (!is_char_valid_identifier_start(line[0])) {
@@ -964,7 +986,8 @@ void take_next_token(const char *&line, Token &token) {
     StringSlice identifier;
     identifier.pointer = line;
     ++line;
-    while (is_char_valid_in_identifier(tolower(line[0]))) ++line;
+    while (is_char_valid_in_identifier(tolower(line[0])))
+        ++line;
     identifier.length = line - identifier.pointer;
 
     /* printf("IDENT: <"); */
@@ -993,7 +1016,8 @@ void take_integer_hex(const char *&line, Token &token) {
         is_signed = true;
     }
     // Only allow one 0 in prefixx
-    if (new_line[0] == '0') ++new_line;
+    if (new_line[0] == '0')
+        ++new_line;
     // Must have prefix
     if (new_line[0] != 'x' && new_line[0] != 'X') {
         return;
@@ -1009,7 +1033,8 @@ void take_integer_hex(const char *&line, Token &token) {
         }
         is_signed = true;
     }
-    while (new_line[0] == '0' && isdigit(new_line[1])) ++new_line;
+    while (new_line[0] == '0' && isdigit(new_line[1]))
+        ++new_line;
 
     // Not an integer
     // Continue to next token
@@ -1047,7 +1072,8 @@ void take_integer_hex(const char *&line, Token &token) {
         ++line;
     }
 
-    if (is_signed) number *= -1;  // Store negative number in unsigned word
+    if (is_signed)
+        number *= -1;  // Store negative number in unsigned word
     token.value.integer.value = number;
 }
 
@@ -1060,7 +1086,8 @@ void take_integer_decimal(const char *&line, Token &token) {
         is_signed = true;
     }
     // Don't allow any 0's before prefix
-    if (new_line[0] == '#') ++new_line;  // Optional
+    if (new_line[0] == '#')
+        ++new_line;  // Optional
     if (new_line[0] == '-') {
         ++new_line;
         // Don't allow `-#-`
@@ -1070,7 +1097,8 @@ void take_integer_decimal(const char *&line, Token &token) {
         }
         is_signed = true;
     }
-    while (new_line[0] == '0' && isdigit(new_line[1])) ++new_line;
+    while (new_line[0] == '0' && isdigit(new_line[1]))
+        ++new_line;
 
     // Not an integer
     // Continue to next token
@@ -1102,21 +1130,26 @@ void take_integer_decimal(const char *&line, Token &token) {
         ++line;
     }
 
-    if (is_signed) number *= -1;  // Store negative number in unsigned word
+    if (is_signed)
+        number *= -1;  // Store negative number in unsigned word
     token.value.integer.value = number;
 }
 
 // Returns -1 if not a valid hex digit
 int8_t parse_hex_digit(const char ch) {
-    if (ch >= '0' && ch <= '9') return ch - '0';
-    if (ch >= 'A' && ch <= 'Z') return ch - 'A' + 10;
-    if (ch >= 'a' && ch <= 'z') return ch - 'a' + 10;
+    if (ch >= '0' && ch <= '9')
+        return ch - '0';
+    if (ch >= 'A' && ch <= 'Z')
+        return ch - 'A' + 10;
+    if (ch >= 'a' && ch <= 'z')
+        return ch - 'a' + 10;
     return -1;
 }
 
 bool append_decimal_digit_checked(Word &number, uint8_t digit,
                                   bool is_negative) {
-    if (number > WORD_MAX_UNSIGNED / 10) return false;
+    if (number > WORD_MAX_UNSIGNED / 10)
+        return false;
     number *= 10;
     // Largest negative integer is 1 larger than largest positive integer
     if (number > WORD_MAX_UNSIGNED - digit + (is_negative ? 1 : 0))
@@ -1143,10 +1176,12 @@ bool string_equals_slice(const char *const target,
         // Will return false if any character mismatches
         //     OR target string is shorter (mismatch of NUL with candidate char)
         // Therefore no chance of reading past allocated length
-        if (tolower(candidate.pointer[i]) != tolower(target[i])) return false;
+        if (tolower(candidate.pointer[i]) != tolower(target[i]))
+            return false;
     }
     // Target string is longer than candidate
-    if (target[i] != '\0') return false;
+    if (target[i] != '\0')
+        return false;
     return true;
 }
 

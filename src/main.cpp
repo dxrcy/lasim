@@ -27,19 +27,23 @@ void try_run(Options &options) {
     switch (options.mode) {
         case Mode::ASSEMBLE_ONLY:
             assemble(options.in_file, options.out_file);
-            if (ERROR != ERR_OK) return;
+            if (ERROR != ERR_OK)
+                return;
             break;
 
         case Mode::EXECUTE_ONLY:
             execute(options.in_file);
-            if (ERROR != ERR_OK) return;
+            if (ERROR != ERR_OK)
+                return;
             break;
 
         case Mode::ASSEMBLE_EXECUTE:
             assemble(options.in_file, options.out_file);
-            if (ERROR != ERR_OK) return;
+            if (ERROR != ERR_OK)
+                return;
             execute(options.out_file);
-            if (ERROR != ERR_OK) return;
+            if (ERROR != ERR_OK)
+                return;
             break;
     }
 }
