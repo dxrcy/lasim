@@ -18,6 +18,9 @@
 #define low_11_bits_signed(_instr) \
     (to_signed_word((_instr) & BITMASK_LOW_11, 11))
 
+// Prompt for `IN` trap
+#define TRAP_IN_PROMPT "Input a character: "
+
 // TODO(refactor): Re-order functions
 
 void execute(const char *const obj_filename);
@@ -29,7 +32,7 @@ void read_obj_filename_to_memory(const char *const obj_filename);
 Word &memory_checked(Word addr);
 SignedWord sign_extend(SignedWord value, const size_t size);
 void set_condition_codes(const Word result);
-void print_char(const char ch);
+void print_char(char ch);
 void print_on_new_line(void);
 static char *halfbyte_string(const Word word);
 void print_registers(void);
@@ -404,16 +407,13 @@ void execute_trap_instruction(const Word instr, bool &do_halt) {
 
         case TrapVector::IN: {
             print_on_new_line();
-            printf("Input a character> ");
+            printf(TRAP_IN_PROMPT);
             tty_nobuffer_noecho();
             const char input = getchar() & BITMASK_LOW_8;  // Zero high 8 bits
             tty_restore();
             // Echo, follow with newline if not already printed
             // Don't check if input is ASCII, it doesn't matter
             print_char(input);
-            if (!stdout_on_new_line) {
-                printf("\n");
-            }
             registers.general_purpose[0] = input;
         }; break;
 
@@ -575,13 +575,12 @@ void set_condition_codes(const Word result) {
     registers.condition = (is_negative << 2) | (is_zero << 1) | is_positive;
 }
 
-void print_char(const char ch) {
+void print_char(char ch) {
     if (ch == '\r') {
-        printf("\n");
-    } else {
-        printf("%c", ch);
+        ch = '\n';
     }
-    stdout_on_new_line = ch == '\n' || ch == '\r';
+    printf("%c", ch);
+    stdout_on_new_line = ch == '\n';
 }
 
 void print_on_new_line() {
@@ -637,6 +636,8 @@ void print_registers() {
     printf("  %s", box_bl);
     for (size_t i = 0; i < width; ++i) printf("%s", box_h);
     printf("%s\n", box_br);
+
+    stdout_on_new_line = true;
 }
 
 #endif

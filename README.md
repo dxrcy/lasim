@@ -39,7 +39,8 @@ lasim -x examples/checkerboard.obj
 - `string_array`: Prints an array of static-memory strings
 
 Some of the examples are taken from
-[here](https://github.com/Nguyen-Nhat-Tuan-Minh/LC_3-Assembly-Program).
+[here](https://github.com/Nguyen-Nhat-Tuan-Minh/LC_3-Assembly-Program) and
+[here](https://github.com/dideler/LC-3-Programs).
 
 # C++ Subset
 
