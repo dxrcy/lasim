@@ -290,6 +290,7 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words) {
         take_next_token(line_ptr, token);
         if (ERROR != ERR_OK) return;
 
+        /* printf("----\n"); */
         /* _print_token(token); */
 
         // Empty line
@@ -678,11 +679,13 @@ void parse_instruction(Word &word, const char *&line_ptr,
             opcode = Opcode::LEA;
 
             EXPECT_NEXT_TOKEN(line_ptr, token);
+            /* _print_token(token); */
             EXPECT_TOKEN_IS_KIND(token, REGISTER);
             const Register dest_reg = token.value.register_;
             operands |= dest_reg << 9;
 
             EXPECT_NEXT_TOKEN_AFTER_COMMA(line_ptr, token);
+            /* _print_token(token); */
             if (token.kind == Token::INTEGER) {
                 // 9 bits
                 EXPECT_INTEGER_FITS_SIZE(token.value.integer, 9);
@@ -1135,10 +1138,15 @@ bool is_char_valid_identifier_start(const char ch) {
 
 bool string_equals_slice(const char *const target,
                          const StringSlice candidate) {
-    // Equality will check \0-mismatch, so no worry of reading past target
-    for (size_t i = 0; i < candidate.length; ++i) {
+    size_t i = 0;
+    for (; i < candidate.length; ++i) {
+        // Will return false if any character mismatches
+        //     OR target string is shorter (mismatch of NUL with candidate char)
+        // Therefore no chance of reading past allocated length
         if (tolower(candidate.pointer[i]) != tolower(target[i])) return false;
     }
+    // Target string is longer than candidate
+    if (target[i] != '\0') return false;
     return true;
 }
 
