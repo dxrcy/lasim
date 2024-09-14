@@ -34,9 +34,14 @@ typedef struct LabelReference {
 enum class Directive {
     ORIG,
     END,
-    STRINGZ,
     FILL,
     BLKW,
+    STRINGZ,
+};
+
+// MUST match order of `Directive` enum
+static const char *const DIRECTIVE_NAMES[] = {
+    "ORIG", "END", "FILL", "BLKW", "STRINGZ",
 };
 
 enum class Instruction {
@@ -73,6 +78,14 @@ enum class Instruction {
     RTI,  // Only used in 'supervisor' mode
 };
 
+// MUST match order of `Instruction` enum
+static const char *const INSTRUCTION_NAMES[] = {
+    "ADD",  "AND",  "NOT",   "BR",    "BRN",  "BRZ", "BRP",  "BRNZ",
+    "BRZP", "BRNP", "BRNZP", "JMP",   "RET",  "JSR", "JSRR", "LD",
+    "ST",   "LDI",  "STI",   "LDR",   "STR",  "LEA", "TRAP", "GETC",
+    "OUT",  "PUTS", "IN",    "PUTSP", "HALT", "REG", "RTI",
+};
+
 // Can be signed or unsigned
 // Intended sign needs to be known to check if integer is too large for
 //     a particular instruction
@@ -85,7 +98,6 @@ typedef struct SignExplicitWord {
     bool is_signed;
 } SignExplicitWord;
 
-// TODO(refactor): Maybe move postive/negative flag for immediates to `value`
 enum class TokenKind {
     DIRECTIVE,
     INSTRUCTION,
@@ -369,38 +381,14 @@ void parse_directive(vector<Word> &words, const char *&line_ptr,
     Token token;
 
     switch (directive) {
-        case Directive::END:
-            // TODO(correctness): Maybe `.END` cannot be followed by tokens
-            is_end = true;
+        case Directive::ORIG:
+            fprintf(stderr, "Unexpected `.ORIG`\n");
+            ERROR = ERR_ASM_UNEXPECTED_DIRECTIVE;
             return;
 
-        case Directive::STRINGZ: {
-            /* printf("%s\n", line_ptr); */
-            take_next_token(line_ptr, token);
-            OK_OR_RETURN();
-            /* _print_token(token); */
-            if (token.kind != TokenKind::STRING) {
-                fprintf(stderr, "String literal required after `.STRINGZ`\n");
-                ERROR = ERR_ASM_EXPECTED_OPERAND;
-                return;
-            }
-            const char *string = token.value.string.pointer;
-            for (size_t i = 0; i < token.value.string.length; ++i) {
-                char ch = string[i];
-                if (ch == '\\') {
-                    ++i;
-                    // "... \" is treated as unterminated
-                    if (i > token.value.string.length) {
-                        ERROR = ERR_ASM_UNTERMINATED_STRING;
-                        return;
-                    }
-                    ch = escape_character(string[i]);
-                    OK_OR_RETURN();
-                }
-                words.push_back(static_cast<Word>(ch));
-            }
-            words.push_back(0x0000);  // Null-termination
-        }; break;
+        case Directive::END:
+            is_end = true;
+            return;
 
         case Directive::FILL: {
             expect_next_token(line_ptr, token);
@@ -430,12 +418,33 @@ void parse_directive(vector<Word> &words, const char *&line_ptr,
             }
         }; break;
 
-        default:
-            // Includes second `.ORIG`
-            fprintf(stderr, "Unexpected directive `%s`\n",
-                    directive_to_string(directive));
-            ERROR = ERR_ASM_UNEXPECTED_DIRECTIVE;
-            return;
+        case Directive::STRINGZ: {
+            /* printf("%s\n", line_ptr); */
+            take_next_token(line_ptr, token);
+            OK_OR_RETURN();
+            /* _print_token(token); */
+            if (token.kind != TokenKind::STRING) {
+                fprintf(stderr, "String literal required after `.STRINGZ`\n");
+                ERROR = ERR_ASM_EXPECTED_OPERAND;
+                return;
+            }
+            const char *string = token.value.string.pointer;
+            for (size_t i = 0; i < token.value.string.length; ++i) {
+                char ch = string[i];
+                if (ch == '\\') {
+                    ++i;
+                    // "... \" is treated as unterminated
+                    if (i > token.value.string.length) {
+                        ERROR = ERR_ASM_UNTERMINATED_STRING;
+                        return;
+                    }
+                    ch = escape_character(string[i]);
+                    OK_OR_RETURN();
+                }
+                words.push_back(static_cast<Word>(ch));
+            }
+            words.push_back(0x0000);  // Null-termination
+        }; break;
     }
 }
 
@@ -864,7 +873,6 @@ bool find_label_definition(const LabelString &target,
     return false;
 }
 
-// TODO(refactor): return char
 char escape_character(const char ch) {
     switch (ch) {
         case 'n':
@@ -1200,183 +1208,39 @@ bool is_char_valid_identifier_start(const char ch) {
     return ch == '_' || isalpha(ch);
 }
 
-// TODO(refactor): Maybe make a `directive_names` array and index with the
-//     directive value as int ? -- to get names as static strings.
-//     Same with instructions
-
 static const char *directive_to_string(const Directive directive) {
-    switch (directive) {
-        case Directive::ORIG:
-            return "ORIG";
-        case Directive::END:
-            return "END";
-        case Directive::FILL:
-            return "FILL";
-        case Directive::BLKW:
-            return "BLKW";
-        case Directive::STRINGZ:
-            return "STRINGZ";
-    }
-    UNREACHABLE();
+    return DIRECTIVE_NAMES[static_cast<size_t>(directive)];
 }
 
 void directive_from_string(Token &token, const StringSlice directive) {
     token.kind = TokenKind::DIRECTIVE;
-    if (string_equals_slice("orig", directive)) {
-        token.value.directive = Directive::ORIG;
-    } else if (string_equals_slice("end", directive)) {
-        token.value.directive = Directive::END;
-    } else if (string_equals_slice("fill", directive)) {
-        token.value.directive = Directive::FILL;
-    } else if (string_equals_slice("blkw", directive)) {
-        token.value.directive = Directive::BLKW;
-    } else if (string_equals_slice("stringz", directive)) {
-        token.value.directive = Directive::STRINGZ;
-    } else {
-        ERROR = ERR_ASM_INVALID_DIRECTIVE;
+    for (size_t i = 0; i < sizeof(DIRECTIVE_NAMES) / sizeof(char *); ++i) {
+        if (string_equals_slice(DIRECTIVE_NAMES[i], directive)) {
+            token.value.directive = static_cast<Directive>(i);
+            return;
+        }
     }
-    return;
+    ERROR = ERR_ASM_INVALID_DIRECTIVE;
 }
 
 static const char *instruction_to_string(const Instruction instruction) {
-    switch (instruction) {
-        case Instruction::ADD:
-            return "ADD";
-        case Instruction::AND:
-            return "AND";
-        case Instruction::NOT:
-            return "NOT";
-        case Instruction::BR:
-            return "BR";
-        case Instruction::BRN:
-            return "RN";
-        case Instruction::BRZ:
-            return "RZ";
-        case Instruction::BRP:
-            return "RP";
-        case Instruction::BRNZ:
-            return "RNZ";
-        case Instruction::BRZP:
-            return "RZP";
-        case Instruction::BRNP:
-            return "RNP";
-        case Instruction::BRNZP:
-            return "RNZP";
-        case Instruction::JMP:
-            return "JMP";
-        case Instruction::RET:
-            return "RET";
-        case Instruction::JSR:
-            return "JSR";
-        case Instruction::JSRR:
-            return "JSRR";
-        case Instruction::LD:
-            return "LD";
-        case Instruction::ST:
-            return "ST";
-        case Instruction::LDI:
-            return "LDI";
-        case Instruction::STI:
-            return "STI";
-        case Instruction::LDR:
-            return "LDR";
-        case Instruction::STR:
-            return "STR";
-        case Instruction::LEA:
-            return "LEA";
-        case Instruction::TRAP:
-            return "TRAP";
-        case Instruction::GETC:
-            return "GETC";
-        case Instruction::OUT:
-            return "OUT";
-        case Instruction::PUTS:
-            return "PUTS";
-        case Instruction::IN:
-            return "IN";
-        case Instruction::PUTSP:
-            return "PUTSP";
-        case Instruction::HALT:
-            return "HALT";
-        case Instruction::REG:
-            return "REG";
-        case Instruction::RTI:
-            return "RTI";
-    }
-    UNREACHABLE();
+    return INSTRUCTION_NAMES[static_cast<size_t>(instruction)];
 }
 
-// TODO(refactor): Maybe return void and check .kind==TokenKind::Instruction in
-//     caller
+// TODO(refactor): Maybe return void and check .kind==TokenKind::Instruction
+//     in caller
 bool try_instruction_from_string_slice(Token &token,
                                        const StringSlice &instruction) {
-    if (string_equals_slice("add", instruction)) {
-        token.value.instruction = Instruction::ADD;
-    } else if (string_equals_slice("and", instruction)) {
-        token.value.instruction = Instruction::AND;
-    } else if (string_equals_slice("not", instruction)) {
-        token.value.instruction = Instruction::NOT;
-    } else if (string_equals_slice("br", instruction)) {
-        token.value.instruction = Instruction::BR;
-    } else if (string_equals_slice("brn", instruction)) {
-        token.value.instruction = Instruction::BRN;
-    } else if (string_equals_slice("brz", instruction)) {
-        token.value.instruction = Instruction::BRZ;
-    } else if (string_equals_slice("brp", instruction)) {
-        token.value.instruction = Instruction::BRP;
-    } else if (string_equals_slice("brnz", instruction)) {
-        token.value.instruction = Instruction::BRNZ;
-    } else if (string_equals_slice("brzp", instruction)) {
-        token.value.instruction = Instruction::BRZP;
-    } else if (string_equals_slice("brnp", instruction)) {
-        token.value.instruction = Instruction::BRNP;
-    } else if (string_equals_slice("brnzp", instruction)) {
-        token.value.instruction = Instruction::BRNZP;
-    } else if (string_equals_slice("jmp", instruction)) {
-        token.value.instruction = Instruction::JMP;
-    } else if (string_equals_slice("ret", instruction)) {
-        token.value.instruction = Instruction::RET;
-    } else if (string_equals_slice("jsr", instruction)) {
-        token.value.instruction = Instruction::JSR;
-    } else if (string_equals_slice("jsrr", instruction)) {
-        token.value.instruction = Instruction::JSRR;
-    } else if (string_equals_slice("ld", instruction)) {
-        token.value.instruction = Instruction::LD;
-    } else if (string_equals_slice("st", instruction)) {
-        token.value.instruction = Instruction::ST;
-    } else if (string_equals_slice("ldi", instruction)) {
-        token.value.instruction = Instruction::LDI;
-    } else if (string_equals_slice("sti", instruction)) {
-        token.value.instruction = Instruction::STI;
-    } else if (string_equals_slice("ldr", instruction)) {
-        token.value.instruction = Instruction::LDR;
-    } else if (string_equals_slice("str", instruction)) {
-        token.value.instruction = Instruction::STR;
-    } else if (string_equals_slice("lea", instruction)) {
-        token.value.instruction = Instruction::LEA;
-    } else if (string_equals_slice("trap", instruction)) {
-        token.value.instruction = Instruction::TRAP;
-    } else if (string_equals_slice("getc", instruction)) {
-        token.value.instruction = Instruction::GETC;
-    } else if (string_equals_slice("out", instruction)) {
-        token.value.instruction = Instruction::OUT;
-    } else if (string_equals_slice("puts", instruction)) {
-        token.value.instruction = Instruction::PUTS;
-    } else if (string_equals_slice("in", instruction)) {
-        token.value.instruction = Instruction::IN;
-    } else if (string_equals_slice("putsp", instruction)) {
-        token.value.instruction = Instruction::PUTSP;
-    } else if (string_equals_slice("halt", instruction)) {
-        token.value.instruction = Instruction::HALT;
-    } else if (string_equals_slice("reg", instruction)) {
-        token.value.instruction = Instruction::REG;
-    } else if (string_equals_slice("rti", instruction)) {
-        token.value.instruction = Instruction::RTI;
-    } else {
-        return false;
+    const size_t count =
+        sizeof(INSTRUCTION_NAMES) / sizeof(INSTRUCTION_NAMES[0]);
+    for (size_t i = 0; i < count; ++i) {
+        if (string_equals_slice(INSTRUCTION_NAMES[i], instruction)) {
+            token.kind = TokenKind::INSTRUCTION;
+            token.value.instruction = static_cast<Instruction>(i);
+            return true;
+        }
     }
-    token.kind = TokenKind::INSTRUCTION;
-    return true;
+    return false;
 }
 
 void _print_token(const Token &token) {
