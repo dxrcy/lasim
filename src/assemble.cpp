@@ -9,15 +9,16 @@
 #include "bitmasks.hpp"
 #include "error.hpp"
 #include "globals.hpp"
-/* #include "types.hpp" */
+#include "slice.cpp"
 
 using std::vector;
 
-// These include '\0'
-#define MAX_LINE 512  // This can be large as it is never aggregated
-#define MAX_LABEL 32
+// This can be large as it is never aggregated
+#define MAX_LINE 512  // Includes '\0'
+#define MAX_LABEL 32  // Includes '\0'
 
 // Used by `assemble_file_to_words`
+// TODO(refactor): convert these macros to functions
 
 // Get next token, or return on error
 #define EXPECT_NEXT_TOKEN(_line_ptr, _token)       \
@@ -66,16 +67,6 @@ using std::vector;
             return;                                             \
         }                                                       \
     }
-
-// TODO(refactor): Maybe move some/all of these types to `types.hpp`.
-//     Perhaps not. These types are only used within this file
-
-// Temporary reference to a substring of a line
-// Must be copied if used after line is overwritten
-typedef struct StringSlice {
-    const char *pointer;
-    size_t length;
-} StringSlice;
 
 // Must be a copied string, as `line` is overwritten
 typedef char LabelString[MAX_LABEL];
@@ -207,11 +198,6 @@ bool append_decimal_digit_checked(Word &number, uint8_t digit,
 bool is_char_eol(const char ch);
 bool is_char_valid_in_identifier(const char ch);
 bool is_char_valid_identifier_start(const char ch);
-
-// For `StringSlice`
-bool string_equals_slice(const char *const target, const StringSlice candidate);
-void copy_string_slice_to_string(char *dest, const StringSlice src);
-void print_string_slice(FILE *const &file, const StringSlice &slice);
 
 // Directive/Instruction to/from string
 static const char *directive_to_string(const Directive directive);
@@ -1167,36 +1153,6 @@ bool is_char_valid_in_identifier(const char ch) {
 }
 bool is_char_valid_identifier_start(const char ch) {
     return ch == '_' || isalpha(ch);
-}
-
-bool string_equals_slice(const char *const target,
-                         const StringSlice candidate) {
-    size_t i = 0;
-    for (; i < candidate.length; ++i) {
-        // Will return false if any character mismatches
-        //     OR target string is shorter (mismatch of NUL with candidate char)
-        // Therefore no chance of reading past allocated length
-        if (tolower(candidate.pointer[i]) != tolower(target[i]))
-            return false;
-    }
-    // Target string is longer than candidate
-    if (target[i] != '\0')
-        return false;
-    return true;
-}
-
-// Assumes `dest` can hold src.length+1 characters
-void copy_string_slice_to_string(char *dest, const StringSlice src) {
-    for (size_t i = 0; i < src.length; ++i) {
-        dest[i] = src.pointer[i];
-    }
-    dest[src.length] = '\0';
-}
-
-void print_string_slice(FILE *const &file, const StringSlice &slice) {
-    for (size_t i = 0; i < slice.length; ++i) {
-        fprintf(file, "%c", slice.pointer[i]);
-    }
 }
 
 // TODO(refactor): Maybe make a `directive_names` array and index with the
