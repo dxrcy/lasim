@@ -13,6 +13,13 @@
 
 using std::vector;
 
+// TODO(refactor): Move to `error.hpp`
+#define OK_OR_RETURN()       \
+    {                        \
+        if (ERROR != ERR_OK) \
+            return;          \
+    }
+
 // This can be large as it is never aggregated
 #define MAX_LINE 512  // Includes '\0'
 #define MAX_LABEL 32  // Includes '\0'
@@ -129,8 +136,8 @@ void expect_next_token(const char *&line_ptr, Token &token);
 void expect_next_token_after_comma(const char *&line_ptr, Token &token);
 void expect_token_is_kind(const Token &token, const enum TokenKind kind);
 void expect_integer_fits_size(SignExplicitWord integer, size_t size_bits);
+void expect_line_eol(const char *line_ptr);
 
-bool is_line_eol(const char *line_ptr);
 ConditionCode get_branch_condition_code(const Instruction instruction);
 void add_label_reference(vector<LabelReference> &references,
                          const StringSlice &name, const Word index,
@@ -170,11 +177,9 @@ void _print_token(const Token &token);
 void assemble(const char *const asm_filename, const char *const obj_filename) {
     vector<Word> words;
     assemble_file_to_words(asm_filename, words);
-    if (ERROR != ERR_OK)
-        return;
+    OK_OR_RETURN();
     write_obj_file(obj_filename, words);
-    if (ERROR != ERR_OK)
-        return;
+    OK_OR_RETURN();
 }
 
 void write_obj_file(const char *const filename, const vector<Word> &words) {
@@ -238,8 +243,7 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words) {
 
         Token token;
         take_next_token(line_ptr, token);
-        if (ERROR != ERR_OK)
-            return;
+        OK_OR_RETURN();
 
         /* printf("----\n"); */
         /* _print_token(token); */
@@ -256,8 +260,7 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words) {
                 return;
             }
             take_next_token(line_ptr, token);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             // Must be unsigned
             if (token.kind != TokenKind::INTEGER ||
                 token.value.integer.is_signed) {
@@ -298,13 +301,11 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words) {
 
             // Continue to instruction/directive after label
             take_next_token(line_ptr, token);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             // Skip if colon following label name
             if (token.kind == TokenKind::COLON) {
                 take_next_token(line_ptr, token);
-                if (ERROR != ERR_OK)
-                    return;
+                OK_OR_RETURN();
             }
         }
 
@@ -312,10 +313,8 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words) {
 
         if (token.kind == TokenKind::DIRECTIVE) {
             parse_directive(words, line_ptr, token.value.directive, is_end);
-            if (!is_line_eol(line_ptr)) {
-                ERROR = ERR_ASM_UNEXPECTED_OPERAND;
-                return;
-            }
+            expect_line_eol(line_ptr);
+            OK_OR_RETURN();
             continue;
         }
 
@@ -336,10 +335,8 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words) {
         parse_instruction(word, line_ptr, instruction, words.size(),
                           label_references);
         /* printf("%s\n", line_ptr); */
-        if (!is_line_eol(line_ptr)) {
-            ERROR = ERR_ASM_UNEXPECTED_OPERAND;
-            return;
-        }
+        expect_line_eol(line_ptr);
+        OK_OR_RETURN();
         words.push_back(word);
     }
 
@@ -387,8 +384,7 @@ void parse_directive(vector<Word> &words, const char *&line_ptr,
         case Directive::STRINGZ: {
             /* printf("%s\n", line_ptr); */
             take_next_token(line_ptr, token);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             /* _print_token(token); */
             if (token.kind != TokenKind::STRING) {
                 fprintf(stderr, "String literal required after `.STRINGZ`\n");
@@ -406,8 +402,7 @@ void parse_directive(vector<Word> &words, const char *&line_ptr,
                         return;
                     }
                     ch = escape_character(string[i]);
-                    if (ERROR != ERR_OK)
-                        return;
+                    OK_OR_RETURN();
                 }
                 words.push_back(static_cast<Word>(ch));
             }
@@ -416,11 +411,9 @@ void parse_directive(vector<Word> &words, const char *&line_ptr,
 
         case Directive::FILL: {
             expect_next_token(line_ptr, token);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             expect_token_is_kind(token, TokenKind::INTEGER);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             // Don't check integer size -- it should have been checked
             //     to fit in a word when being
             // Sign is ignored
@@ -429,8 +422,7 @@ void parse_directive(vector<Word> &words, const char *&line_ptr,
 
         case Directive::BLKW: {
             expect_next_token(line_ptr, token);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             if (token.kind != TokenKind::INTEGER ||
                 token.value.integer.is_signed) {
                 fprintf(stderr,
@@ -468,37 +460,30 @@ void parse_instruction(Word &word, const char *&line_ptr,
                 instruction == Instruction::ADD ? Opcode::ADD : Opcode::AND;
 
             expect_next_token(line_ptr, token);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             expect_token_is_kind(token, TokenKind::REGISTER);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             const Register dest_reg = token.value.register_;
             operands |= dest_reg << 9;
 
             expect_next_token_after_comma(line_ptr, token);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             expect_token_is_kind(token, TokenKind::REGISTER);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             const Register src_reg_a = token.value.register_;
             operands |= src_reg_a << 6;
 
             expect_next_token_after_comma(line_ptr, token);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             if (token.kind == TokenKind::REGISTER) {
                 const Register src_reg_b = token.value.register_;
                 operands |= src_reg_b;
             } else {
                 expect_token_is_kind(token, TokenKind::INTEGER);
-                if (ERROR != ERR_OK)
-                    return;
+                OK_OR_RETURN();
                 const SignExplicitWord immediate = token.value.integer;
                 expect_integer_fits_size(immediate, 5);
-                if (ERROR != ERR_OK)
-                    return;
+                OK_OR_RETURN();
                 operands |= 1 << 5;  // Flag
                 operands |= immediate.value & BITMASK_LOW_5;
             }
@@ -508,20 +493,16 @@ void parse_instruction(Word &word, const char *&line_ptr,
             opcode = Opcode::NOT;
 
             expect_next_token(line_ptr, token);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             expect_token_is_kind(token, TokenKind::REGISTER);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             const Register dest_reg = token.value.register_;
             operands |= dest_reg << 9;
 
             expect_next_token_after_comma(line_ptr, token);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             expect_token_is_kind(token, TokenKind::REGISTER);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             const Register src_reg = token.value.register_;
             operands |= src_reg << 6;
 
@@ -542,13 +523,11 @@ void parse_instruction(Word &word, const char *&line_ptr,
             operands |= condition << 9;
 
             expect_next_token(line_ptr, token);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             if (token.kind == TokenKind::INTEGER) {
                 // 9 bits
                 expect_integer_fits_size(token.value.integer, 9);
-                if (ERROR != ERR_OK)
-                    return;
+                OK_OR_RETURN();
                 operands |= token.value.integer.value & BITMASK_LOW_9;
             } else if (token.kind == TokenKind::LABEL) {
                 add_label_reference(label_references, token.value.label,
@@ -567,11 +546,9 @@ void parse_instruction(Word &word, const char *&line_ptr,
             Register addr_reg = 7;  // Default R7 for `RET`
             if (instruction == Instruction::JMP) {
                 expect_next_token(line_ptr, token);
-                if (ERROR != ERR_OK)
-                    return;
+                OK_OR_RETURN();
                 expect_token_is_kind(token, TokenKind::REGISTER);
-                if (ERROR != ERR_OK)
-                    return;
+                OK_OR_RETURN();
                 addr_reg = token.value.register_;
             }
             operands |= addr_reg << 6;
@@ -586,13 +563,11 @@ void parse_instruction(Word &word, const char *&line_ptr,
 
                 // PCOffset11
                 expect_next_token(line_ptr, token);
-                if (ERROR != ERR_OK)
-                    return;
+                OK_OR_RETURN();
                 if (token.kind == TokenKind::INTEGER) {
                     // 11 bits
                     expect_integer_fits_size(token.value.integer, 11);
-                    if (ERROR != ERR_OK)
-                        return;
+                    OK_OR_RETURN();
                     operands |= token.value.integer.value & BITMASK_LOW_11;
                 } else if (token.kind == TokenKind::LABEL) {
                     add_label_reference(label_references, token.value.label,
@@ -604,11 +579,9 @@ void parse_instruction(Word &word, const char *&line_ptr,
                 }
             } else {
                 expect_next_token(line_ptr, token);
-                if (ERROR != ERR_OK)
-                    return;
+                OK_OR_RETURN();
                 expect_token_is_kind(token, TokenKind::REGISTER);
-                if (ERROR != ERR_OK)
-                    return;
+                OK_OR_RETURN();
                 const Register addr_reg = token.value.register_;
                 operands |= addr_reg << 6;
             }
@@ -636,22 +609,18 @@ void parse_instruction(Word &word, const char *&line_ptr,
             }
 
             expect_next_token(line_ptr, token);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             expect_token_is_kind(token, TokenKind::REGISTER);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             const Register ds_reg = token.value.register_;
             operands |= ds_reg << 9;
 
             expect_next_token_after_comma(line_ptr, token);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             if (token.kind == TokenKind::INTEGER) {
                 // 9 bits
                 expect_integer_fits_size(token.value.integer, 9);
-                if (ERROR != ERR_OK)
-                    return;
+                OK_OR_RETURN();
                 operands |= token.value.integer.value & BITMASK_LOW_9;
             } else if (token.kind == TokenKind::LABEL) {
                 add_label_reference(label_references, token.value.label,
@@ -669,35 +638,28 @@ void parse_instruction(Word &word, const char *&line_ptr,
                 instruction == Instruction::LDR ? Opcode::LDR : Opcode::STR;
 
             expect_next_token(line_ptr, token);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             expect_token_is_kind(token, TokenKind::REGISTER);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             const Register ds_reg = token.value.register_;
             operands |= ds_reg << 9;
 
             expect_next_token_after_comma(line_ptr, token);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             expect_token_is_kind(token, TokenKind::REGISTER);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             const Register base_reg = token.value.register_;
             operands |= base_reg << 6;
 
             expect_next_token_after_comma(line_ptr, token);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             expect_token_is_kind(token, TokenKind::INTEGER);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
 
             const SignExplicitWord immediate = token.value.integer;
             // 6 bits
             expect_integer_fits_size(immediate, 6);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             operands |= immediate.value & BITMASK_LOW_6;
         }; break;
 
@@ -705,24 +667,20 @@ void parse_instruction(Word &word, const char *&line_ptr,
             opcode = Opcode::LEA;
 
             expect_next_token(line_ptr, token);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             /* _print_token(token); */
             expect_token_is_kind(token, TokenKind::REGISTER);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             const Register dest_reg = token.value.register_;
             operands |= dest_reg << 9;
 
             expect_next_token_after_comma(line_ptr, token);
-            if (ERROR != ERR_OK)
-                return;
+            OK_OR_RETURN();
             /* _print_token(token); */
             if (token.kind == TokenKind::INTEGER) {
                 // 9 bits
                 expect_integer_fits_size(token.value.integer, 9);
-                if (ERROR != ERR_OK)
-                    return;
+                OK_OR_RETURN();
                 operands |= token.value.integer.value & BITMASK_LOW_9;
             } else if (token.kind == TokenKind::LABEL) {
                 add_label_reference(label_references, token.value.label,
@@ -771,8 +729,7 @@ void parse_instruction(Word &word, const char *&line_ptr,
                 // Trap instruction with explicit code
                 case Instruction::TRAP: {
                     expect_next_token(line_ptr, token);
-                    if (ERROR != ERR_OK)
-                        return;
+                    OK_OR_RETURN();
                     // Don't allow explicit sign
                     if (token.kind != TokenKind::INTEGER ||
                         token.value.integer.is_signed) {
@@ -787,8 +744,7 @@ void parse_instruction(Word &word, const char *&line_ptr,
                     // TODO(refactor): A redundant check happens here. Maybe
                     //     this could be avoided ?
                     expect_integer_fits_size(immediate, 8);
-                    if (ERROR != ERR_OK)
-                        return;
+                    OK_OR_RETURN();
                     trap_vector = static_cast<TrapVector>(immediate.value);
                 }; break;
 
@@ -808,8 +764,7 @@ void parse_instruction(Word &word, const char *&line_ptr,
 
 void expect_next_token(const char *&line_ptr, Token &token) {
     take_next_token(line_ptr, token);
-    if (ERROR != ERR_OK)
-        return;
+    OK_OR_RETURN();
     if (token.kind == TokenKind::NONE) {
         fprintf(stderr, "Expected operand\n");
         ERROR = ERR_ASM_EXPECTED_OPERAND;
@@ -818,12 +773,10 @@ void expect_next_token(const char *&line_ptr, Token &token) {
 
 void expect_next_token_after_comma(const char *&line_ptr, Token &token) {
     take_next_token(line_ptr, token);
-    if (ERROR != ERR_OK)
-        return;
+    OK_OR_RETURN();
     if (token.kind == TokenKind::COMMA) {
         take_next_token(line_ptr, token);
-        if (ERROR != ERR_OK)
-            return;
+        OK_OR_RETURN();
     }
     if (token.kind == TokenKind::NONE) {
         fprintf(stderr, "Expected operand\n");
@@ -847,16 +800,14 @@ void expect_integer_fits_size(SignExplicitWord integer, size_t size_bits) {
     }
 }
 
-bool is_line_eol(const char *line_ptr) {
+void expect_line_eol(const char *line_ptr) {
     Token token;
     take_next_token(line_ptr, token);
-    if (ERROR != ERR_OK)
-        return false;
+    OK_OR_RETURN();
     if (token.kind != TokenKind::NONE) {
         fprintf(stderr, "Unexpected operand after instruction\n");
-        return false;
+        ERROR = ERR_ASM_UNEXPECTED_OPERAND;
     }
-    return true;
 }
 
 // Must ONLY be called with a BR* instruction
@@ -983,33 +934,28 @@ void take_next_token(const char *&line, Token &token) {
 
     // String literal
     take_literal_string(line, token);
-    if (ERROR != ERR_OK)
-        return;
+    OK_OR_RETURN();
     if (token.kind != TokenKind::NONE)
         return;  // Tried to parse, but failed
 
     // Register
     take_register(line, token);  // Cannot fail
-    if (ERROR != ERR_OK)
-        return;
+    OK_OR_RETURN();
 
     // Directive
     take_directive(line, token);
-    if (ERROR != ERR_OK)
-        return;
+    OK_OR_RETURN();
     if (token.kind != TokenKind::NONE)
         return;  // Tried to parse, but failed
 
     // Hex literal
     take_integer_hex(line, token);
-    if (ERROR != ERR_OK)
-        return;
+    OK_OR_RETURN();
     if (token.kind != TokenKind::NONE)
         return;  // Tried to parse, but failed
     // Decimal literal
     take_integer_decimal(line, token);
-    if (ERROR != ERR_OK)
-        return;
+    OK_OR_RETURN();
     if (token.kind != TokenKind::NONE)
         return;  // Tried to parse, but failed
 
