@@ -31,6 +31,7 @@ lasim -x examples/checkerboard.obj
 
 # Examples
 
+- `char_count`: Counts the amount of times each letter was inputted
 - `checkerboard`: Prints an ASCII checkerboard
 - `count_bits`: Counts the '1' bits of an inputted number from 0-9
 - `hello_world`: Take a wild guess...
