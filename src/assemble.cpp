@@ -93,10 +93,10 @@ static const char *const INSTRUCTION_NAMES[] = {
 // Value is stored signed if `is_signed`, in 2's compliment, but stored in an
 //     unsigned type
 // TODO(refactor): Rename this type
-typedef struct SignExplicitWord {
+typedef struct InitialSignWord {
     Word value;
     bool is_signed;
-} SignExplicitWord;
+} InitialSignWord;
 
 enum class TokenKind {
     DIRECTIVE,
@@ -116,7 +116,7 @@ typedef struct Token {
         Instruction instruction;
         Register register_;
         // Sign depends on if `-` character is present in asm file
-        SignExplicitWord integer;
+        InitialSignWord integer;
         // `StringSlice`s are only valid for lifetime of `line`
         StringSlice string;
         StringSlice label;  // Gets copied on push to a labels vector
@@ -140,7 +140,7 @@ void parse_instruction(Word &word, const char *&line_ptr,
 void expect_next_token(const char *&line_ptr, Token &token);
 void expect_next_token_after_comma(const char *&line_ptr, Token &token);
 void expect_token_is_kind(const Token &token, const enum TokenKind kind);
-void expect_integer_fits_size(SignExplicitWord integer, size_t size_bits);
+void expect_integer_fits_size(InitialSignWord integer, size_t size_bits);
 void expect_line_eol(const char *line_ptr);
 
 ConditionCode get_branch_condition_code(const Instruction instruction);
@@ -151,7 +151,7 @@ bool find_label_definition(const LabelString &target,
                            const vector<LabelDefinition> &definitions,
                            SignedWord &index);
 char escape_character(const char ch);
-bool does_integer_fit_size(const SignExplicitWord integer,
+bool does_integer_fit_size(const InitialSignWord integer,
                            const uint8_t size_bits);
 
 // Note: 'take' here means increment the line pointer and return a token
@@ -483,7 +483,7 @@ void parse_instruction(Word &word, const char *&line_ptr,
             } else {
                 expect_token_is_kind(token, TokenKind::INTEGER);
                 OK_OR_RETURN();
-                const SignExplicitWord immediate = token.value.integer;
+                const InitialSignWord immediate = token.value.integer;
                 expect_integer_fits_size(immediate, 5);
                 OK_OR_RETURN();
                 operands |= 1 << 5;  // Flag
@@ -658,7 +658,7 @@ void parse_instruction(Word &word, const char *&line_ptr,
             expect_token_is_kind(token, TokenKind::INTEGER);
             OK_OR_RETURN();
 
-            const SignExplicitWord immediate = token.value.integer;
+            const InitialSignWord immediate = token.value.integer;
             // 6 bits
             expect_integer_fits_size(immediate, 6);
             OK_OR_RETURN();
@@ -741,10 +741,9 @@ void parse_instruction(Word &word, const char *&line_ptr,
                         ERROR = ERR_ASM_EXPECTED_OPERAND;
                         return;
                     }
-                    const SignExplicitWord immediate = token.value.integer;
+                    const InitialSignWord immediate = token.value.integer;
                     // 8 bits -- always positive
-                    // TODO(refactor): A redundant check happens here. Maybe
-                    //     this could be avoided ?
+                    // This incurs a redundant sign check, this is fine
                     expect_integer_fits_size(immediate, 8);
                     OK_OR_RETURN();
                     trap_vector = static_cast<TrapVector>(immediate.value);
@@ -795,7 +794,7 @@ void expect_token_is_kind(const Token &token, const enum TokenKind kind) {
     }
 }
 
-void expect_integer_fits_size(SignExplicitWord integer, size_t size_bits) {
+void expect_integer_fits_size(InitialSignWord integer, size_t size_bits) {
     if (!does_integer_fit_size(integer, size_bits)) {
         fprintf(stderr, "Immediate too large\n");
         ERROR = ERR_ASM_IMMEDIATE_TOO_LARGE;
@@ -889,7 +888,7 @@ char escape_character(const char ch) {
     }
 }
 
-bool does_integer_fit_size(const SignExplicitWord integer,
+bool does_integer_fit_size(const InitialSignWord integer,
                            const uint8_t size_bits) {
     // TODO(rewrite): There has to be a better way to do this...
     if (integer.is_signed) {
