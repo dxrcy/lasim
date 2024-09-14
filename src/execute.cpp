@@ -604,19 +604,41 @@ static char *halfbyte_string(const Word word) {
 
 // TODO(refactor): Rename, this is no longer just used for debugging lasim
 void _print_registers() {
+    const int width = 27;
+    const char *const box_h = "─";
+    const char *const box_v = "│";
+    const char *const box_tl = "╭";
+    const char *const box_tr = "╮";
+    const char *const box_bl = "╰";
+    const char *const box_br = "╯";
+
     print_on_new_line();
-    printf("--------------------------\n");
-    printf("    PC  0x%04hx\n", registers.program_counter);
-    printf("    N=%x  Z=%x  P=%x\n",
+
+    printf("  %s", box_tl);
+    for (size_t i = 0; i < width; ++i) printf("%s", box_h);
+    printf("%s\n", box_tr);
+
+    printf("  %s ", box_v);
+    printf("pc: 0x%04hx        cc: %x%x%x", registers.program_counter,
            (registers.condition >> 2),        // Negative
            (registers.condition >> 1) & 0b1,  // Zero
            (registers.condition) & 0b1);      // Positive
-    printf("..........................\n");
+    printf(" %s\n", box_v);
+
+    printf("  %s ", box_v);
+    printf("       HEX    UINT    INT");
+    printf(" %s\n", box_v);
+
     for (int reg = 0; reg < GP_REGISTER_COUNT; ++reg) {
         const Word value = registers.general_purpose[reg];
-        printf("    R%d  0x%04hx  %3d\n", reg, value, value);
+        printf("  %s ", box_v);
+        printf("r%d  0x%04hx  %6hd  %5hu", reg, value, value, value);
+        printf(" %s\n", box_v);
     }
-    printf("--------------------------\n");
+
+    printf("  %s", box_bl);
+    for (size_t i = 0; i < width; ++i) printf("%s", box_h);
+    printf("%s\n", box_br);
 }
 
 #endif
