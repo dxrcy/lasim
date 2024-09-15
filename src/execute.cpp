@@ -23,13 +23,14 @@
 
 // TODO(refactor): Re-order functions
 
-void execute(const char *const obj_filename);
-void execute_next_instrution(bool &do_halt);
-void execute_trap_instruction(const Word instr, bool &do_halt);
+void execute(const char *const obj_filename, Error &error);
+void execute_next_instrution(bool &do_halt, Error &error);
+void execute_trap_instruction(const Word instr, bool &do_halt, Error &error);
 
-void read_obj_filename_to_memory(const char *const obj_filename);
+void read_obj_filename_to_memory(const char *const obj_filename, Error &error);
 
-Word &memory_checked(Word addr);
+Word &memory_checked(Word addr, Error &error);
+
 SignedWord sign_extend(SignedWord value, const size_t size);
 void set_condition_codes(const Word result);
 void print_char(char ch);
@@ -37,9 +38,9 @@ void print_on_new_line(void);
 static char *halfbyte_string(const Word word);
 void print_registers(void);
 
-void execute(const char *const obj_filename) {
-    read_obj_filename_to_memory(obj_filename);
-    OK_OR_RETURN();
+void execute(const char *const obj_filename, Error &error) {
+    read_obj_filename_to_memory(obj_filename, error);
+    OK_OR_RETURN(error);
 
     // GP and condition registers are already initialized to 0
     registers.program_counter = memory_file_bounds.start;
@@ -47,25 +48,21 @@ void execute(const char *const obj_filename) {
     // Loop until `true` is returned, indicating a HALT (TRAP 0x25)
     bool do_halt = false;
     while (!do_halt) {
-        execute_next_instrution(do_halt);
-        OK_OR_RETURN();
+        execute_next_instrution(do_halt, error);
+        OK_OR_RETURN(error);
     }
 
-    if (!stdout_on_new_line) {
+    if (!stdout_on_new_line)
         printf("\n");
-    }
 }
 
 // `true` return value indicates that program should end
-void execute_next_instrution(bool &do_halt) {
-    memory_checked(registers.program_counter);
-    OK_OR_RETURN();
+void execute_next_instrution(bool &do_halt, Error &error) {
+    memory_checked(registers.program_counter, error);
+    OK_OR_RETURN(error);
 
     const Word instr = memory[registers.program_counter];
     ++registers.program_counter;
-
-    // printf("INSTR at 0x%04x: 0x%04x  %016b\n", registers.program_counter - 1,
-    //        instr, instr);
 
     // May be invalid enum variant
     // Handled in default switch branch
@@ -90,7 +87,7 @@ void execute_next_instrution(bool &do_halt) {
                 if (padding != 0b00) {
                     fprintf(stderr,
                             "Expected padding 0b00 for ADD instruction\n");
-                    ERROR = ERR_MALFORMED_PADDING;
+                    SET_ERROR(error, EXECUTE);
                     return;
                 }
                 const Register src_reg_b = bits_0_2(instr);
@@ -102,12 +99,7 @@ void execute_next_instrution(bool &do_halt) {
 
             const Word result = static_cast<Word>(value_a + value_b);
 
-            // printf("\n>ADD R%d = (R%d) 0x%04hx + 0x%04hx = 0x%04hx\n",
-            // dest_reg, src_reg_a, value_a, value_b, result);
-
             registers.general_purpose[dest_reg] = result;
-
-            /* _dbg_print_registers(); */
 
             set_condition_codes(result);
         }; break;
@@ -126,7 +118,7 @@ void execute_next_instrution(bool &do_halt) {
                 if (padding != 0b00) {
                     fprintf(stderr,
                             "Expected padding 0b00 for AND instruction\n");
-                    ERROR = ERR_MALFORMED_PADDING;
+                    SET_ERROR(error, EXECUTE);
                     return;
                 }
                 const Register src_reg_b = bits_0_2(instr);
@@ -137,13 +129,7 @@ void execute_next_instrution(bool &do_halt) {
 
             const Word result = value_a & value_b;
 
-            /* printf(">AND R%d = (R%d) 0x%04hx & 0x%04hx = 0x%04hx\n",
-             * dest_reg, */
-            /*        src_reg_a, value_a, value_b, result); */
-
             registers.general_purpose[dest_reg] = result;
-
-            /* dbg_print_registers(); */
 
             set_condition_codes(result);
         }; break;
@@ -158,16 +144,12 @@ void execute_next_instrution(bool &do_halt) {
             if (padding != BITMASK_LOW_5) {
                 fprintf(stderr,
                         "Expected padding 0x11111 for NOT instruction\n");
-                ERROR = ERR_MALFORMED_PADDING;
+                SET_ERROR(error, EXECUTE);
                 return;
             }
 
-            /* printf(">NOT R%d = NOT R%d\n", dest_reg, src_reg1); */
-
             const Word result = ~registers.general_purpose[src_reg];
             registers.general_purpose[dest_reg] = result;
-
-            /* dbg_print_registers(); */
 
             set_condition_codes(result);
         }; break;
@@ -175,20 +157,11 @@ void execute_next_instrution(bool &do_halt) {
         // BRcc
         case Opcode::BR: {
             // Skip special NOP case
-            if (instr == 0x0000) {
+            if (instr == 0x0000)
                 break;
-            }
 
-            /* printf("0x%04x\t0b%016b\n", instr, instr); */
             const ConditionCode condition = bits_9_11(instr);
             const SignedWord offset = low_9_bits_signed(instr);
-
-            /* printf("BR: %03b & %03b = %03b -> %b\n", condition, */
-            /*        registers.condition, condition & registers.condition, */
-            /*        (condition & registers.condition) != 0b000); */
-            /* printf("PCOffset: 0x%04x  %d\n", offset, offset); */
-            /*  */
-            /* _dbg_print_registers(); */
 
             // If any bits of the condition codes match
             // Instruction `BR` is equivalent to `BRnzp`, but 0b000 is checked
@@ -196,7 +169,6 @@ void execute_next_instrution(bool &do_halt) {
             if (condition == 0b000 ||
                 (condition & registers.condition) != 0b000) {
                 registers.program_counter += offset;
-                /* printf("branched to 0x%04x\n", registers.program_counter); */
             }
         }; break;
 
@@ -207,7 +179,7 @@ void execute_next_instrution(bool &do_halt) {
             if (padding_1 != 0b000) {
                 fprintf(stderr,
                         "Expected padding 0b000 for JMP/RET instruction\n");
-                ERROR = ERR_MALFORMED_PADDING;
+                SET_ERROR(error, EXECUTE);
                 return;
             }
             // 6 bits padding
@@ -216,7 +188,7 @@ void execute_next_instrution(bool &do_halt) {
             if (padding_2 != 0b000000) {
                 fprintf(stderr,
                         "Expected padding 0b000000 for JMP/RET instruction\n");
-                ERROR = ERR_MALFORMED_PADDING;
+                SET_ERROR(error, EXECUTE);
                 return;
             }
             const Register base_reg = bits_6_8(instr);
@@ -233,7 +205,6 @@ void execute_next_instrution(bool &do_halt) {
             if (is_offset) {
                 // JSR
                 const SignedWord offset = low_11_bits_signed(instr);
-                /* printf("JSR: PCOffset = 0x%04x\n", pc_offset); */
                 registers.program_counter += offset;
             } else {
                 // JSRR
@@ -242,12 +213,11 @@ void execute_next_instrution(bool &do_halt) {
                 if (padding != 0b00) {
                     fprintf(stderr,
                             "Expected padding 0b00 for JSRR instruction\n");
-                    ERROR = ERR_MALFORMED_PADDING;
+                    SET_ERROR(error, EXECUTE);
                     return;
                 }
                 const Register base_reg = bits_6_8(instr);
                 const Word base = registers.general_purpose[base_reg];
-                /* printf("JSRR: R%x = 0x%04x\n", base_reg, base); */
                 registers.program_counter = base;
             }
         }; break;
@@ -258,23 +228,21 @@ void execute_next_instrution(bool &do_halt) {
             const SignedWord offset = low_9_bits_signed(instr);
 
             const Word value =
-                memory_checked(registers.program_counter + offset);
-            OK_OR_RETURN();
+                memory_checked(registers.program_counter + offset, error);
+            OK_OR_RETURN(error);
 
             registers.general_purpose[dest_reg] = value;
             set_condition_codes(value);
-            /* dbg_print_registers(); */
         }; break;
 
         // ST
         case Opcode::ST: {
-            /* printf("STORE\n"); */
             const Register src_reg = bits_9_11(instr);
             const SignedWord offset = low_9_bits_signed(instr);
             const Word value = registers.general_purpose[src_reg];
 
-            memory_checked(registers.program_counter + offset) = value;
-            OK_OR_RETURN();
+            memory_checked(registers.program_counter + offset, error) = value;
+            OK_OR_RETURN(error);
         }; break;
 
         // LDR*
@@ -282,10 +250,11 @@ void execute_next_instrution(bool &do_halt) {
             const Register dest_reg = bits_9_11(instr);
             const Register base_reg = bits_6_8(instr);
             const SignedWord offset = low_6_bits_signed(instr);
+            // TODO(correctness): I think this being unsigned is correct...
             const Word base = registers.general_purpose[base_reg];
 
-            const Word value = memory_checked(base + offset);
-            OK_OR_RETURN();
+            const Word value = memory_checked(base + offset, error);
+            OK_OR_RETURN(error);
 
             registers.general_purpose[dest_reg] = value;
             set_condition_codes(value);
@@ -299,8 +268,8 @@ void execute_next_instrution(bool &do_halt) {
             const Word value = registers.general_purpose[src_reg];
             const Word base = registers.general_purpose[base_reg];
 
-            memory_checked(base + offset) = value;
-            OK_OR_RETURN();
+            memory_checked(base + offset, error) = value;
+            OK_OR_RETURN(error);
         }; break;
 
         // LDI+
@@ -309,10 +278,10 @@ void execute_next_instrution(bool &do_halt) {
             const SignedWord offset = low_9_bits_signed(instr);
 
             const Word pointer =
-                memory_checked(registers.program_counter + offset);
-            OK_OR_RETURN();
-            const Word value = memory_checked(pointer);
-            OK_OR_RETURN();
+                memory_checked(registers.program_counter + offset, error);
+            OK_OR_RETURN(error);
+            const Word value = memory_checked(pointer, error);
+            OK_OR_RETURN(error);
 
             registers.general_purpose[dest_reg] = value;
             set_condition_codes(value);
@@ -324,28 +293,24 @@ void execute_next_instrution(bool &do_halt) {
             const SignedWord offset = low_9_bits_signed(instr);
             const Word pointer = registers.general_purpose[src_reg];
 
-            const Word value = memory_checked(pointer);
-            OK_OR_RETURN();
-            memory_checked(registers.program_counter + offset) = value;
-            OK_OR_RETURN();
+            const Word value = memory_checked(pointer, error);
+            OK_OR_RETURN(error);
+            memory_checked(registers.program_counter + offset, error) = value;
+            OK_OR_RETURN(error);
         }; break;
 
         // LEA*
         case Opcode::LEA: {
             const Register dest_reg = bits_9_11(instr);
             const SignedWord offset = low_9_bits_signed(instr);
-            /* printf(">LEA REG%d, pc_offset:0x%04hx\n", reg, */
-            /*        pc_offset); */
-            /* print_registers(); */
             registers.general_purpose[dest_reg] =
                 registers.program_counter + offset;
-            /* dbg_print_registers(); */
         }; break;
 
         // TRAP
         case Opcode::TRAP: {
-            execute_trap_instruction(instr, do_halt);
-            OK_OR_RETURN();
+            execute_trap_instruction(instr, do_halt, error);
+            OK_OR_RETURN(error);
         }; break;
 
         // RTI (supervisor-only)
@@ -353,7 +318,7 @@ void execute_next_instrution(bool &do_halt) {
             fprintf(stderr,
                     "Invalid use of RTI opcode: 0b%s in non-supervisor mode\n",
                     halfbyte_string(static_cast<Word>(opcode)));
-            ERROR = ERR_UNAUTHORIZED_INSTR;
+            SET_ERROR(error, EXECUTE);
             return;
             break;
 
@@ -362,17 +327,17 @@ void execute_next_instrution(bool &do_halt) {
             fprintf(stderr, "Invalid opcode: 0b%s (0x%04x)\n",
                     halfbyte_string(static_cast<Word>(opcode)),
                     static_cast<Word>(opcode));
-            ERROR = ERR_MALFORMED_INSTR;
+            SET_ERROR(error, EXECUTE);
             return;
     }
 }
 
-void execute_trap_instruction(const Word instr, bool &do_halt) {
+void execute_trap_instruction(const Word instr, bool &do_halt, Error &error) {
     // 4 bits padding
     const uint8_t padding = bits_8_12(instr);
     if (padding != 0b0000) {
         fprintf(stderr, "Expected padding 0x00 for TRAP instruction\n");
-        ERROR = ERR_MALFORMED_PADDING;
+        SET_ERROR(error, EXECUTE);
         return;
     }
 
@@ -385,8 +350,8 @@ void execute_trap_instruction(const Word instr, bool &do_halt) {
             tty_nobuffer_noecho();                         // Disable echo
             const char input = getchar() & BITMASK_LOW_8;  // Zero high 8 bits
             tty_restore();
+            print_on_new_line();
             registers.general_purpose[0] = input;
-            /* dbg_print_registers(); */
         }; break;
 
         case TrapVector::IN: {
@@ -396,6 +361,7 @@ void execute_trap_instruction(const Word instr, bool &do_halt) {
             const char input = getchar() & BITMASK_LOW_8;  // Zero high 8 bits
             tty_restore();
             print_char(input);
+            print_on_new_line();
             registers.general_purpose[0] = input;
         }; break;
 
@@ -408,8 +374,8 @@ void execute_trap_instruction(const Word instr, bool &do_halt) {
         case TrapVector::PUTS: {
             print_on_new_line();
             for (Word i = registers.general_purpose[0];; ++i) {
-                const Word word = memory_checked(i);
-                OK_OR_RETURN();
+                const Word word = memory_checked(i, error);
+                OK_OR_RETURN(error);
 
                 if (word == 0x0000)
                     break;
@@ -423,8 +389,8 @@ void execute_trap_instruction(const Word instr, bool &do_halt) {
             // Loop over words, then split into bytes
             // This is done to ensure the memory check is sound
             for (Word i = registers.general_purpose[0];; ++i) {
-                const Word word = memory_checked(i);
-                OK_OR_RETURN();
+                const Word word = memory_checked(i, error);
+                OK_OR_RETURN(error);
 
                 const char high = static_cast<char>(bits_high(word));
                 const char low = static_cast<char>(bits_low(word));
@@ -449,23 +415,23 @@ void execute_trap_instruction(const Word instr, bool &do_halt) {
         default:
             fprintf(stderr, "Invalid trap vector 0x%02x\n",
                     static_cast<Word>(trap_vector));
-            ERROR = ERR_MALFORMED_TRAP;
+            SET_ERROR(error, EXECUTE);
             return;
     }
 }
 
-void read_obj_filename_to_memory(const char *const obj_filename) {
+void read_obj_filename_to_memory(const char *const obj_filename, Error &error) {
     size_t words_read;
 
     FILE *obj_file;
     if (obj_filename[0] == '\0') {
-        // Already checked for stdin-input in assemble+execute mode
+        // Already checked erroneous stdin-input in assemble+execute mode
         obj_file = stdin;
     } else {
         obj_file = fopen(obj_filename, "rb");
         if (obj_file == nullptr) {
             fprintf(stderr, "Could not open file %s\n", obj_filename);
-            ERROR = ERR_FILE_OPEN;
+            SET_ERROR(error, EXECUTE);
             return;
         }
     }
@@ -476,18 +442,16 @@ void read_obj_filename_to_memory(const char *const obj_filename) {
 
     if (ferror(obj_file)) {
         fprintf(stderr, "Could not read file %s\n", obj_filename);
-        ERROR = ERR_FILE_READ;
+        SET_ERROR(error, EXECUTE);
         return;
     }
     if (words_read < 1) {
         fprintf(stderr, "File is too short %s\n", obj_filename);
-        ERROR = ERR_FILE_TOO_SHORT;
+        SET_ERROR(error, EXECUTE);
         return;
     }
 
     Word start = swap_endian(origin);
-
-    /* printf("origin: 0x%04x\n", start); */
 
     char *const memory_at_file = reinterpret_cast<char *>(memory + start);
     const size_t max_file_bytes = (MEMORY_SIZE - start) * WORD_SIZE;
@@ -495,17 +459,17 @@ void read_obj_filename_to_memory(const char *const obj_filename) {
 
     if (ferror(obj_file)) {
         fprintf(stderr, "Could not read file %s\n", obj_filename);
-        ERROR = ERR_FILE_READ;
+        SET_ERROR(error, EXECUTE);
         return;
     }
     if (words_read < 1) {
         fprintf(stderr, "File is too short %s\n", obj_filename);
-        ERROR = ERR_FILE_TOO_SHORT;
+        SET_ERROR(error, EXECUTE);
         return;
     }
     if (!feof(obj_file)) {
         fprintf(stderr, "File is too long %s\n", obj_filename);
-        ERROR = ERR_FILE_TOO_LONG;
+        SET_ERROR(error, EXECUTE);
         return;
     }
 
@@ -518,8 +482,6 @@ void read_obj_filename_to_memory(const char *const obj_filename) {
     for (size_t i = end; i < MEMORY_SIZE; ++i)
         memory[i] = 0;
 
-    /* printf("words read: %ld\n", words_read); */
-
     memory_file_bounds.start = start;
     memory_file_bounds.end = end;
 
@@ -527,24 +489,24 @@ void read_obj_filename_to_memory(const char *const obj_filename) {
 }
 
 // Check memory address is within the 'allocated' file memory
-Word &memory_checked(Word addr) {
+Word &memory_checked(Word addr, Error &error) {
     if (addr < memory_file_bounds.start) {
         fprintf(stderr, "Cannot access non-user memory (before user memory)\n");
-        ERROR = ERR_ADDRESS_TOO_LOW;
+        SET_ERROR(error, EXECUTE);
     }
     if (addr > MEMORY_USER_MAX) {
         fprintf(stderr, "Cannot access non-user memory (after user memory)\n");
-        ERROR = ERR_ADDRESS_TOO_HIGH;
+        SET_ERROR(error, EXECUTE);
     }
     return memory[addr];
 }
 
 SignedWord sign_extend(SignedWord value, const size_t size) {
     // If previous-highest bit is set
-    if (value >> (size - 1) & 0b1) {
-        // Set all bits higher than previous sign bit to 1
+    // Set all bits higher than previous sign bit to 1
+    // TODO(refactor): This could be done without a branch lol
+    if (value >> (size - 1) & 0b1)
         return value | (~0U << size);
-    }
     return value;
 }
 
@@ -557,9 +519,8 @@ void set_condition_codes(const Word result) {
 }
 
 void print_char(char ch) {
-    if (ch == '\r') {
+    if (ch == '\r')
         ch = '\n';
-    }
     printf("%c", ch);
     stdout_on_new_line = ch == '\n';
 }

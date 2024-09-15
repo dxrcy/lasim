@@ -3,43 +3,61 @@
 #include "error.hpp"
 #include "execute.cpp"
 
-void try_run(Options &options);
+Error try_run(Options &options);
 
 int main(const int argc, const char *const *const argv) {
     Options options;
-    parse_options(options, argc, argv);
+    parse_options(options, argc, argv);  // Exits on error
 
-    // TODO(feat): Print out different message for each error
+    Error error = try_run(options);
 
-    try_run(options);
-    switch (ERROR) {
-        case ERR_OK:
+    switch (error) {
+        case Error::OK:
+            break;
+        case Error::ASSEMBLE:
+            fprintf(stderr, "Failed to assemble.\n");
             break;
         default:
-            printf("ERROR: 0x%04x\n", ERROR);
-            return ERROR;
+            break;
     }
 
-    return ERR_OK;
+    return static_cast<int>(error);
 }
 
-void try_run(Options &options) {
+Error try_run(Options &options) {
+    Error error = Error::OK;
+
+    const char *assemble_filename = nullptr;  // Assemble if !nullptr
+    const char *execute_filename = nullptr;   // Execute if !nullptr
+
     switch (options.mode) {
         case Mode::ASSEMBLE_ONLY:
-            assemble(options.in_file, options.out_file);
-            OK_OR_RETURN();
+            assemble_filename = options.in_filename;
             break;
-
         case Mode::EXECUTE_ONLY:
-            execute(options.in_file);
-            OK_OR_RETURN();
+            execute_filename = options.in_filename;
             break;
-
         case Mode::ASSEMBLE_EXECUTE:
-            assemble(options.in_file, options.out_file);
-            OK_OR_RETURN();
-            execute(options.out_file);
-            OK_OR_RETURN();
+            assemble_filename = options.in_filename;
+            execute_filename = options.out_filename;
             break;
     }
+
+    // Sanity check
+    if (assemble_filename == nullptr && execute_filename == nullptr)
+        UNREACHABLE();
+
+    if (assemble_filename != nullptr) {
+        assemble(assemble_filename, options.out_filename, error);
+        if (error != Error::OK)
+            return error;
+    }
+
+    if (execute_filename != nullptr) {
+        execute(execute_filename, error);
+        if (error != Error::OK)
+            return error;
+    }
+
+    return Error::OK;
 }

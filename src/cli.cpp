@@ -9,7 +9,7 @@
 
 #define PROGRAM_NAME "lasim"
 
-// A standard `FILENAME_MAX` of 4kB is a bit large.
+// A standard `FILENAME_MAX` of 4kiB is a bit large.
 // Perhaps it's for the best if this program does not allow such large filenames
 #undef FILENAME_MAX
 #define FILENAME_MAX 256  // Includes '\0'
@@ -26,8 +26,8 @@ enum class Mode {
 struct Options {
     Mode mode;
     // Empty string (file[0]=='\0') refers to stdin/stdout respectively
-    char in_file[FILENAME_MAX];
-    char out_file[FILENAME_MAX];
+    char in_filename[FILENAME_MAX];
+    char out_filename[FILENAME_MAX];
 };
 
 void parse_options(Options &options, const int argc,
@@ -51,7 +51,7 @@ void parse_options(Options &options, const int argc,
         if (arg[0] == '\0') {
             fprintf(stderr, "Argument cannot be empty\n");
             print_usage_hint();
-            exit(ERR_CLI);
+            exit(static_cast<int>(Error::CLI));
         }
 
         // `-` as input file for stdin
@@ -59,14 +59,14 @@ void parse_options(Options &options, const int argc,
             if (!in_file_set) {
                 in_file_set = true;
                 if (arg[0] == '-') {
-                    options.in_file[0] = '\0';
+                    options.in_filename[0] = '\0';
                 } else {
-                    strcpy_max_size(options.in_file, arg, FILENAME_MAX - 1);
+                    strcpy_max_size(options.in_filename, arg, FILENAME_MAX - 1);
                 }
             } else {
                 fprintf(stderr, "Unexpected argument: `%s`\n", arg);
                 print_usage_hint();
-                exit(ERR_CLI);
+                exit(static_cast<int>(Error::CLI));
             }
             continue;
         }
@@ -75,7 +75,7 @@ void parse_options(Options &options, const int argc,
         if (arg[0] == '\0') {
             fprintf(stderr, "Expected option name after `-`\n");
             print_usage_hint();
-            exit(ERR_CLI);
+            exit(static_cast<int>(Error::CLI));
         }
 
         for (char option; (option = arg[0]) != '\0'; ++arg) {
@@ -83,7 +83,7 @@ void parse_options(Options &options, const int argc,
                 // Help
                 case 'h': {
                     print_usage();
-                    exit(ERR_OK);
+                    exit(static_cast<int>(Error::OK));
                 }; break;
 
                 // Output file
@@ -92,7 +92,7 @@ void parse_options(Options &options, const int argc,
                     if (i + 1 >= argc) {
                         fprintf(stderr, "Expected argument for `-o`\n");
                         print_usage_hint();
-                        exit(ERR_CLI);
+                        exit(static_cast<int>(Error::CLI));
                     }
                     const char *next_arg = argv[++i];
                     // `-` as output filename for stdout
@@ -100,11 +100,11 @@ void parse_options(Options &options, const int argc,
                         if (next_arg[1] != '\0') {
                             fprintf(stderr, "Expected argument for `-o`\n");
                             print_usage_hint();
-                            exit(ERR_CLI);
+                            exit(static_cast<int>(Error::CLI));
                         }
-                        options.out_file[0] = '\0';
+                        options.out_filename[0] = '\0';
                     } else {
-                        strcpy_max_size(options.out_file, next_arg,
+                        strcpy_max_size(options.out_filename, next_arg,
                                         FILENAME_MAX - 1);
                     }
                 }; break;
@@ -119,7 +119,7 @@ void parse_options(Options &options, const int argc,
                             "Cannot specify `-a` with `-x`. Omit both options "
                             "for default (assemble+execute) mode.\n");
                         print_usage_hint();
-                        exit(ERR_CLI);
+                        exit(static_cast<int>(Error::CLI));
                     }
                 }; break;
 
@@ -133,14 +133,14 @@ void parse_options(Options &options, const int argc,
                             "Cannot specify `-x` with `-a`. Omit both options "
                             "for default (assemble+execute) mode.\n");
                         print_usage_hint();
-                        exit(ERR_CLI);
+                        exit(static_cast<int>(Error::CLI));
                     }
                 }; break;
 
                 default:
                     fprintf(stderr, "Invalid option: `-%c`\n", option);
                     print_usage_hint();
-                    exit(ERR_CLI);
+                    exit(static_cast<int>(Error::CLI));
                     break;
             }
         }
@@ -149,21 +149,21 @@ void parse_options(Options &options, const int argc,
     if (!in_file_set) {
         fprintf(stderr, "No input file specified\n");
         print_usage_hint();
-        exit(ERR_CLI);
+        exit(static_cast<int>(Error::CLI));
     }
 
     if (options.mode == Mode::EXECUTE_ONLY) {
         if (out_file_set) {
             fprintf(stderr, "Cannot specify output file with `-x`\n");
             print_usage_hint();
-            exit(ERR_CLI);
+            exit(static_cast<int>(Error::CLI));
         }
     } else if (!out_file_set) {
         // Mode is a|ax, but no output file was specified
         // Default output filename based on input filename
-        copy_filename_with_extension(options.out_file, options.in_file);
+        copy_filename_with_extension(options.out_filename, options.in_filename);
     } else if (options.mode == Mode::ASSEMBLE_EXECUTE &&
-               options.out_file[0] == '\0') {
+               options.out_filename[0] == '\0') {
         // Mode is ax, but output file was set as stdout (using `-`)
         // An intermediate file is required
         // Cannot use `-o -` in ax|x mode (x mode checked above)
@@ -171,7 +171,7 @@ void parse_options(Options &options, const int argc,
                 "Cannot write output to stdout in default "
                 "(assemble+execute) mode\n");
         print_usage_hint();
-        exit(ERR_CLI);
+        exit(static_cast<int>(Error::CLI));
     }
 }
 
@@ -200,11 +200,12 @@ void print_usage() {
             "");
 }
 
-// Better version of `strncpy`
+// Like `strncpy`, but ALWAYS null-terminate destination string
+// `max_length` does NOT include NUL byte
 void strcpy_max_size(char *const dest, const char *const src,
-                     const size_t max_size) {
+                     const size_t max_length) {
     size_t i = 0;
-    for (; i < max_size; ++i) {
+    for (; i < max_length; ++i) {
         if (src[i] == '\0')
             break;
         dest[i] = src[i];
