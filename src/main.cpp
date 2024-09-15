@@ -64,7 +64,7 @@ Error try_run(Options &options) {
             return error;
     }
 
-    if (execute_filename == nullptr) {
+    if (execute_filename != nullptr) {
         execute(execute_filename);
         // (Old error handling)
         if (ERROR != ERR_OK) {
