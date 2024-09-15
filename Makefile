@@ -4,16 +4,16 @@ CFLAGS=-Wall -Wpedantic -Wextra
 TARGET=lasim
 BINDIR = /usr/local/bin
 
-.PHONY: run watch test clean
+.PHONY: install run watch test clean
 
-main:
+$(TARGET): src
 	$(CC) $(CFLAGS) src/main.cpp -o $(TARGET)
 
 install:
 	sudo install -m 755 $(TARGET) $(BINDIR)
 
 name=hello_world
-run: main
+run: $(TARGET)
 	@./$(TARGET) examples/$(name).asm
 
 watch:
@@ -21,7 +21,7 @@ watch:
 	@reflex --decoration=none -r 'src/.*|.*\.asm' -s -- zsh -c \
 		'clear; sleep 0.2; $(MAKE) --no-print-directory run'
 
-test: main
+test: $(TARGET)
 	tests/assemble.sh
 
 clean:
