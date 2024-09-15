@@ -39,7 +39,7 @@ void print_registers(void);
 
 void execute(const char *const obj_filename) {
     read_obj_filename_to_memory(obj_filename);
-    OK_OR_RETURN();
+    OK_OR_RETURN_OLD();
 
     // GP and condition registers are already initialized to 0
     registers.program_counter = memory_file_bounds.start;
@@ -48,7 +48,7 @@ void execute(const char *const obj_filename) {
     bool do_halt = false;
     while (!do_halt) {
         execute_next_instrution(do_halt);
-        OK_OR_RETURN();
+        OK_OR_RETURN_OLD();
     }
 
     if (!stdout_on_new_line) {
@@ -59,7 +59,7 @@ void execute(const char *const obj_filename) {
 // `true` return value indicates that program should end
 void execute_next_instrution(bool &do_halt) {
     memory_checked(registers.program_counter);
-    OK_OR_RETURN();
+    OK_OR_RETURN_OLD();
 
     const Word instr = memory[registers.program_counter];
     ++registers.program_counter;
@@ -259,7 +259,7 @@ void execute_next_instrution(bool &do_halt) {
 
             const Word value =
                 memory_checked(registers.program_counter + offset);
-            OK_OR_RETURN();
+            OK_OR_RETURN_OLD();
 
             registers.general_purpose[dest_reg] = value;
             set_condition_codes(value);
@@ -274,7 +274,7 @@ void execute_next_instrution(bool &do_halt) {
             const Word value = registers.general_purpose[src_reg];
 
             memory_checked(registers.program_counter + offset) = value;
-            OK_OR_RETURN();
+            OK_OR_RETURN_OLD();
         }; break;
 
         // LDR*
@@ -285,7 +285,7 @@ void execute_next_instrution(bool &do_halt) {
             const Word base = registers.general_purpose[base_reg];
 
             const Word value = memory_checked(base + offset);
-            OK_OR_RETURN();
+            OK_OR_RETURN_OLD();
 
             registers.general_purpose[dest_reg] = value;
             set_condition_codes(value);
@@ -300,7 +300,7 @@ void execute_next_instrution(bool &do_halt) {
             const Word base = registers.general_purpose[base_reg];
 
             memory_checked(base + offset) = value;
-            OK_OR_RETURN();
+            OK_OR_RETURN_OLD();
         }; break;
 
         // LDI+
@@ -310,9 +310,9 @@ void execute_next_instrution(bool &do_halt) {
 
             const Word pointer =
                 memory_checked(registers.program_counter + offset);
-            OK_OR_RETURN();
+            OK_OR_RETURN_OLD();
             const Word value = memory_checked(pointer);
-            OK_OR_RETURN();
+            OK_OR_RETURN_OLD();
 
             registers.general_purpose[dest_reg] = value;
             set_condition_codes(value);
@@ -325,9 +325,9 @@ void execute_next_instrution(bool &do_halt) {
             const Word pointer = registers.general_purpose[src_reg];
 
             const Word value = memory_checked(pointer);
-            OK_OR_RETURN();
+            OK_OR_RETURN_OLD();
             memory_checked(registers.program_counter + offset) = value;
-            OK_OR_RETURN();
+            OK_OR_RETURN_OLD();
         }; break;
 
         // LEA*
@@ -345,7 +345,7 @@ void execute_next_instrution(bool &do_halt) {
         // TRAP
         case Opcode::TRAP: {
             execute_trap_instruction(instr, do_halt);
-            OK_OR_RETURN();
+            OK_OR_RETURN_OLD();
         }; break;
 
         // RTI (supervisor-only)
@@ -409,7 +409,7 @@ void execute_trap_instruction(const Word instr, bool &do_halt) {
             print_on_new_line();
             for (Word i = registers.general_purpose[0];; ++i) {
                 const Word word = memory_checked(i);
-                OK_OR_RETURN();
+                OK_OR_RETURN_OLD();
 
                 if (word == 0x0000)
                     break;
@@ -424,7 +424,7 @@ void execute_trap_instruction(const Word instr, bool &do_halt) {
             // This is done to ensure the memory check is sound
             for (Word i = registers.general_purpose[0];; ++i) {
                 const Word word = memory_checked(i);
-                OK_OR_RETURN();
+                OK_OR_RETURN_OLD();
 
                 const char high = static_cast<char>(bits_high(word));
                 const char low = static_cast<char>(bits_low(word));

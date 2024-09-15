@@ -12,18 +12,24 @@
         exit(ERR_UNREACHABLE);                                 \
     }
 
-#define OK_OR_RETURN()       \
+#define OK_OR_RETURN(error)     \
+    {                           \
+        if (error != Error::OK) \
+            return;             \
+    }
+
+// TODO(refactor): Replace all occurences with `OK_OR_RETURN`, or other method
+#define OK_OR_RETURN_OLD()   \
     {                        \
         if (ERROR != ERR_OK) \
             return;          \
     }
-#define OK_OR_RETURN2(error)     \
-    {                            \
-        if (error != Error2::OK) \
-            return;              \
-    }
 
-enum class Error2 {
+#define SET_ERROR(_error, _kind) \
+    if ((_error) == Error::OK)   \
+        (_error) = Error::_kind;
+
+enum class Error {
     OK,
     CLI,
     FILE,
@@ -31,8 +37,8 @@ enum class Error2 {
     EXECUTE,
 };
 
-// This should not be `enum class`
-typedef enum Error {
+// TODO(refactor): Replace all occurences with new `Error`
+typedef enum ErrorOld {
     // Ok
     ERR_OK = 0x00,
     // CLI arguments
@@ -75,6 +81,6 @@ typedef enum Error {
     // 'Meta'
     ERR_UNIMPLEMENTED = 0xf1,
     ERR_UNREACHABLE = 0xf2,
-} Error;
+} ErrorOld;
 
 #endif

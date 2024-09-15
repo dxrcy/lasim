@@ -21,10 +21,6 @@ using std::vector;
     if (_failed)                  \
         return;
 
-#define SET_ERROR(_error, _kind) \
-    if ((_error) == Error2::OK)  \
-        (_error) = Error2::_kind;
-
 // Must be a copied string, as `line` is overwritten
 typedef char LabelString[MAX_LABEL];
 
@@ -136,12 +132,12 @@ typedef struct Token {
 // TODO(refactor): Change some out-params to be return values
 
 void assemble(const char *const asm_filename, const char *const obj_filename,
-              Error2 &error);
+              Error &error);
 // Used by `assemble`
 void write_obj_file(const char *const filename, const vector<Word> &words,
-                    Error2 &error);
+                    Error &error);
 void assemble_file_to_words(const char *const filename, vector<Word> &words,
-                            Error2 &error);
+                            Error &error);
 
 // Used by `assemble_file_to_words`
 void parse_line(vector<Word> &words, const char *&line,
@@ -199,16 +195,16 @@ bool instruction_from_string_slice(Token &token,
 void _print_token(const Token &token);
 
 void assemble(const char *const asm_filename, const char *const obj_filename,
-              Error2 &error) {
+              Error &error) {
     vector<Word> words;
     assemble_file_to_words(asm_filename, words, error);
-    OK_OR_RETURN2(error);
+    OK_OR_RETURN(error);
     write_obj_file(obj_filename, words, error);
-    OK_OR_RETURN2(error);
+    OK_OR_RETURN(error);
 }
 
 void write_obj_file(const char *const filename, const vector<Word> &words,
-                    Error2 &error) {
+                    Error &error) {
     FILE *obj_file;
     if (filename[0] == '\0') {
         // Already checked for stdout-output in assemble+execute mode
@@ -237,7 +233,7 @@ void write_obj_file(const char *const filename, const vector<Word> &words,
 }
 
 void assemble_file_to_words(const char *const filename, vector<Word> &words,
-                            Error2 &error) {
+                            Error &error) {
     // File errors are fatal to assembly process, all other errors can be
     // 'ignored' to allow parsing to continue to following lines. However, if
     // any error occurs, the program will stop after parsing, and not write the
