@@ -29,10 +29,10 @@ typedef struct LabelDefinition {
     Word index;
 } LabelDefinition;
 
-// TODO(feat): Include line number for diagnostic
 typedef struct LabelReference {
     LabelString name;
     Word index;
+    int line_number;   // For diagnostic
     bool is_offset11;  // Used for `JSR` only
 } LabelReference;
 
@@ -143,13 +143,14 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words,
 // Used by `assemble_file_to_words`
 void parse_line(vector<Word> &words, const char *&line,
                 vector<LabelDefinition> &label_definitions,
-                vector<LabelReference> &label_references, bool &is_end,
-                bool &failed);
+                vector<LabelReference> &label_references, int line_number,
+                bool &is_end, bool &failed);
 void parse_directive(vector<Word> &words, const char *&line,
                      const Directive directive, bool &is_end, bool &failed);
 void parse_instruction(Word &word, const char *&line,
                        const Instruction &instruction, const size_t word_count,
-                       vector<LabelReference> &label_references, bool &failed);
+                       vector<LabelReference> &label_references,
+                       const int line_number, bool &failed);
 
 void print_invalid_operand(const char *const expected,
                            const TokenKind token_kind, Instruction instruction);
@@ -165,7 +166,7 @@ void expect_line_eol(const char *line, bool &failed);
 ConditionCode get_branch_condition_code(const Instruction instruction);
 void add_label_reference(vector<LabelReference> &references,
                          const StringSlice &name, const Word index,
-                         const bool is_offset11);
+                         const int line_number, const bool is_offset11);
 bool find_label_definition(const LabelString &target,
                            const vector<LabelDefinition> &definitions,
                            SignedWord &index);
@@ -273,11 +274,11 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words,
         }
 
         bool failed = false;
-        parse_line(words, line, label_definitions, label_references, is_end,
-                   failed);
+        parse_line(words, line, label_definitions, label_references,
+                   line_number, is_end, failed);
 
         if (failed) {
-            fprintf(stderr, "\t%s:%d\n", basename(filename), line_number);
+            fprintf(stderr, "\tLine %d\n", line_number);
             SET_ERROR(error, ASSEMBLE);
         }
     }
@@ -294,6 +295,7 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words,
         SignedWord index;
         if (!find_label_definition(ref.name, label_definitions, index)) {
             fprintf(stderr, "Undefined label '%s'\n", ref.name);
+            fprintf(stderr, "\tLine %d\n", ref.line_number);
             SET_ERROR(error, ASSEMBLE);
             continue;
         }
@@ -308,8 +310,8 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words,
 
 void parse_line(vector<Word> &words, const char *&line,
                 vector<LabelDefinition> &label_definitions,
-                vector<LabelReference> &label_references, bool &is_end,
-                bool &failed) {
+                vector<LabelReference> &label_references, int line_number,
+                bool &is_end, bool &failed) {
     Token token;
     take_next_token(line, token, failed);
     RETURN_IF_FAILED(failed);
@@ -393,7 +395,7 @@ void parse_line(vector<Word> &words, const char *&line,
     const Instruction instruction = token.value.instruction;
     Word word;
     parse_instruction(word, line, instruction, words.size(), label_references,
-                      failed);
+                      line_number, failed);
     RETURN_IF_FAILED(failed);
     expect_line_eol(line, failed);
     RETURN_IF_FAILED(failed);
@@ -476,7 +478,8 @@ void parse_directive(vector<Word> &words, const char *&line,
 
 void parse_instruction(Word &word, const char *&line,
                        const Instruction &instruction, const size_t word_count,
-                       vector<LabelReference> &label_references, bool &failed) {
+                       vector<LabelReference> &label_references,
+                       const int line_number, bool &failed) {
     Token token;
     Opcode opcode;
     Word operands = 0x0000;
@@ -565,7 +568,7 @@ void parse_instruction(Word &word, const char *&line,
                 operands |= token.value.integer.value & BITMASK_LOW_9;
             } else if (token.kind == TokenKind::LABEL) {
                 add_label_reference(label_references, token.value.label,
-                                    word_count, false);
+                                    line_number, word_count, false);
             } else {
                 print_invalid_operand("integer or label", token.kind,
                                       instruction);
@@ -606,7 +609,7 @@ void parse_instruction(Word &word, const char *&line,
                     operands |= token.value.integer.value & BITMASK_LOW_11;
                 } else if (token.kind == TokenKind::LABEL) {
                     add_label_reference(label_references, token.value.label,
-                                        word_count, false);
+                                        line_number, word_count, false);
                 } else {
                     fprintf(stderr, "Invalid operand\n");
                     failed = true;
@@ -659,7 +662,7 @@ void parse_instruction(Word &word, const char *&line,
                 operands |= token.value.integer.value & BITMASK_LOW_9;
             } else if (token.kind == TokenKind::LABEL) {
                 add_label_reference(label_references, token.value.label,
-                                    word_count, false);
+                                    word_count, line_number, false);
             } else {
                 fprintf(stderr, "Invalid operand\n");
                 failed = true;
@@ -717,7 +720,7 @@ void parse_instruction(Word &word, const char *&line,
                 operands |= token.value.integer.value & BITMASK_LOW_9;
             } else if (token.kind == TokenKind::LABEL) {
                 add_label_reference(label_references, token.value.label,
-                                    word_count, false);
+                                    word_count, line_number, false);
             } else {
                 fprintf(stderr, "Invalid operand\n");
                 failed = true;
@@ -878,12 +881,13 @@ ConditionCode get_branch_condition_code(const Instruction instruction) {
 
 void add_label_reference(vector<LabelReference> &references,
                          const StringSlice &name, const Word index,
-                         const bool is_offset11) {
+                         const int line_number, const bool is_offset11) {
     references.push_back({});
     LabelReference &ref = references.back();
     // Label length has already been checked
     copy_string_slice_to_string(ref.name, name);
     ref.index = index;
+    ref.line_number = line_number;
     ref.is_offset11 = is_offset11;
 }
 
