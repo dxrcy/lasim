@@ -937,6 +937,22 @@ bool does_integer_fit_size(const InitialSignWord integer,
     return integer.value >> (size_bits - 1) == 0;
 }
 
+void print_invalid_token(const char *const &line) {
+    fprintf(stderr, "Invalid token: `");
+    fprintf(stderr, "%c", line[0]);
+    // Print rest of instruction/label/integer if not starting with punctuation
+    if (isalnum(line[0])) {
+        for (size_t i = 1;; ++i) {
+            const char ch = line[i];
+            // Only these symbols can terminate a label
+            if (isspace(ch) || ch == ',' || ch == ':')
+                break;
+            fprintf(stderr, "%c", ch);
+        }
+    }
+    fprintf(stderr, "`\n");
+}
+
 void take_next_token(const char *&line, Token &token, bool &failed) {
     token.kind = TokenKind::EOL;
 
@@ -990,10 +1006,7 @@ void take_next_token(const char *&line, Token &token, bool &failed) {
 
     // Character cannot start an identifier -> invalid
     if (!is_char_valid_identifier_start(line[0])) {
-        // TODO(feat): Print the token, not the whole line
-        // TODO(refactor): Use function for this. It will be used by integer-
-        //     token parsing functions
-        fprintf(stderr, "Invalid token `%s`\n", line);
+        print_invalid_token(line);
         failed = true;
         return;
     }
@@ -1102,7 +1115,7 @@ void take_integer_hex(const char *&line, Token &token, bool &failed) {
         ++new_line;
         // Don't allow `-x-`
         if (is_signed) {
-            fprintf(stderr, "Invalid token\n");
+            print_invalid_token(line);
             failed = true;
             return;
         }
@@ -1128,7 +1141,7 @@ void take_integer_hex(const char *&line, Token &token, bool &failed) {
             // Checks if number is immediately followed by identifier character
             //     (like a suffix), which is invalid
             if (ch != '\0' && is_char_valid_in_identifier(ch)) {
-                fprintf(stderr, "Invalid token\n");
+                print_invalid_token(new_line);  // Start of token
                 failed = true;
                 return;
             }
@@ -1168,7 +1181,7 @@ void take_integer_decimal(const char *&line, Token &token, bool &failed) {
         ++new_line;
         // Don't allow `-#-`
         if (is_signed) {
-            fprintf(stderr, "Invalid token\n");
+            print_invalid_token(line);
             failed = true;
             return;
         }
@@ -1193,7 +1206,7 @@ void take_integer_decimal(const char *&line, Token &token, bool &failed) {
             // Checks if number is immediately followed by identifier character
             //     (like a suffix), which is invalid
             if (ch != '\0' && is_char_valid_in_identifier(ch)) {
-                fprintf(stderr, "Invalid token\n");
+                print_invalid_token(new_line);  // Start of token
                 failed = true;
                 return;
             }
