@@ -9,8 +9,6 @@ int main(const int argc, const char *const *const argv) {
     Options options;
     parse_options(options, argc, argv);
 
-    // TODO(feat): Print out different message for each error
-
     Error error = try_run(options);
 
     // (Old error handling)
