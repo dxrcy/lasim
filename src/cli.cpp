@@ -9,7 +9,7 @@
 
 #define PROGRAM_NAME "lasim"
 
-// A standard `FILENAME_MAX` of 4kB is a bit large.
+// A standard `FILENAME_MAX` of 4kiB is a bit large.
 // Perhaps it's for the best if this program does not allow such large filenames
 #undef FILENAME_MAX
 #define FILENAME_MAX 256  // Includes '\0'
@@ -200,11 +200,12 @@ void print_usage() {
             "");
 }
 
-// Better version of `strncpy`
+// Like `strncpy`, but ALWAYS null-terminate destination string
+// `max_length` does NOT include NUL byte
 void strcpy_max_size(char *const dest, const char *const src,
-                     const size_t max_size) {
+                     const size_t max_length) {
     size_t i = 0;
-    for (; i < max_size; ++i) {
+    for (; i < max_length; ++i) {
         if (src[i] == '\0')
             break;
         dest[i] = src[i];

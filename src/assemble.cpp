@@ -17,6 +17,10 @@ using std::vector;
 #define MAX_LINE 512  // Includes '\0'
 #define MAX_LABEL 32  // Includes '\0'
 
+#define RETURN_IF_FAILED(_failed) \
+    if (_failed)                  \
+        return;
+
 // Must be a copied string, as `line` is overwritten
 typedef char LabelString[MAX_LABEL];
 
@@ -94,7 +98,6 @@ static const char *const INSTRUCTION_NAMES[] = {
 // Value is stored unsigned if `!is_signed` (high bit does not imply negative)
 // Value is stored signed if `is_signed`, in 2's compliment, but stored in an
 //     unsigned type
-// TODO(refactor): Rename this type
 typedef struct InitialSignWord {
     Word value;
     bool is_signed;
@@ -109,8 +112,7 @@ enum class TokenKind {
     LABEL,
     COMMA,
     COLON,
-    // TODO(refactor): Rename to `EOF` ?
-    NONE,
+    EOL,
 };
 typedef struct Token {
     TokenKind kind;
@@ -121,8 +123,8 @@ typedef struct Token {
         // Sign depends on if `-` character is present in asm file
         InitialSignWord integer;
         // `StringSlice`s are only valid for lifetime of `line`
-        StringSlice string;
-        StringSlice label;  // Gets copied on push to a labels vector
+        StringSlice string;  // Gets copied on push to words vector
+        StringSlice label;   // Gets copied on push to a labels vector
     } value;
 } Token;
 
@@ -210,7 +212,7 @@ void write_obj_file(const char *const filename, const vector<Word> &words,
                     Error &error) {
     FILE *obj_file;
     if (filename[0] == '\0') {
-        // Already checked for stdout-output in assemble+execute mode
+        // Already checked erroneous stdout-output in assemble+execute mode
         obj_file = stdout;
     } else {
         obj_file = fopen(filename, "wb");
@@ -221,8 +223,6 @@ void write_obj_file(const char *const filename, const vector<Word> &words,
             return;
         }
     }
-
-    /* printf("Size: %lu words\n", words.size()); */
 
     for (size_t i = 0; i < words.size(); ++i) {
         const Word word = swap_endian(words[i]);
@@ -272,8 +272,6 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words,
             return;
         }
 
-        /* printf("<%s>\n", line_ptr); */
-
         bool failed = false;
         parse_line(words, line, label_definitions, label_references, is_end,
                    failed);
@@ -292,7 +290,6 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words,
     // Replace label references with PC offsets based on label definitions
     for (size_t i = 0; i < label_references.size(); ++i) {
         const LabelReference &ref = label_references[i];
-        /* printf("Resolving '%s' at 0x%04x\n", ref.name, ref.index); */
 
         SignedWord index;
         if (!find_label_definition(ref.name, label_definitions, index)) {
@@ -300,14 +297,9 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words,
             SET_ERROR(error, ASSEMBLE);
             continue;
         }
-        /* printf("Found definition at 0x%04lx\n", index); */
 
-        /* printf("0x%04x -> 0x%04x\n", ref.index, index); */
         const SignedWord pc_offset = index - ref.index - 1;
-        /* printf("PC offset: 0x%04lx\n", pc_offset); */
-
         const Word mask = (1U << (ref.is_offset11 ? 11 : 9)) - 1;
-
         words[ref.index] |= pc_offset & mask;
     }
 
@@ -322,15 +314,11 @@ void parse_line(vector<Word> &words, const char *&line,
     take_next_token(line, token, failed);
     RETURN_IF_FAILED(failed);
 
-    /* printf("----\n"); */
-    /* _print_token(token); */
-
     // Empty line (including line with only whitespace or a comment)
-    if (token.kind == TokenKind::NONE)
+    if (token.kind == TokenKind::EOL)
         return;
 
     if (words.size() == 0) {
-        /* _print_token(token); */
         if (token.kind != TokenKind::DIRECTIVE) {
             fprintf(stderr, "First line must be `.ORIG` directive\n");
             failed = true;
@@ -357,11 +345,6 @@ void parse_line(vector<Word> &words, const char *&line,
     if (token.kind == TokenKind::LABEL) {
         const StringSlice &name = token.value.label;
         for (size_t i = 0; i < label_definitions.size(); ++i) {
-            /* printf("-- <"); */
-            /* printf("%s", label_definitions[i].name); */
-            /* printf("> : <"); */
-            /* print_string_slice(stdout, name); */
-            /* printf(">\n"); */
             if (!strncmp(label_definitions[i].name, name.pointer,
                          name.length)) {
                 fprintf(stderr, "Multiple labels are defined with the name '");
@@ -388,21 +371,16 @@ void parse_line(vector<Word> &words, const char *&line,
         }
     }
 
-    /* _print_token(token); */
-
     if (token.kind == TokenKind::DIRECTIVE) {
         parse_directive(words, line, token.value.directive, is_end, failed);
         RETURN_IF_FAILED(failed);
         expect_line_eol(line, failed);
         RETURN_IF_FAILED(failed);
-        // TODO(correctness): Idk why this was here ??
-        /* take_next_token(line_ptr, token, failed); */
-        /* RETURN_IF_FAILED(failed); */
         return;  // Next line
     }
 
     // Line with only label
-    if (token.kind == TokenKind::NONE)
+    if (token.kind == TokenKind::EOL)
         return;
 
     if (token.kind != TokenKind::INSTRUCTION) {
@@ -413,15 +391,12 @@ void parse_line(vector<Word> &words, const char *&line,
     }
 
     const Instruction instruction = token.value.instruction;
-    /* _print_token(token); */
     Word word;
     parse_instruction(word, line, instruction, words.size(), label_references,
                       failed);
     RETURN_IF_FAILED(failed);
-    /* printf("%s\n", line_ptr); */
     expect_line_eol(line, failed);
     RETURN_IF_FAILED(failed);
-    /* OK_OR_RETURN2(); */
     words.push_back(word);
 }
 
@@ -446,7 +421,7 @@ void parse_directive(vector<Word> &words, const char *&line,
             expect_token_is_kind(token, TokenKind::INTEGER, failed);
             RETURN_IF_FAILED(failed);
             // Don't check integer size -- it should have been checked
-            //     to fit in a word when being
+            //     to fit in a word when token was parsed
             // Sign is ignored
             words.push_back(token.value.integer.value);
         }; break;
@@ -470,10 +445,8 @@ void parse_directive(vector<Word> &words, const char *&line,
         }; break;
 
         case Directive::STRINGZ: {
-            /* printf("%s\n", line_ptr); */
             take_next_token(line, token, failed);
             RETURN_IF_FAILED(failed);
-            /* _print_token(token); */
             if (token.kind != TokenKind::STRING) {
                 fprintf(stderr,
                         "String literal required after `.STRINGZ` directive\n");
@@ -730,7 +703,6 @@ void parse_instruction(Word &word, const char *&line,
 
             expect_next_token(line, token, failed);
             RETURN_IF_FAILED(failed);
-            /* _print_token(token); */
             expect_token_is_kind(token, TokenKind::REGISTER, failed);
             RETURN_IF_FAILED(failed);
             const Register dest_reg = token.value.register_;
@@ -738,7 +710,6 @@ void parse_instruction(Word &word, const char *&line,
 
             expect_next_token_after_comma(line, token, failed);
             RETURN_IF_FAILED(failed);
-            /* _print_token(token); */
             if (token.kind == TokenKind::INTEGER) {
                 // 9 bits
                 expect_integer_fits_size(token.value.integer, 9, failed);
@@ -834,7 +805,7 @@ void print_invalid_operand(const char *const expected,
 void expect_next_token(const char *&line, Token &token, bool &failed) {
     take_next_token(line, token, failed);
     RETURN_IF_FAILED(failed);
-    if (token.kind == TokenKind::NONE) {
+    if (token.kind == TokenKind::EOL) {
         fprintf(stderr, "Expected operand\n");
         failed = true;
     }
@@ -848,7 +819,7 @@ void expect_next_token_after_comma(const char *&line, Token &token,
         take_next_token(line, token, failed);
         RETURN_IF_FAILED(failed);
     }
-    if (token.kind == TokenKind::NONE) {
+    if (token.kind == TokenKind::EOL) {
         fprintf(stderr, "Expected operand\n");
         failed = true;
     }
@@ -876,7 +847,7 @@ void expect_line_eol(const char *line, bool &failed) {
     Token token;
     take_next_token(line, token, failed);
     RETURN_IF_FAILED(failed);
-    if (token.kind != TokenKind::NONE) {
+    if (token.kind != TokenKind::EOL) {
         fprintf(stderr, "Unexpected operand after instruction\n");
         failed = true;
     }
@@ -910,23 +881,10 @@ void add_label_reference(vector<LabelReference> &references,
                          const bool is_offset11) {
     references.push_back({});
     LabelReference &ref = references.back();
-    /* printf("\nStart:\n"); */
-    /* for (size_t i = 0; i < name.length; ++i) { */
-    /* printf("%ld\t", i); */
-    /* fflush(stdout); */
-    /* printf("%c\n", name.pointer[i]); */
-    /* ref.name[i] = 'i'; */
-    /* } */
-    /* printf("Done!\n"); */
-
     // Label length has already been checked
     copy_string_slice_to_string(ref.name, name);
     ref.index = index;
     ref.is_offset11 = is_offset11;
-
-    /* printf("label:<"); */
-    /* _print_string_slice(name); */
-    /* printf(">\n"); */
 }
 
 bool find_label_definition(const LabelString &target,
@@ -976,9 +934,7 @@ bool does_integer_fit_size(const InitialSignWord integer,
 }
 
 void take_next_token(const char *&line, Token &token, bool &failed) {
-    token.kind = TokenKind::NONE;
-
-    /* printf("-- <%s>\n", line); */
+    token.kind = TokenKind::EOL;
 
     // Ignore leading spaces
     while (isspace(line[0]))
@@ -986,10 +942,6 @@ void take_next_token(const char *&line, Token &token, bool &failed) {
     // Linebreak, EOF, or comment
     if (is_char_eol(line[0]))
         return;
-
-    /* printf("<<%s>>\n", line); */
-
-    /* printf("<%c> 0x%04hx\n", line[0], line[0]); */
 
     // Comma can appear between operands
     if (line[0] == ',') {
@@ -1007,7 +959,7 @@ void take_next_token(const char *&line, Token &token, bool &failed) {
     // String literal
     take_literal_string(line, token, failed);
     RETURN_IF_FAILED(failed);
-    if (token.kind != TokenKind::NONE)
+    if (token.kind != TokenKind::EOL)
         return;  // Tried to parse, but failed
 
     // Register
@@ -1017,19 +969,19 @@ void take_next_token(const char *&line, Token &token, bool &failed) {
     // Directive
     take_directive(line, token, failed);
     RETURN_IF_FAILED(failed);
-    if (token.kind != TokenKind::NONE)
+    if (token.kind != TokenKind::EOL)
         return;  // Tried to parse, but failed
 
     // Hex literal
     take_integer_hex(line, token, failed);
     RETURN_IF_FAILED(failed);
-    if (token.kind != TokenKind::NONE)
+    if (token.kind != TokenKind::EOL)
         return;  // Tried to parse, but failed
 
     // Decimal literal
     take_integer_decimal(line, token, failed);
     RETURN_IF_FAILED(failed);
-    if (token.kind != TokenKind::NONE)
+    if (token.kind != TokenKind::EOL)
         return;  // Tried to parse, but failed
 
     // Character cannot start an identifier -> invalid
@@ -1049,10 +1001,6 @@ void take_next_token(const char *&line, Token &token, bool &failed) {
     while (is_char_valid_in_identifier(tolower(line[0])))
         ++line;
     identifier.length = line - identifier.pointer;
-
-    /* printf("IDENT: <"); */
-    /* _print_string_slice(identifier); */
-    /* printf(">\n"); */
 
     // Sets kind and value, if is valid instruction
     if (!instruction_from_string_slice(token, identifier)) {
@@ -1161,9 +1109,8 @@ void take_integer_hex(const char *&line, Token &token, bool &failed) {
 
     // Not an integer
     // Continue to next token
-    if (parse_hex_digit(new_line[0]) < 0) {
+    if (parse_hex_digit(new_line[0]) < 0)
         return;
-    }
 
     line = new_line;  // Skip [x0-] which was just checked
     token.kind = TokenKind::INTEGER;
@@ -1228,9 +1175,8 @@ void take_integer_decimal(const char *&line, Token &token, bool &failed) {
 
     // Not an integer
     // Continue to next token
-    if (!isdigit(new_line[0])) {
+    if (!isdigit(new_line[0]))
         return;
-    }
 
     line = new_line;  // Skip [#0-] which was just checked
     token.kind = TokenKind::INTEGER;
@@ -1347,7 +1293,7 @@ static const char *token_kind_to_string(const TokenKind token_kind) {
             return "comma";
         case TokenKind::COLON:
             return "colon";
-        case TokenKind::NONE:
+        case TokenKind::EOL:
             return "end of line";
     }
     UNREACHABLE();
@@ -1392,7 +1338,7 @@ void _print_token(const Token &token) {
         case TokenKind::COLON:
             printf("Colon\n");
             break;
-        case TokenKind::NONE:
+        case TokenKind::EOL:
             printf("NONE!\n");
             break;
     }
