@@ -338,12 +338,12 @@ void parse_line(vector<Word> &words, const char *&line,
             failed = true;
             return;
         }
+        expect_line_eol(line, failed);
+        RETURN_IF_FAILED(failed);
         words.push_back(token.value.integer.value);
         return;
     }
 
-    // TODO(correctness): Parsing label before directive *might* have bad
-    //     effects, although I cannot think of any off the top of my head.
     if (token.kind == TokenKind::LABEL) {
         const StringSlice &name = token.value.label;
         for (size_t i = 0; i < label_definitions.size(); ++i) {
