@@ -1231,9 +1231,9 @@ void take_integer_decimal(const char *&line, Token &token, bool &failed) {
 int8_t parse_hex_digit(const char ch) {
     if (ch >= '0' && ch <= '9')
         return ch - '0';
-    if (ch >= 'A' && ch <= 'Z')
+    if (ch >= 'A' && ch <= 'F')
         return ch - 'A' + 10;
-    if (ch >= 'a' && ch <= 'z')
+    if (ch >= 'a' && ch <= 'f')
         return ch - 'a' + 10;
     return -1;
 }
