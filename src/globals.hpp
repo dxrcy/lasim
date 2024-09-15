@@ -3,7 +3,6 @@
 
 #include <cstdlib>  // exit
 
-#include "error.hpp"
 #include "types.hpp"
 
 static Word memory[MEMORY_SIZE];
