@@ -17,6 +17,19 @@
         if (ERROR != ERR_OK) \
             return;          \
     }
+#define OK_OR_RETURN2(error)     \
+    {                            \
+        if (error != Error2::OK) \
+            return;              \
+    }
+
+enum class Error2 {
+    OK,
+    CLI,
+    FILE,
+    ASSEMBLE,
+    EXECUTE,
+};
 
 // This should not be `enum class`
 typedef enum Error {

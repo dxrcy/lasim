@@ -26,8 +26,8 @@ enum class Mode {
 struct Options {
     Mode mode;
     // Empty string (file[0]=='\0') refers to stdin/stdout respectively
-    char in_file[FILENAME_MAX];
-    char out_file[FILENAME_MAX];
+    char in_filename[FILENAME_MAX];
+    char out_filename[FILENAME_MAX];
 };
 
 void parse_options(Options &options, const int argc,
@@ -59,9 +59,9 @@ void parse_options(Options &options, const int argc,
             if (!in_file_set) {
                 in_file_set = true;
                 if (arg[0] == '-') {
-                    options.in_file[0] = '\0';
+                    options.in_filename[0] = '\0';
                 } else {
-                    strcpy_max_size(options.in_file, arg, FILENAME_MAX - 1);
+                    strcpy_max_size(options.in_filename, arg, FILENAME_MAX - 1);
                 }
             } else {
                 fprintf(stderr, "Unexpected argument: `%s`\n", arg);
@@ -102,9 +102,9 @@ void parse_options(Options &options, const int argc,
                             print_usage_hint();
                             exit(ERR_CLI);
                         }
-                        options.out_file[0] = '\0';
+                        options.out_filename[0] = '\0';
                     } else {
-                        strcpy_max_size(options.out_file, next_arg,
+                        strcpy_max_size(options.out_filename, next_arg,
                                         FILENAME_MAX - 1);
                     }
                 }; break;
@@ -161,9 +161,9 @@ void parse_options(Options &options, const int argc,
     } else if (!out_file_set) {
         // Mode is a|ax, but no output file was specified
         // Default output filename based on input filename
-        copy_filename_with_extension(options.out_file, options.in_file);
+        copy_filename_with_extension(options.out_filename, options.in_filename);
     } else if (options.mode == Mode::ASSEMBLE_EXECUTE &&
-               options.out_file[0] == '\0') {
+               options.out_filename[0] == '\0') {
         // Mode is ax, but output file was set as stdout (using `-`)
         // An intermediate file is required
         // Cannot use `-o -` in ax|x mode (x mode checked above)

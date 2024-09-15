@@ -8,14 +8,22 @@
 
 #include "bitmasks.hpp"
 #include "error.hpp"
-#include "globals.hpp"
 #include "slice.cpp"
+#include "types.hpp"
 
 using std::vector;
 
 // This can be large as it is never aggregated
 #define MAX_LINE 512  // Includes '\0'
 #define MAX_LABEL 32  // Includes '\0'
+
+#define RETURN_IF_FAILED(_failed) \
+    if (_failed)                  \
+        return;
+
+#define SET_ERROR(_error, _kind) \
+    if ((_error) == Error2::OK)  \
+        (_error) = Error2::_kind;
 
 // Must be a copied string, as `line` is overwritten
 typedef char LabelString[MAX_LABEL];
@@ -125,23 +133,34 @@ typedef struct Token {
 
 // TODO(chore): Document functions
 // TODO(chore): Move all function doc comments to prototypes ?
+// TODO(refactor): Change some out-params to be return values
 
-void assemble(const char *const asm_filename, const char *const obj_filename);
+void assemble(const char *const asm_filename, const char *const obj_filename,
+              Error2 &error);
 // Used by `assemble`
-void write_obj_file(const char *const filename, const vector<Word> &words);
-void assemble_file_to_words(const char *const filename, vector<Word> &words);
+void write_obj_file(const char *const filename, const vector<Word> &words,
+                    Error2 &error);
+void assemble_file_to_words(const char *const filename, vector<Word> &words,
+                            Error2 &error);
 
 // Used by `assemble_file_to_words`
-void parse_directive(vector<Word> &words, const char *&line_ptr,
-                     const Directive directive, bool &is_end);
-void parse_instruction(Word &word, const char *&line_ptr,
+void parse_line(vector<Word> &words, const char *&line,
+                vector<LabelDefinition> &label_definitions,
+                vector<LabelReference> &label_references, bool &is_end,
+                bool &failed);
+void parse_directive(vector<Word> &words, const char *&line,
+                     const Directive directive, bool &is_end, bool &failed);
+void parse_instruction(Word &word, const char *&line,
                        const Instruction &instruction, const size_t word_count,
-                       vector<LabelReference> &label_references);
-void expect_next_token(const char *&line_ptr, Token &token);
-void expect_next_token_after_comma(const char *&line_ptr, Token &token);
-void expect_token_is_kind(const Token &token, const enum TokenKind kind);
-void expect_integer_fits_size(InitialSignWord integer, size_t size_bits);
-void expect_line_eol(const char *line_ptr);
+                       vector<LabelReference> &label_references, bool &failed);
+void expect_next_token(const char *&line, Token &token, bool &failed);
+void expect_next_token_after_comma(const char *&line, Token &token,
+                                   bool &failed);
+void expect_token_is_kind(const Token &token, const enum TokenKind kind,
+                          bool &failed);
+void expect_integer_fits_size(InitialSignWord integer, size_t size_bits,
+                              bool &failed);
+void expect_line_eol(const char *line, bool &failed);
 
 ConditionCode get_branch_condition_code(const Instruction instruction);
 void add_label_reference(vector<LabelReference> &references,
@@ -150,18 +169,18 @@ void add_label_reference(vector<LabelReference> &references,
 bool find_label_definition(const LabelString &target,
                            const vector<LabelDefinition> &definitions,
                            SignedWord &index);
-char escape_character(const char ch);
+char escape_character(const char ch, bool &failed);
 bool does_integer_fit_size(const InitialSignWord integer,
                            const uint8_t size_bits);
 
 // Note: 'take' here means increment the line pointer and return a token
-void take_next_token(const char *&line, Token &token);
+void take_next_token(const char *&line, Token &token, bool &failed);
 // Used by `take_next_token`
-void take_literal_string(const char *&line, Token &token);
-void take_directive(const char *&line, Token &token);
+void take_literal_string(const char *&line, Token &token, bool &failed);
+void take_directive(const char *&line, Token &token, bool &failed);
 void take_register(const char *&line, Token &token);
-void take_integer_hex(const char *&line, Token &token);
-void take_integer_decimal(const char *&line, Token &token);
+void take_integer_hex(const char *&line, Token &token, bool &failed);
+void take_integer_decimal(const char *&line, Token &token, bool &failed);
 int8_t parse_hex_digit(const char ch);
 bool append_decimal_digit_checked(Word &number, uint8_t digit,
                                   bool is_negative);
@@ -179,15 +198,17 @@ bool instruction_from_string_slice(Token &token,
 // Debugging
 void _print_token(const Token &token);
 
-void assemble(const char *const asm_filename, const char *const obj_filename) {
+void assemble(const char *const asm_filename, const char *const obj_filename,
+              Error2 &error) {
     vector<Word> words;
-    assemble_file_to_words(asm_filename, words);
-    OK_OR_RETURN();
-    write_obj_file(obj_filename, words);
-    OK_OR_RETURN();
+    assemble_file_to_words(asm_filename, words, error);
+    OK_OR_RETURN2(error);
+    write_obj_file(obj_filename, words, error);
+    OK_OR_RETURN2(error);
 }
 
-void write_obj_file(const char *const filename, const vector<Word> &words) {
+void write_obj_file(const char *const filename, const vector<Word> &words,
+                    Error2 &error) {
     FILE *obj_file;
     if (filename[0] == '\0') {
         // Already checked for stdout-output in assemble+execute mode
@@ -196,7 +217,7 @@ void write_obj_file(const char *const filename, const vector<Word> &words) {
         obj_file = fopen(filename, "wb");
         if (obj_file == nullptr) {
             fprintf(stderr, "Could not open file %s\n", filename);
-            ERROR = ERR_FILE_OPEN;
+            SET_ERROR(error, FILE);
             return;
         }
     }
@@ -207,7 +228,7 @@ void write_obj_file(const char *const filename, const vector<Word> &words) {
         const Word word = swap_endian(words[i]);
         fwrite(&word, sizeof(Word), 1, obj_file);
         if (ferror(obj_file)) {
-            ERROR = ERR_FILE_WRITE;
+            SET_ERROR(error, FILE);
             return;
         }
     }
@@ -215,7 +236,13 @@ void write_obj_file(const char *const filename, const vector<Word> &words) {
     fclose(obj_file);
 }
 
-void assemble_file_to_words(const char *const filename, vector<Word> &words) {
+void assemble_file_to_words(const char *const filename, vector<Word> &words,
+                            Error2 &error) {
+    // File errors are fatal to assembly process, all other errors can be
+    // 'ignored' to allow parsing to continue to following lines. However, if
+    // any error occurs, the program will stop after parsing, and not write the
+    // output file (or execute, in ax mode).
+
     FILE *asm_file;
     if (filename[0] == '\0') {
         asm_file = stdin;
@@ -223,7 +250,7 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words) {
         asm_file = fopen(filename, "r");
         if (asm_file == nullptr) {
             fprintf(stderr, "Could not open file %s\n", filename);
-            ERROR = ERR_FILE_OPEN;
+            SET_ERROR(error, FILE);
             return;
         }
     }
@@ -234,121 +261,31 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words) {
     bool is_end = false;  // Set to `true` by `.END`
 
     char line_buf[MAX_LINE];  // Buffer gets overwritten
-    while (!is_end) {
-        const char *line_ptr = line_buf;  // Pointer address is mutated
+    for (int line_number = 1; !is_end; ++line_number) {
+        const char *line = line_buf;  // Pointer address is mutated
 
         if (fgets(line_buf, MAX_LINE, asm_file) == NULL)
             break;
         if (ferror(asm_file)) {
-            ERROR = ERR_FILE_READ;
+            SET_ERROR(error, FILE);
             return;
         }
 
         /* printf("<%s>\n", line_ptr); */
 
-        Token token;
-        take_next_token(line_ptr, token);
-        OK_OR_RETURN();
+        bool failed = false;
+        parse_line(words, line, label_definitions, label_references, is_end,
+                   failed);
 
-        /* printf("----\n"); */
-        /* _print_token(token); */
-
-        // Empty line
-        if (token.kind == TokenKind::NONE)
-            continue;
-
-        if (words.size() == 0) {
-            /* _print_token(token); */
-            if (token.kind != TokenKind::DIRECTIVE) {
-                fprintf(stderr, "First line must be `.ORIG`\n");
-                ERROR = ERR_ASM_EXPECTED_ORIG;
-                return;
-            }
-            take_next_token(line_ptr, token);
-            OK_OR_RETURN();
-            // Must be unsigned
-            if (token.kind != TokenKind::INTEGER ||
-                token.value.integer.is_signed) {
-                fprintf(stderr,
-                        "Positive integer literal required after `.ORIG`\n");
-                ERROR = ERR_ASM_EXPECTED_OPERAND;
-                return;
-            }
-            words.push_back(token.value.integer.value);
-            continue;
+        if (failed) {
+            fprintf(stderr, "\t%s:%d\n", basename(filename), line_number);
+            SET_ERROR(error, ASSEMBLE);
         }
-
-        // TODO(correctness): Parsing label before directive *might* have bad
-        //     effects, although I cannot think of any off the top of my head.
-        if (token.kind == TokenKind::LABEL) {
-            const StringSlice &name = token.value.label;
-            for (size_t i = 0; i < label_definitions.size(); ++i) {
-                /* printf("-- <"); */
-                /* printf("%s", label_definitions[i].name); */
-                /* printf("> : <"); */
-                /* print_string_slice(stdout, name); */
-                /* printf(">\n"); */
-                if (!strncmp(label_definitions[i].name, name.pointer,
-                             name.length)) {
-                    fprintf(stderr, "Duplicate label '");
-                    print_string_slice(stderr, name);
-                    fprintf(stderr, "'\n");
-                    ERROR = ERR_ASM_DUPLICATE_LABEL;
-                    return;
-                }
-            }
-
-            label_definitions.push_back({});
-            LabelDefinition &def = label_definitions.back();
-            // Label length has already been checked
-            copy_string_slice_to_string(def.name, name);
-            def.index = words.size();
-
-            // Continue to instruction/directive after label
-            take_next_token(line_ptr, token);
-            OK_OR_RETURN();
-            // Skip if colon following label name
-            if (token.kind == TokenKind::COLON) {
-                take_next_token(line_ptr, token);
-                OK_OR_RETURN();
-            }
-        }
-
-        /* _print_token(token); */
-
-        if (token.kind == TokenKind::DIRECTIVE) {
-            parse_directive(words, line_ptr, token.value.directive, is_end);
-            expect_line_eol(line_ptr);
-            OK_OR_RETURN();
-            continue;
-        }
-
-        // Line with only label
-        if (token.kind == TokenKind::NONE)
-            continue;
-
-        if (token.kind != TokenKind::INSTRUCTION) {
-            /* _print_token(token); */
-            fprintf(stderr, "Expected instruction or end of line\n");
-            ERROR = ERR_ASM_EXPECTED_INSTRUCTION;
-            return;
-        }
-
-        const Instruction instruction = token.value.instruction;
-        /* _print_token(token); */
-        Word word;
-        parse_instruction(word, line_ptr, instruction, words.size(),
-                          label_references);
-        /* printf("%s\n", line_ptr); */
-        expect_line_eol(line_ptr);
-        OK_OR_RETURN();
-        words.push_back(word);
     }
 
     if (!is_end) {
         fprintf(stderr, "Missing `.END` directive\n");
-        ERROR = ERR_ASM_EXPECTED_END;
-        return;
+        SET_ERROR(error, ASSEMBLE);
     }
 
     // Replace label references with PC offsets based on label definitions
@@ -359,8 +296,8 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words) {
         SignedWord index;
         if (!find_label_definition(ref.name, label_definitions, index)) {
             fprintf(stderr, "Undefined label '%s'\n", ref.name);
-            ERROR = ERR_ASM_UNDEFINED_LABEL;
-            return;
+            SET_ERROR(error, ASSEMBLE);
+            continue;
         }
         /* printf("Found definition at 0x%04lx\n", index); */
 
@@ -376,25 +313,137 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words) {
     fclose(asm_file);
 }
 
-void parse_directive(vector<Word> &words, const char *&line_ptr,
-                     const Directive directive, bool &is_end) {
+void parse_line(vector<Word> &words, const char *&line,
+                vector<LabelDefinition> &label_definitions,
+                vector<LabelReference> &label_references, bool &is_end,
+                bool &failed) {
+    Token token;
+    take_next_token(line, token, failed);
+    RETURN_IF_FAILED(failed);
+
+    /* printf("----\n"); */
+    /* _print_token(token); */
+
+    // Empty line (including line with only whitespace or a comment)
+    if (token.kind == TokenKind::NONE)
+        return;
+
+    if (words.size() == 0) {
+        /* _print_token(token); */
+        if (token.kind != TokenKind::DIRECTIVE) {
+            fprintf(stderr, "First line must be `.ORIG`\n");
+            failed = true;
+            // Silence this error message for following lines
+            // Compilation will not succeed regardless
+            words.push_back(0x0000);
+            return;
+        }
+        take_next_token(line, token, failed);
+        RETURN_IF_FAILED(failed);
+        // Must be unsigned
+        if (token.kind != TokenKind::INTEGER || token.value.integer.is_signed) {
+            fprintf(stderr,
+                    "Positive integer literal required after `.ORIG`\n");
+            failed = true;
+            return;
+        }
+        words.push_back(token.value.integer.value);
+        return;
+    }
+
+    // TODO(correctness): Parsing label before directive *might* have bad
+    //     effects, although I cannot think of any off the top of my head.
+    if (token.kind == TokenKind::LABEL) {
+        const StringSlice &name = token.value.label;
+        for (size_t i = 0; i < label_definitions.size(); ++i) {
+            /* printf("-- <"); */
+            /* printf("%s", label_definitions[i].name); */
+            /* printf("> : <"); */
+            /* print_string_slice(stdout, name); */
+            /* printf(">\n"); */
+            if (!strncmp(label_definitions[i].name, name.pointer,
+                         name.length)) {
+                fprintf(stderr, "Duplicate label '");
+                print_string_slice(stderr, name);
+                fprintf(stderr, "'\n");
+                failed = true;
+                return;
+            }
+        }
+
+        label_definitions.push_back({});
+        LabelDefinition &def = label_definitions.back();
+        // Label length has already been checked
+        copy_string_slice_to_string(def.name, name);
+        def.index = words.size();
+
+        // Continue to instruction/directive after label
+        take_next_token(line, token, failed);
+        RETURN_IF_FAILED(failed);
+        // Skip if colon following label name
+        if (token.kind == TokenKind::COLON) {
+            take_next_token(line, token, failed);
+            RETURN_IF_FAILED(failed);
+        }
+    }
+
+    /* _print_token(token); */
+
+    if (token.kind == TokenKind::DIRECTIVE) {
+        parse_directive(words, line, token.value.directive, is_end, failed);
+        RETURN_IF_FAILED(failed);
+        expect_line_eol(line, failed);
+        RETURN_IF_FAILED(failed);
+        // TODO(correctness): Idk why this was here ??
+        /* take_next_token(line_ptr, token, failed); */
+        /* RETURN_IF_FAILED(failed); */
+        return;  // Next line
+    }
+
+    // Line with only label
+    if (token.kind == TokenKind::NONE)
+        return;
+
+    if (token.kind != TokenKind::INSTRUCTION) {
+        /* _print_token(token); */
+        fprintf(stderr, "Expected instruction or end of line\n");
+        failed = true;
+        return;
+    }
+
+    const Instruction instruction = token.value.instruction;
+    /* _print_token(token); */
+    Word word;
+    parse_instruction(word, line, instruction, words.size(), label_references,
+                      failed);
+    RETURN_IF_FAILED(failed);
+    /* printf("%s\n", line_ptr); */
+    expect_line_eol(line, failed);
+    RETURN_IF_FAILED(failed);
+    /* OK_OR_RETURN2(); */
+    words.push_back(word);
+}
+
+void parse_directive(vector<Word> &words, const char *&line,
+                     const Directive directive, bool &is_end, bool &failed) {
     Token token;
 
     switch (directive) {
         case Directive::ORIG:
             fprintf(stderr, "Unexpected `.ORIG`\n");
-            ERROR = ERR_ASM_UNEXPECTED_DIRECTIVE;
+            failed = true;
             return;
 
         case Directive::END:
             is_end = true;
+            // Ignore all following tokens, including on the same line
             return;
 
         case Directive::FILL: {
-            expect_next_token(line_ptr, token);
-            OK_OR_RETURN();
-            expect_token_is_kind(token, TokenKind::INTEGER);
-            OK_OR_RETURN();
+            expect_next_token(line, token, failed);
+            RETURN_IF_FAILED(failed);
+            expect_token_is_kind(token, TokenKind::INTEGER, failed);
+            RETURN_IF_FAILED(failed);
             // Don't check integer size -- it should have been checked
             //     to fit in a word when being
             // Sign is ignored
@@ -402,13 +451,13 @@ void parse_directive(vector<Word> &words, const char *&line_ptr,
         }; break;
 
         case Directive::BLKW: {
-            expect_next_token(line_ptr, token);
-            OK_OR_RETURN();
+            expect_next_token(line, token, failed);
+            RETURN_IF_FAILED(failed);
             if (token.kind != TokenKind::INTEGER ||
                 token.value.integer.is_signed) {
                 fprintf(stderr,
                         "Positive integer literal required after `.BLKW`\n");
-                ERROR = ERR_ASM_EXPECTED_OPERAND;
+                failed = true;
                 return;
             }
             // Don't check integer size
@@ -420,12 +469,12 @@ void parse_directive(vector<Word> &words, const char *&line_ptr,
 
         case Directive::STRINGZ: {
             /* printf("%s\n", line_ptr); */
-            take_next_token(line_ptr, token);
-            OK_OR_RETURN();
+            take_next_token(line, token, failed);
+            RETURN_IF_FAILED(failed);
             /* _print_token(token); */
             if (token.kind != TokenKind::STRING) {
                 fprintf(stderr, "String literal required after `.STRINGZ`\n");
-                ERROR = ERR_ASM_EXPECTED_OPERAND;
+                failed = true;
                 return;
             }
             const char *string = token.value.string.pointer;
@@ -435,11 +484,12 @@ void parse_directive(vector<Word> &words, const char *&line_ptr,
                     ++i;
                     // "... \" is treated as unterminated
                     if (i > token.value.string.length) {
-                        ERROR = ERR_ASM_UNTERMINATED_STRING;
+                        fprintf(stderr, "Unterminated string literal\n");
+                        failed = true;
                         return;
                     }
-                    ch = escape_character(string[i]);
-                    OK_OR_RETURN();
+                    ch = escape_character(string[i], failed);
+                    RETURN_IF_FAILED(failed);
                 }
                 words.push_back(static_cast<Word>(ch));
             }
@@ -448,9 +498,9 @@ void parse_directive(vector<Word> &words, const char *&line_ptr,
     }
 }
 
-void parse_instruction(Word &word, const char *&line_ptr,
+void parse_instruction(Word &word, const char *&line,
                        const Instruction &instruction, const size_t word_count,
-                       vector<LabelReference> &label_references) {
+                       vector<LabelReference> &label_references, bool &failed) {
     Token token;
     Opcode opcode;
     Word operands = 0x0000;
@@ -461,31 +511,31 @@ void parse_instruction(Word &word, const char *&line_ptr,
             opcode =
                 instruction == Instruction::ADD ? Opcode::ADD : Opcode::AND;
 
-            expect_next_token(line_ptr, token);
-            OK_OR_RETURN();
-            expect_token_is_kind(token, TokenKind::REGISTER);
-            OK_OR_RETURN();
+            expect_next_token(line, token, failed);
+            RETURN_IF_FAILED(failed);
+            expect_token_is_kind(token, TokenKind::REGISTER, failed);
+            RETURN_IF_FAILED(failed);
             const Register dest_reg = token.value.register_;
             operands |= dest_reg << 9;
 
-            expect_next_token_after_comma(line_ptr, token);
-            OK_OR_RETURN();
-            expect_token_is_kind(token, TokenKind::REGISTER);
-            OK_OR_RETURN();
+            expect_next_token_after_comma(line, token, failed);
+            RETURN_IF_FAILED(failed);
+            expect_token_is_kind(token, TokenKind::REGISTER, failed);
+            RETURN_IF_FAILED(failed);
             const Register src_reg_a = token.value.register_;
             operands |= src_reg_a << 6;
 
-            expect_next_token_after_comma(line_ptr, token);
-            OK_OR_RETURN();
+            expect_next_token_after_comma(line, token, failed);
+            RETURN_IF_FAILED(failed);
             if (token.kind == TokenKind::REGISTER) {
                 const Register src_reg_b = token.value.register_;
                 operands |= src_reg_b;
             } else {
-                expect_token_is_kind(token, TokenKind::INTEGER);
-                OK_OR_RETURN();
+                expect_token_is_kind(token, TokenKind::INTEGER, failed);
+                RETURN_IF_FAILED(failed);
                 const InitialSignWord immediate = token.value.integer;
-                expect_integer_fits_size(immediate, 5);
-                OK_OR_RETURN();
+                expect_integer_fits_size(immediate, 5, failed);
+                RETURN_IF_FAILED(failed);
                 operands |= 1 << 5;  // Flag
                 operands |= immediate.value & BITMASK_LOW_5;
             }
@@ -494,17 +544,17 @@ void parse_instruction(Word &word, const char *&line_ptr,
         case Instruction::NOT: {
             opcode = Opcode::NOT;
 
-            expect_next_token(line_ptr, token);
-            OK_OR_RETURN();
-            expect_token_is_kind(token, TokenKind::REGISTER);
-            OK_OR_RETURN();
+            expect_next_token(line, token, failed);
+            RETURN_IF_FAILED(failed);
+            expect_token_is_kind(token, TokenKind::REGISTER, failed);
+            RETURN_IF_FAILED(failed);
             const Register dest_reg = token.value.register_;
             operands |= dest_reg << 9;
 
-            expect_next_token_after_comma(line_ptr, token);
-            OK_OR_RETURN();
-            expect_token_is_kind(token, TokenKind::REGISTER);
-            OK_OR_RETURN();
+            expect_next_token_after_comma(line, token, failed);
+            RETURN_IF_FAILED(failed);
+            expect_token_is_kind(token, TokenKind::REGISTER, failed);
+            RETURN_IF_FAILED(failed);
             const Register src_reg = token.value.register_;
             operands |= src_reg << 6;
 
@@ -524,19 +574,19 @@ void parse_instruction(Word &word, const char *&line_ptr,
                 get_branch_condition_code(instruction);
             operands |= condition << 9;
 
-            expect_next_token(line_ptr, token);
-            OK_OR_RETURN();
+            expect_next_token(line, token, failed);
+            RETURN_IF_FAILED(failed);
             if (token.kind == TokenKind::INTEGER) {
                 // 9 bits
-                expect_integer_fits_size(token.value.integer, 9);
-                OK_OR_RETURN();
+                expect_integer_fits_size(token.value.integer, 9, failed);
+                RETURN_IF_FAILED(failed);
                 operands |= token.value.integer.value & BITMASK_LOW_9;
             } else if (token.kind == TokenKind::LABEL) {
                 add_label_reference(label_references, token.value.label,
                                     word_count, false);
             } else {
                 fprintf(stderr, "Invalid operand\n");
-                ERROR = ERR_ASM_INVALID_OPERAND;
+                failed = true;
                 return;
             }
         }; break;
@@ -547,10 +597,10 @@ void parse_instruction(Word &word, const char *&line_ptr,
 
             Register addr_reg = 7;  // Default R7 for `RET`
             if (instruction == Instruction::JMP) {
-                expect_next_token(line_ptr, token);
-                OK_OR_RETURN();
-                expect_token_is_kind(token, TokenKind::REGISTER);
-                OK_OR_RETURN();
+                expect_next_token(line, token, failed);
+                RETURN_IF_FAILED(failed);
+                expect_token_is_kind(token, TokenKind::REGISTER, failed);
+                RETURN_IF_FAILED(failed);
                 addr_reg = token.value.register_;
             }
             operands |= addr_reg << 6;
@@ -564,26 +614,26 @@ void parse_instruction(Word &word, const char *&line_ptr,
                 operands |= 1 << 11;  // Flag
 
                 // PCOffset11
-                expect_next_token(line_ptr, token);
-                OK_OR_RETURN();
+                expect_next_token(line, token, failed);
+                RETURN_IF_FAILED(failed);
                 if (token.kind == TokenKind::INTEGER) {
                     // 11 bits
-                    expect_integer_fits_size(token.value.integer, 11);
-                    OK_OR_RETURN();
+                    expect_integer_fits_size(token.value.integer, 11, failed);
+                    RETURN_IF_FAILED(failed);
                     operands |= token.value.integer.value & BITMASK_LOW_11;
                 } else if (token.kind == TokenKind::LABEL) {
                     add_label_reference(label_references, token.value.label,
                                         word_count, false);
                 } else {
                     fprintf(stderr, "Invalid operand\n");
-                    ERROR = ERR_ASM_INVALID_OPERAND;
+                    failed = true;
                     return;
                 }
             } else {
-                expect_next_token(line_ptr, token);
-                OK_OR_RETURN();
-                expect_token_is_kind(token, TokenKind::REGISTER);
-                OK_OR_RETURN();
+                expect_next_token(line, token, failed);
+                RETURN_IF_FAILED(failed);
+                expect_token_is_kind(token, TokenKind::REGISTER, failed);
+                RETURN_IF_FAILED(failed);
                 const Register addr_reg = token.value.register_;
                 operands |= addr_reg << 6;
             }
@@ -610,26 +660,26 @@ void parse_instruction(Word &word, const char *&line_ptr,
                     UNREACHABLE();
             }
 
-            expect_next_token(line_ptr, token);
-            OK_OR_RETURN();
-            expect_token_is_kind(token, TokenKind::REGISTER);
-            OK_OR_RETURN();
+            expect_next_token(line, token, failed);
+            RETURN_IF_FAILED(failed);
+            expect_token_is_kind(token, TokenKind::REGISTER, failed);
+            RETURN_IF_FAILED(failed);
             const Register ds_reg = token.value.register_;
             operands |= ds_reg << 9;
 
-            expect_next_token_after_comma(line_ptr, token);
-            OK_OR_RETURN();
+            expect_next_token_after_comma(line, token, failed);
+            RETURN_IF_FAILED(failed);
             if (token.kind == TokenKind::INTEGER) {
                 // 9 bits
-                expect_integer_fits_size(token.value.integer, 9);
-                OK_OR_RETURN();
+                expect_integer_fits_size(token.value.integer, 9, failed);
+                RETURN_IF_FAILED(failed);
                 operands |= token.value.integer.value & BITMASK_LOW_9;
             } else if (token.kind == TokenKind::LABEL) {
                 add_label_reference(label_references, token.value.label,
                                     word_count, false);
             } else {
                 fprintf(stderr, "Invalid operand\n");
-                ERROR = ERR_ASM_INVALID_OPERAND;
+                failed = true;
                 return;
             }
         }; break;
@@ -639,57 +689,57 @@ void parse_instruction(Word &word, const char *&line_ptr,
             opcode =
                 instruction == Instruction::LDR ? Opcode::LDR : Opcode::STR;
 
-            expect_next_token(line_ptr, token);
-            OK_OR_RETURN();
-            expect_token_is_kind(token, TokenKind::REGISTER);
-            OK_OR_RETURN();
+            expect_next_token(line, token, failed);
+            RETURN_IF_FAILED(failed);
+            expect_token_is_kind(token, TokenKind::REGISTER, failed);
+            RETURN_IF_FAILED(failed);
             const Register ds_reg = token.value.register_;
             operands |= ds_reg << 9;
 
-            expect_next_token_after_comma(line_ptr, token);
-            OK_OR_RETURN();
-            expect_token_is_kind(token, TokenKind::REGISTER);
-            OK_OR_RETURN();
+            expect_next_token_after_comma(line, token, failed);
+            RETURN_IF_FAILED(failed);
+            expect_token_is_kind(token, TokenKind::REGISTER, failed);
+            RETURN_IF_FAILED(failed);
             const Register base_reg = token.value.register_;
             operands |= base_reg << 6;
 
-            expect_next_token_after_comma(line_ptr, token);
-            OK_OR_RETURN();
-            expect_token_is_kind(token, TokenKind::INTEGER);
-            OK_OR_RETURN();
+            expect_next_token_after_comma(line, token, failed);
+            RETURN_IF_FAILED(failed);
+            expect_token_is_kind(token, TokenKind::INTEGER, failed);
+            RETURN_IF_FAILED(failed);
 
             const InitialSignWord immediate = token.value.integer;
             // 6 bits
-            expect_integer_fits_size(immediate, 6);
-            OK_OR_RETURN();
+            expect_integer_fits_size(immediate, 6, failed);
+            RETURN_IF_FAILED(failed);
             operands |= immediate.value & BITMASK_LOW_6;
         }; break;
 
         case Instruction::LEA: {
             opcode = Opcode::LEA;
 
-            expect_next_token(line_ptr, token);
-            OK_OR_RETURN();
+            expect_next_token(line, token, failed);
+            RETURN_IF_FAILED(failed);
             /* _print_token(token); */
-            expect_token_is_kind(token, TokenKind::REGISTER);
-            OK_OR_RETURN();
+            expect_token_is_kind(token, TokenKind::REGISTER, failed);
+            RETURN_IF_FAILED(failed);
             const Register dest_reg = token.value.register_;
             operands |= dest_reg << 9;
 
-            expect_next_token_after_comma(line_ptr, token);
-            OK_OR_RETURN();
+            expect_next_token_after_comma(line, token, failed);
+            RETURN_IF_FAILED(failed);
             /* _print_token(token); */
             if (token.kind == TokenKind::INTEGER) {
                 // 9 bits
-                expect_integer_fits_size(token.value.integer, 9);
-                OK_OR_RETURN();
+                expect_integer_fits_size(token.value.integer, 9, failed);
+                RETURN_IF_FAILED(failed);
                 operands |= token.value.integer.value & BITMASK_LOW_9;
             } else if (token.kind == TokenKind::LABEL) {
                 add_label_reference(label_references, token.value.label,
                                     word_count, false);
             } else {
                 fprintf(stderr, "Invalid operand\n");
-                ERROR = ERR_ASM_INVALID_OPERAND;
+                failed = true;
                 return;
             }
         }; break;
@@ -730,22 +780,22 @@ void parse_instruction(Word &word, const char *&line_ptr,
 
                 // Trap instruction with explicit code
                 case Instruction::TRAP: {
-                    expect_next_token(line_ptr, token);
-                    OK_OR_RETURN();
+                    expect_next_token(line, token, failed);
+                    RETURN_IF_FAILED(failed);
                     // Don't allow explicit sign
                     if (token.kind != TokenKind::INTEGER ||
                         token.value.integer.is_signed) {
                         fprintf(
                             stderr,
                             "Positive integer literal required after `TRAP`\n");
-                        ERROR = ERR_ASM_EXPECTED_OPERAND;
+                        failed = true;
                         return;
                     }
                     const InitialSignWord immediate = token.value.integer;
                     // 8 bits -- always positive
                     // This incurs a redundant sign check, this is fine
-                    expect_integer_fits_size(immediate, 8);
-                    OK_OR_RETURN();
+                    expect_integer_fits_size(immediate, 8, failed);
+                    RETURN_IF_FAILED(failed);
                     trap_vector = static_cast<TrapVector>(immediate.value);
                 }; break;
 
@@ -763,51 +813,54 @@ void parse_instruction(Word &word, const char *&line_ptr,
     word = static_cast<Word>(opcode) << 12 | operands;
 }
 
-void expect_next_token(const char *&line_ptr, Token &token) {
-    take_next_token(line_ptr, token);
-    OK_OR_RETURN();
+void expect_next_token(const char *&line, Token &token, bool &failed) {
+    take_next_token(line, token, failed);
+    RETURN_IF_FAILED(failed);
     if (token.kind == TokenKind::NONE) {
         fprintf(stderr, "Expected operand\n");
-        ERROR = ERR_ASM_EXPECTED_OPERAND;
+        failed = true;
     }
 }
 
-void expect_next_token_after_comma(const char *&line_ptr, Token &token) {
-    take_next_token(line_ptr, token);
-    OK_OR_RETURN();
+void expect_next_token_after_comma(const char *&line, Token &token,
+                                   bool &failed) {
+    take_next_token(line, token, failed);
+    RETURN_IF_FAILED(failed);
     if (token.kind == TokenKind::COMMA) {
-        take_next_token(line_ptr, token);
-        OK_OR_RETURN();
+        take_next_token(line, token, failed);
+        RETURN_IF_FAILED(failed);
     }
     if (token.kind == TokenKind::NONE) {
         fprintf(stderr, "Expected operand\n");
-        ERROR = ERR_ASM_EXPECTED_OPERAND;
+        failed = true;
     }
 }
 
 // TODO(refactor): Remove these wrapper functions when error handling is good
 
-void expect_token_is_kind(const Token &token, const enum TokenKind kind) {
+void expect_token_is_kind(const Token &token, const enum TokenKind kind,
+                          bool &failed) {
     if (token.kind != kind) {
         fprintf(stderr, "Invalid operand\n");
-        ERROR = ERR_ASM_INVALID_OPERAND;
+        failed = true;
     }
 }
 
-void expect_integer_fits_size(InitialSignWord integer, size_t size_bits) {
+void expect_integer_fits_size(InitialSignWord integer, size_t size_bits,
+                              bool &failed) {
     if (!does_integer_fit_size(integer, size_bits)) {
         fprintf(stderr, "Immediate too large\n");
-        ERROR = ERR_ASM_IMMEDIATE_TOO_LARGE;
+        failed = true;
     }
 }
 
-void expect_line_eol(const char *line_ptr) {
+void expect_line_eol(const char *line, bool &failed) {
     Token token;
-    take_next_token(line_ptr, token);
-    OK_OR_RETURN();
+    take_next_token(line, token, failed);
+    RETURN_IF_FAILED(failed);
     if (token.kind != TokenKind::NONE) {
         fprintf(stderr, "Unexpected operand after instruction\n");
-        ERROR = ERR_ASM_UNEXPECTED_OPERAND;
+        failed = true;
     }
 }
 
@@ -872,7 +925,7 @@ bool find_label_definition(const LabelString &target,
     return false;
 }
 
-char escape_character(const char ch) {
+char escape_character(const char ch, bool &failed) {
     switch (ch) {
         case 'n':
             return '\n';
@@ -883,7 +936,8 @@ char escape_character(const char ch) {
         case '0':
             return '\0';
         default:
-            ERROR = ERR_ASM_INVALID_ESCAPE_CHAR;
+            fprintf(stderr, "Invalid escape sequence\n");
+            failed = true;
             return 0x7f;
     }
 }
@@ -903,7 +957,7 @@ bool does_integer_fit_size(const InitialSignWord integer,
     return integer.value >> (size_bits - 1) == 0;
 }
 
-void take_next_token(const char *&line, Token &token) {
+void take_next_token(const char *&line, Token &token, bool &failed) {
     token.kind = TokenKind::NONE;
 
     /* printf("-- <%s>\n", line); */
@@ -933,35 +987,37 @@ void take_next_token(const char *&line, Token &token) {
     }
 
     // String literal
-    take_literal_string(line, token);
-    OK_OR_RETURN();
+    take_literal_string(line, token, failed);
+    RETURN_IF_FAILED(failed);
     if (token.kind != TokenKind::NONE)
         return;  // Tried to parse, but failed
 
     // Register
     take_register(line, token);  // Cannot fail
-    OK_OR_RETURN();
+    RETURN_IF_FAILED(failed);
 
     // Directive
-    take_directive(line, token);
-    OK_OR_RETURN();
+    take_directive(line, token, failed);
+    RETURN_IF_FAILED(failed);
     if (token.kind != TokenKind::NONE)
         return;  // Tried to parse, but failed
 
     // Hex literal
-    take_integer_hex(line, token);
-    OK_OR_RETURN();
+    take_integer_hex(line, token, failed);
+    RETURN_IF_FAILED(failed);
     if (token.kind != TokenKind::NONE)
         return;  // Tried to parse, but failed
+
     // Decimal literal
-    take_integer_decimal(line, token);
-    OK_OR_RETURN();
+    take_integer_decimal(line, token, failed);
+    RETURN_IF_FAILED(failed);
     if (token.kind != TokenKind::NONE)
         return;  // Tried to parse, but failed
 
     // Character cannot start an identifier -> invalid
     if (!is_char_valid_identifier_start(line[0])) {
-        ERROR = ERR_ASM_INVALID_TOKEN;
+        fprintf(stderr, "Invalid token\n");
+        failed = true;
         return;
     }
 
@@ -982,7 +1038,7 @@ void take_next_token(const char *&line, Token &token) {
         // Label
         if (identifier.length >= MAX_LABEL) {
             fprintf(stderr, "Label too long.\n");
-            ERROR = ERR_ASM_LABEL_TOO_LONG;
+            failed = true;
             return;
         }
         token.kind = TokenKind::LABEL;
@@ -990,7 +1046,7 @@ void take_next_token(const char *&line, Token &token) {
     }
 }
 
-void take_literal_string(const char *&line, Token &token) {
+void take_literal_string(const char *&line, Token &token, bool &failed) {
     if (line[0] != '"')
         return;
     ++line;  // Opening quote
@@ -1000,7 +1056,8 @@ void take_literal_string(const char *&line, Token &token) {
     for (; line[0] != '"'; ++line) {
         // String cannot be multi-line, or unclosed within a file
         if (line[0] == '\n' || line[0] == '\0') {
-            ERROR = ERR_ASM_UNTERMINATED_STRING;
+            fprintf(stderr, "Unterminated string literal\n");
+            failed = true;
             return;
         }
     }
@@ -1009,7 +1066,7 @@ void take_literal_string(const char *&line, Token &token) {
     ++line;  // Closing quote
 }
 
-void take_directive(const char *&line, Token &token) {
+void take_directive(const char *&line, Token &token, bool &failed) {
     if (line[0] != '.')
         return;
     ++line;  // '.'
@@ -1024,7 +1081,8 @@ void take_directive(const char *&line, Token &token) {
 
     // Sets kind and value
     if (!directive_from_string(token, directive)) {
-        ERROR = ERR_ASM_INVALID_DIRECTIVE;
+        fprintf(stderr, "Invalid directive\n");
+        failed = true;
     }
 }
 
@@ -1046,7 +1104,7 @@ void take_register(const char *&line, Token &token) {
     return;
 }
 
-void take_integer_hex(const char *&line, Token &token) {
+void take_integer_hex(const char *&line, Token &token, bool &failed) {
     const char *new_line = line;
 
     bool is_signed = false;
@@ -1067,7 +1125,8 @@ void take_integer_hex(const char *&line, Token &token) {
         ++new_line;
         // Don't allow `-x-`
         if (is_signed) {
-            ERROR = ERR_ASM_INVALID_TOKEN;
+            fprintf(stderr, "Invalid token\n");
+            failed = true;
             return;
         }
         is_signed = true;
@@ -1093,7 +1152,8 @@ void take_integer_hex(const char *&line, Token &token) {
             // Checks if number is immediately followed by identifier character
             //     (like a suffix), which is invalid
             if (ch != '\0' && is_char_valid_in_identifier(ch)) {
-                ERROR = ERR_ASM_INVALID_TOKEN;
+                fprintf(stderr, "Invalid token\n");
+                failed = true;
                 return;
             }
             break;
@@ -1103,7 +1163,7 @@ void take_integer_hex(const char *&line, Token &token) {
         // Ignore sign
         if (i >= 4) {
             fprintf(stderr, "Immediate too large\n");
-            ERROR = ERR_ASM_IMMEDIATE_TOO_LARGE;
+            failed = true;
             return;
         }
         number <<= 4;
@@ -1116,7 +1176,7 @@ void take_integer_hex(const char *&line, Token &token) {
     token.value.integer.value = number;
 }
 
-void take_integer_decimal(const char *&line, Token &token) {
+void take_integer_decimal(const char *&line, Token &token, bool &failed) {
     const char *new_line = line;
 
     bool is_signed = false;
@@ -1131,7 +1191,8 @@ void take_integer_decimal(const char *&line, Token &token) {
         ++new_line;
         // Don't allow `-#-`
         if (is_signed) {
-            ERROR = ERR_ASM_INVALID_TOKEN;
+            fprintf(stderr, "Invalid token\n");
+            failed = true;
             return;
         }
         is_signed = true;
@@ -1156,14 +1217,15 @@ void take_integer_decimal(const char *&line, Token &token) {
             // Checks if number is immediately followed by identifier character
             //     (like a suffix), which is invalid
             if (ch != '\0' && is_char_valid_in_identifier(ch)) {
-                ERROR = ERR_ASM_INVALID_TOKEN;
+                fprintf(stderr, "Invalid token\n");
+                failed = true;
                 return;
             }
             break;
         }
         if (!append_decimal_digit_checked(number, ch - '0', is_signed)) {
             fprintf(stderr, "Immediate too large\n");
-            ERROR = ERR_ASM_IMMEDIATE_TOO_LARGE;
+            failed = true;
             return;
         }
         ++line;
@@ -1175,6 +1237,7 @@ void take_integer_decimal(const char *&line, Token &token) {
 }
 
 // Returns -1 if not a valid hex digit
+// TODO(refactor): Don't use sentinel value for `parse_hex_digit`
 int8_t parse_hex_digit(const char ch) {
     if (ch >= '0' && ch <= '9')
         return ch - '0';

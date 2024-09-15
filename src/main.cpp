@@ -24,22 +24,40 @@ int main(const int argc, const char *const *const argv) {
 }
 
 void try_run(Options &options) {
+    Error2 error = Error2::OK;
+
+    const char *assemble_filename = nullptr;  // Assemble if !nullptr
+    const char *execute_filename = nullptr;   // Execute if !nullptr
+
     switch (options.mode) {
         case Mode::ASSEMBLE_ONLY:
-            assemble(options.in_file, options.out_file);
-            OK_OR_RETURN();
+            assemble_filename = options.in_filename;
             break;
-
         case Mode::EXECUTE_ONLY:
-            execute(options.in_file);
-            OK_OR_RETURN();
+            execute_filename = options.in_filename;
             break;
-
         case Mode::ASSEMBLE_EXECUTE:
-            assemble(options.in_file, options.out_file);
-            OK_OR_RETURN();
-            execute(options.out_file);
-            OK_OR_RETURN();
+            assemble_filename = options.in_filename;
+            execute_filename = options.out_filename;
             break;
+    }
+
+    // Sanity check
+    if (assemble_filename == nullptr && execute_filename == nullptr)
+        UNREACHABLE();
+
+    if (assemble_filename != nullptr) {
+        assemble(assemble_filename, options.out_filename, error);
+        if (error != Error2::OK) {
+            fprintf(stderr, "Assembly failed.\n");
+            exit(static_cast<int>(error));
+        }
+        printf("Assembled successfully.\n");
+        OK_OR_RETURN();
+    }
+
+    if (execute_filename == nullptr) {
+        execute(execute_filename);
+        OK_OR_RETURN();
     }
 }
