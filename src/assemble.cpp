@@ -17,10 +17,6 @@ using std::vector;
 #define MAX_LINE 512  // Includes '\0'
 #define MAX_LABEL 32  // Includes '\0'
 
-#define RETURN_IF_FAILED(_failed) \
-    if (_failed)                  \
-        return;
-
 // Must be a copied string, as `line` is overwritten
 typedef char LabelString[MAX_LABEL];
 

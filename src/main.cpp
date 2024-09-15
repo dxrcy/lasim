@@ -7,18 +7,9 @@ Error try_run(Options &options);
 
 int main(const int argc, const char *const *const argv) {
     Options options;
-    parse_options(options, argc, argv);
+    parse_options(options, argc, argv);  // Exits on error
 
     Error error = try_run(options);
-
-    // (Old error handling)
-    switch (ERROR) {
-        case ERR_OK:
-            break;
-        default:
-            printf("ERROR! 0x%04x\n", ERROR);
-            return ERROR;
-    }
 
     switch (error) {
         case Error::OK:
@@ -63,13 +54,9 @@ Error try_run(Options &options) {
     }
 
     if (execute_filename != nullptr) {
-        execute(execute_filename);
-        // (Old error handling)
-        if (ERROR != ERR_OK) {
-            // TODO(fix): This does not distinguish between execute and file
-            //     error
-            return Error::EXECUTE;
-        }
+        execute(execute_filename, error);
+        if (error != Error::OK)
+            return error;
     }
 
     return Error::OK;

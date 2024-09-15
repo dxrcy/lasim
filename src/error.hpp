@@ -29,6 +29,10 @@
     if ((_error) == Error::OK)   \
         (_error) = Error::_kind;
 
+#define RETURN_IF_FAILED(_failed) \
+    if (_failed)                  \
+        return;
+
 enum class Error {
     OK,
     CLI,

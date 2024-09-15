@@ -6,8 +6,6 @@
 #include "error.hpp"
 #include "types.hpp"
 
-static ErrorOld ERROR;  // Global error value
-
 static Word memory[MEMORY_SIZE];
 
 static Registers registers;
