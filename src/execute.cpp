@@ -303,7 +303,7 @@ void execute_next_instrution(bool &do_halt, Error &error) {
             const Word addr =
                 static_cast<Word>(registers.program_counter + offset);
             registers.general_purpose[dest_reg] = addr;
-            /* set_condition_codes(value); */
+            set_condition_codes(addr);
         }; break;
 
         // TRAP

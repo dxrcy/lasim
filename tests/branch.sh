@@ -25,10 +25,10 @@ for cc in "${ccs[@]}"; do
         name="${cc}_$input"
         cat >> "$asm_file" << EOF
     ; Branch <$cc> if $value ($input)
-    and $reg, $reg #0
-    add $reg, $reg #$value
     lea r0, Msg_$name
     puts
+    and $reg, $reg #0
+    add $reg, $reg #$value
     BR${cc} Branch_$name
     lea r0, MsgNoBranch
     puts
