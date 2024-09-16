@@ -8,8 +8,10 @@ simulator in C++.
 > Only *nix systems are supported currently.
 
 - `g++` to compile
-- [`lc3as` from `lc3tools`](https://github.com/chiragsakhuja/lc3tools) only for
-    running `make test`
+
+- Development dependencies:
+    - [`lc3as` from `lc3tools`](https://github.com/chiragsakhuja/lc3tools)
+    - [`reflex`](https://github.com/cespare/reflex)
 
 ```sh
 # Download
