@@ -11,7 +11,7 @@ simulator in C++.
 
 - Development dependencies:
     - [`lc3as` from `lc3tools`](https://github.com/chiragsakhuja/lc3tools)
-    - [`reflex`](https://github.com/cespare/reflex)
+    - [`reflex`](https://github.com/cespare/reflex) *(optional)*
 
 ```sh
 # Download
@@ -34,6 +34,7 @@ lasim -x examples/checkerboard.obj
 - `char_count`: Counts the amount of times each letter was inputted
 - `checkerboard`: Prints an ASCII checkerboard
 - `count_bits`: Counts the '1' bits of an inputted number from 0-9
+- `fibonacci`: Caclulates the n-th fibonacci number (no output)
 - `hello_world`: Take a wild guess...
 - `store_number`: Reads a 5-digit number and stores it in memory (no output)
 - `string_array`: Prints an array of static-memory strings
@@ -47,13 +48,14 @@ Some of the examples are taken from
 This project only uses the following C++ features (to keep it simple):
 
 - References
+- Booleans
 - `nullptr`
 - `static_cast`/`reinterpret_cast`
-- `std::vector`
 - `enum class`
+- `std::vector`
 
 # Features to Implement
 
 - [ ] Add debugger mode
-
+- [ ] Make error messages nicer
 
