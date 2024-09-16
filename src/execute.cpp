@@ -10,13 +10,12 @@
 #include "tty.cpp"
 #include "types.hpp"
 
-#define to_signed_word(_value, _size) \
+#define _to_sext_word(_value, _size) \
     (sign_extend(static_cast<SignedWord>(_value), (_size)))
-
-#define low_6_bits_signed(_instr) (to_signed_word((_instr) & BITMASK_LOW_6, 6))
-#define low_9_bits_signed(_instr) (to_signed_word((_instr) & BITMASK_LOW_9, 9))
-#define low_11_bits_signed(_instr) \
-    (to_signed_word((_instr) & BITMASK_LOW_11, 11))
+#define low_5_bits_sext(_instr) (_to_sext_word((_instr) & BITMASK_LOW_5, 5))
+#define low_6_bits_sext(_instr) (_to_sext_word((_instr) & BITMASK_LOW_6, 6))
+#define low_9_bits_sext(_instr) (_to_sext_word((_instr) & BITMASK_LOW_9, 9))
+#define low_11_bits_sext(_instr) (_to_sext_word((_instr) & BITMASK_LOW_11, 11))
 
 // Prompt for `IN` trap
 #define TRAP_IN_PROMPT "Input a character: "
@@ -69,9 +68,6 @@ void execute_next_instrution(bool &do_halt, Error &error) {
     // Handled in default switch branch
     const Opcode opcode = static_cast<Opcode>(bits_12_15(instr));
 
-    // TODO(correctness): Check all operands for whether they need to be
-    //     sign-extended !!!!
-
     switch (opcode) {
         // ADD*
         case Opcode::ADD: {
@@ -95,13 +91,11 @@ void execute_next_instrution(bool &do_halt, Error &error) {
                 value_b = static_cast<SignedWord>(
                     registers.general_purpose[src_reg_b]);
             } else {
-                value_b = to_signed_word(bits_0_5(instr), 5);
+                value_b = low_5_bits_sext(instr);
             }
 
             const Word result = static_cast<Word>(value_a + value_b);
-
             registers.general_purpose[dest_reg] = result;
-
             set_condition_codes(result);
         }; break;
 
@@ -110,8 +104,9 @@ void execute_next_instrution(bool &do_halt, Error &error) {
             const Register dest_reg = bits_9_11(instr);
             const Register src_reg_a = bits_6_8(instr);
 
-            const Word value_a = registers.general_purpose[src_reg_a];
-            Word value_b;
+            // TODO: These maybe should be `Word` ? Shouldn't matter I think...
+            const SignedWord value_a = registers.general_purpose[src_reg_a];
+            SignedWord value_b;
 
             if (bit_5(instr) == 0b0) {
                 // 2 bits padding
@@ -125,13 +120,11 @@ void execute_next_instrution(bool &do_halt, Error &error) {
                 const Register src_reg_b = bits_0_2(instr);
                 value_b = registers.general_purpose[src_reg_b];
             } else {
-                value_b = static_cast<SignedWord>(bits_0_5(instr));
+                value_b = low_5_bits_sext(instr);
             }
 
-            const Word result = value_a & value_b;
-
+            const Word result = static_cast<Word>(value_a & value_b);
             registers.general_purpose[dest_reg] = result;
-
             set_condition_codes(result);
         }; break;
 
@@ -149,9 +142,8 @@ void execute_next_instrution(bool &do_halt, Error &error) {
                 return;
             }
 
-            const Word result = ~registers.general_purpose[src_reg];
+            const Word result = ~(registers.general_purpose[src_reg]);
             registers.general_purpose[dest_reg] = result;
-
             set_condition_codes(result);
         }; break;
 
@@ -162,7 +154,7 @@ void execute_next_instrution(bool &do_halt, Error &error) {
                 break;
 
             const ConditionCode condition = bits_9_11(instr);
-            const SignedWord offset = low_9_bits_signed(instr);
+            const SignedWord offset = low_9_bits_sext(instr);
 
             // If any bits of the condition codes match
             // Instruction `BR` is equivalent to `BRnzp`, but 0b000 is checked
@@ -192,6 +184,7 @@ void execute_next_instrution(bool &do_halt, Error &error) {
                 SET_ERROR(error, EXECUTE);
                 return;
             }
+
             const Register base_reg = bits_6_8(instr);
             const Word base = registers.general_purpose[base_reg];
             registers.program_counter = base;
@@ -201,11 +194,12 @@ void execute_next_instrution(bool &do_halt, Error &error) {
         case Opcode::JSR_JSRR: {
             // Save PC to R7
             registers.general_purpose[7] = registers.program_counter;
+
             // Bit 11 defines JSR or JSRR
             const bool is_offset = bit_11(instr) == 0b1;
             if (is_offset) {
                 // JSR
-                const SignedWord offset = low_11_bits_signed(instr);
+                const SignedWord offset = low_11_bits_sext(instr);
                 registers.program_counter += offset;
             } else {
                 // JSRR
@@ -217,6 +211,7 @@ void execute_next_instrution(bool &do_halt, Error &error) {
                     SET_ERROR(error, EXECUTE);
                     return;
                 }
+
                 const Register base_reg = bits_6_8(instr);
                 const Word base = registers.general_purpose[base_reg];
                 registers.program_counter = base;
@@ -226,12 +221,11 @@ void execute_next_instrution(bool &do_halt, Error &error) {
         // LD*
         case Opcode::LD: {
             const Register dest_reg = bits_9_11(instr);
-            const SignedWord offset = low_9_bits_signed(instr);
+            const SignedWord offset = low_9_bits_sext(instr);
 
             const Word value =
                 memory_checked(registers.program_counter + offset, error);
             OK_OR_RETURN(error);
-
             registers.general_purpose[dest_reg] = value;
             set_condition_codes(value);
         }; break;
@@ -239,9 +233,9 @@ void execute_next_instrution(bool &do_halt, Error &error) {
         // ST
         case Opcode::ST: {
             const Register src_reg = bits_9_11(instr);
-            const SignedWord offset = low_9_bits_signed(instr);
-            const Word value = registers.general_purpose[src_reg];
+            const SignedWord offset = low_9_bits_sext(instr);
 
+            const Word value = registers.general_purpose[src_reg];
             memory_checked(registers.program_counter + offset, error) = value;
             OK_OR_RETURN(error);
         }; break;
@@ -250,10 +244,9 @@ void execute_next_instrution(bool &do_halt, Error &error) {
         case Opcode::LDR: {
             const Register dest_reg = bits_9_11(instr);
             const Register base_reg = bits_6_8(instr);
-            const SignedWord offset = low_6_bits_signed(instr);
-            // TODO(correctness): I think this being unsigned is correct...
-            const Word base = registers.general_purpose[base_reg];
+            const SignedWord offset = low_6_bits_sext(instr);
 
+            const Word base = registers.general_purpose[base_reg];
             const Word value = memory_checked(base + offset, error);
             OK_OR_RETURN(error);
 
@@ -265,18 +258,19 @@ void execute_next_instrution(bool &do_halt, Error &error) {
         case Opcode::STR: {
             const Register src_reg = bits_9_11(instr);
             const Register base_reg = bits_6_8(instr);
-            const SignedWord offset = low_6_bits_signed(instr);
-            const Word value = registers.general_purpose[src_reg];
+            const SignedWord offset = low_6_bits_sext(instr);
+
             const Word base = registers.general_purpose[base_reg];
+            const Word value = registers.general_purpose[src_reg];
 
             memory_checked(base + offset, error) = value;
             OK_OR_RETURN(error);
         }; break;
 
-        // LDI+
+        // LDI*
         case Opcode::LDI: {
             const Register dest_reg = bits_9_11(instr);
-            const SignedWord offset = low_9_bits_signed(instr);
+            const SignedWord offset = low_9_bits_sext(instr);
 
             const Word pointer =
                 memory_checked(registers.program_counter + offset, error);
@@ -291,12 +285,12 @@ void execute_next_instrution(bool &do_halt, Error &error) {
         // STI
         case Opcode::STI: {
             const Register src_reg = bits_9_11(instr);
-            const SignedWord offset = low_9_bits_signed(instr);
+            const SignedWord offset = low_9_bits_sext(instr);
 
-            const Word value = registers.general_purpose[src_reg];
             const Word pointer =
                 memory_checked(registers.program_counter + offset, error);
             OK_OR_RETURN(error);
+            const Word value = registers.general_purpose[src_reg];
 
             memory_checked(pointer, error) = value;
             OK_OR_RETURN(error);
@@ -305,9 +299,11 @@ void execute_next_instrution(bool &do_halt, Error &error) {
         // LEA*
         case Opcode::LEA: {
             const Register dest_reg = bits_9_11(instr);
-            const SignedWord offset = low_9_bits_signed(instr);
-            registers.general_purpose[dest_reg] =
-                registers.program_counter + offset;
+            const SignedWord offset = low_9_bits_sext(instr);
+            const Word addr =
+                static_cast<Word>(registers.program_counter + offset);
+            registers.general_purpose[dest_reg] = addr;
+            /* set_condition_codes(value); */
         }; break;
 
         // TRAP
