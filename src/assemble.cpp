@@ -148,7 +148,7 @@ void parse_line(vector<Word> &words, const char *&line,
 void parse_directive(vector<Word> &words, const char *&line,
                      const Directive directive, bool &is_end, bool &failed);
 void parse_instruction(Word &word, const char *&line,
-                       const Instruction &instruction, const size_t word_count,
+                       const Instruction &instruction, const size_t word_index,
                        vector<LabelReference> &label_references,
                        const int line_number, bool &failed);
 
@@ -478,7 +478,7 @@ void parse_directive(vector<Word> &words, const char *&line,
 }
 
 void parse_instruction(Word &word, const char *&line,
-                       const Instruction &instruction, const size_t word_count,
+                       const Instruction &instruction, const size_t word_index,
                        vector<LabelReference> &label_references,
                        const int line_number, bool &failed) {
     Token token;
@@ -569,7 +569,7 @@ void parse_instruction(Word &word, const char *&line,
                 operands |= token.value.integer.value & BITMASK_LOW_9;
             } else if (token.kind == TokenKind::LABEL) {
                 add_label_reference(label_references, token.value.label,
-                                    word_count, line_number, false);
+                                    word_index, line_number, false);
             } else {
                 print_invalid_operand("integer or label", token.kind,
                                       instruction);
@@ -610,7 +610,7 @@ void parse_instruction(Word &word, const char *&line,
                     operands |= token.value.integer.value & BITMASK_LOW_11;
                 } else if (token.kind == TokenKind::LABEL) {
                     add_label_reference(label_references, token.value.label,
-                                        word_count, line_number, false);
+                                        word_index, line_number, true);
                 } else {
                     fprintf(stderr, "Invalid operand\n");
                     failed = true;
@@ -663,7 +663,7 @@ void parse_instruction(Word &word, const char *&line,
                 operands |= token.value.integer.value & BITMASK_LOW_9;
             } else if (token.kind == TokenKind::LABEL) {
                 add_label_reference(label_references, token.value.label,
-                                    word_count, line_number, false);
+                                    word_index, line_number, false);
             } else {
                 fprintf(stderr, "Invalid operand\n");
                 failed = true;
@@ -721,7 +721,7 @@ void parse_instruction(Word &word, const char *&line,
                 operands |= token.value.integer.value & BITMASK_LOW_9;
             } else if (token.kind == TokenKind::LABEL) {
                 add_label_reference(label_references, token.value.label,
-                                    word_count, line_number, false);
+                                    word_index, line_number, false);
             } else {
                 fprintf(stderr, "Invalid operand\n");
                 failed = true;
