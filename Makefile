@@ -24,6 +24,7 @@ watch:
 test: $(TARGET)
 	tests/assemble.sh
 	tests/branch.sh
+	tests/arith.sh
 
 clean:
 	rm -f ./lasim

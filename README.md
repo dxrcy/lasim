@@ -9,8 +9,9 @@ simulator in C++.
 
 - `g++` to compile
 
-- Development dependencies:
+- Development dependencies (for `make test` or `make watch`):
     - [`lc3as` from `lc3tools`](https://github.com/chiragsakhuja/lc3tools)
+    - [`delta`]
     - [`reflex`](https://github.com/cespare/reflex) *(optional)*
 
 ```sh
