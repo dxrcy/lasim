@@ -164,6 +164,7 @@ void expect_integer_fits_size(InitialSignWord integer, size_t size_bits,
 void expect_line_eol(const char *line, bool &failed);
 
 ConditionCode get_branch_condition_code(const Instruction instruction);
+TrapVector get_trap_vector(const Instruction instruction);
 void add_label_reference(vector<LabelReference> &references,
                          const StringSlice &name, const Word index,
                          const int line_number, const bool is_offset11);
@@ -740,28 +741,6 @@ void parse_instruction(Word &word, const char *&line,
 
             TrapVector trap_vector;
             switch (instruction) {
-                case Instruction::GETC:
-                    trap_vector = TrapVector::GETC;
-                    break;
-                case Instruction::OUT:
-                    trap_vector = TrapVector::OUT;
-                    break;
-                case Instruction::PUTS:
-                    trap_vector = TrapVector::PUTS;
-                    break;
-                case Instruction::IN:
-                    trap_vector = TrapVector::IN;
-                    break;
-                case Instruction::PUTSP:
-                    trap_vector = TrapVector::PUTSP;
-                    break;
-                case Instruction::HALT:
-                    trap_vector = TrapVector::HALT;
-                    break;
-                case Instruction::REG:
-                    trap_vector = TrapVector::REG;
-                    break;
-
                 // Trap instruction with explicit code
                 case Instruction::TRAP: {
                     expect_next_token(line, token, failed);
@@ -780,11 +759,12 @@ void parse_instruction(Word &word, const char *&line,
                     // This incurs a redundant sign check, this is fine
                     expect_integer_fits_size(immediate, 8, failed);
                     RETURN_IF_FAILED(failed);
+                    // TODO(correctness): What happens if cast fails?
                     trap_vector = static_cast<TrapVector>(immediate.value);
                 }; break;
 
                 default:
-                    UNREACHABLE();
+                    trap_vector = get_trap_vector(instruction);
             }
             operands = static_cast<Word>(trap_vector);
         }; break;
@@ -874,6 +854,28 @@ ConditionCode get_branch_condition_code(const Instruction instruction) {
         case Instruction::BR:
         case Instruction::BRNZP:
             return 0b111;
+        default:
+            UNREACHABLE();
+    }
+}
+
+// Must ONLY be called with trap instruction (`GETC`, `PUTS`, etc)
+TrapVector get_trap_vector(const Instruction instruction) {
+    switch (instruction) {
+        case Instruction::GETC:
+            return TrapVector::GETC;
+        case Instruction::OUT:
+            return TrapVector::OUT;
+        case Instruction::PUTS:
+            return TrapVector::PUTS;
+        case Instruction::IN:
+            return TrapVector::IN;
+        case Instruction::PUTSP:
+            return TrapVector::PUTSP;
+        case Instruction::HALT:
+            return TrapVector::HALT;
+        case Instruction::REG:
+            return TrapVector::REG;
         default:
             UNREACHABLE();
     }
