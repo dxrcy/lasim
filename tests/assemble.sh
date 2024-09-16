@@ -1,9 +1,6 @@
 #!/bin/sh
 
-examples='./examples'
-
-alias lasim='./lasim'
-alias lc3as='lc3as'
+source "$(dirname $0)/shared.sh"
 
 echo '------'
 for asm in "$examples"/*.asm; do
@@ -19,10 +16,7 @@ for asm in "$examples"/*.asm; do
     fi
 
     lasim -a "$asm" -o "$obj_actual"
-    if [ $? -eq 0 ];
-        then printf '\x1b[32mpass\x1b[0m\n'
-        else printf '\x1b[31mFAIL\x1b[0m\n'
-    fi
+    report_status $?
 done
 
 echo '------'
@@ -38,9 +32,6 @@ for obj_actual in "$examples"/*.a.obj; do
     fi
 
     diff "$obj_expected" "$obj_actual" >/dev/null
-    if [ $? -eq 0 ];
-        then printf '\x1b[32mpass\x1b[0m\n'
-        else printf '\x1b[31mFAIL\x1b[0m\n'
-    fi
+    report_status $?
 done
-#
+
