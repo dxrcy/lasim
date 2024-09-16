@@ -17,29 +17,28 @@ msg3   .stringz "You may now enter a message of no more than 20 lower case chara
 
 ; Prints out the instructions to the user and reads some user input.
 start
-    ; lea r0, msg1  ; Load address of message1 into R0.
-    ; puts          ; Print message1.
+    lea r0, msg1  ; Load address of message1 into R0.
+    puts          ; Print message1.
 
-    ; in              ; Read user input into r0.
-    and r0, r0, #0
+    in              ; Read user input into r0.
     add r3, r0, #0  ; Copy R0 to R3 (stored for later use).
 
-    ; lea r0, newln ; Load address of newline into R0.
-    ; puts          ; Print newline.
+    lea r0, newln ; Load address of newline into R0.
+    puts          ; Print newline.
 
-    ; lea r0, msg2  ; Load address of message2 into R0.
-    ; puts          ; Print message2.
+    lea r0, msg2  ; Load address of message2 into R0.
+    puts          ; Print message2.
 
-    ; in              ; Read user input into R0.
+    in              ; Read user input into R0.
     lea r0, newln ; Load address of newline into R0.
     lea r1, neg48   ; Load address of neg48 into R1.
     ldr r1, r1, #0  ; Load contents of neg48 into R1 (R1 now holds -48).
     add r2, r0, r1  ; Subtract 48 from the ASCII value and store in R2.
 
-    ; puts          ; Print new line.
+    puts          ; Print new line.
 
-    ; lea r0, msg3  ; Load address of message3 into R0.
-    ; puts          ; Print message3.
+    lea r0, msg3  ; Load address of message3 into R0.
+    puts          ; Print message3.
 
     lea r4, array   ; Load starting point address of array.
     and r1, r1, #0  ; Initialize R1 to zero.
@@ -75,15 +74,13 @@ checkChar
     BRz decrypt     ; If zero, branch to decrypt.
 
 
-; Encryption is divided into two routines
+; Encryption is divided into two routines:
 ; 1. Set up memory array and counter.
 ; 2. Loop over every character to encrypt it.
 ;    Each iteration the rightmost bit is flipped and the key is added.
 encrypt
     lea r4, array   ; Load (starting) address of array into R4.
     add r5, r1, #0  ; Copy # of characters in message to R5, to use as counter.
-    reg
-    halt
 ;  lea r5, pos20   ; Load address of pos20 into R5.
 ;  ldr r5, r5, #0  ; Load contents of pos20 into R5 (used as counter).
 
@@ -159,7 +156,7 @@ outputLoop
 
 halt  ; Halt execution.
 
-array  .blkw	#20    ; Array of size 20.
+array  .blkw	20    ; Array of size 20.
 neg48  .fill	#-48  ; Constant for converting numbers from ASCII to decimal.
 neg69  .fill	#-69  ; Constant for the inverse of 'E'.
 neg68  .fill	#-68  ; Constant for the inverse of' D'.
