@@ -24,6 +24,7 @@ watch:
 test: $(TARGET) test.cpp
 	tests/assemble.sh
 	tests/branch.sh
+	tests/jump.sh
 	tests/arith.sh
 	tests/memory.sh
 	tests/test.cpp.sh
