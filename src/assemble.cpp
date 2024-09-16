@@ -44,6 +44,8 @@ enum class Directive {
     STRINGZ,
 };
 
+// TODO(feat/diagnostic): Warn on unused labels ?
+
 // MUST match order of `Directive` enum
 static const char *const DIRECTIVE_NAMES[] = {
     "ORIG", "END", "FILL", "BLKW", "STRINGZ",

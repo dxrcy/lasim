@@ -504,6 +504,7 @@ Word &memory_checked(Word addr, Error &error) {
     return memory[addr];
 }
 
+// TODO(fix): Truncate to `size` bits in this function, don't rely on caller
 SignedWord sign_extend(SignedWord value, const size_t size) {
     // If previous-highest bit is set
     // Set all bits higher than previous sign bit to 1

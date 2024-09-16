@@ -21,11 +21,15 @@ watch:
 	@reflex --decoration=none -r 'src/.*|.*\.asm' -s -- zsh -c \
 		'clear; sleep 0.2; $(MAKE) --no-print-directory run'
 
-test: $(TARGET)
+test: $(TARGET) test.cpp
 	tests/assemble.sh
 	tests/branch.sh
 	tests/arith.sh
 	tests/memory.sh
+	tests/test.cpp.sh
+
+test.cpp: $(TARGET)
+	$(CC) $(CFLAGS) tests/test.cpp -o tests/out/test.bin
 
 clean:
 	rm -f ./lasim
