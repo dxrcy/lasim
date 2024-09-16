@@ -5,13 +5,13 @@ out="$tests/out"
 project="$tests/.."
 examples="$project/examples"
 
-if [ ! -d "$tests" ] || 
-    [ ! -d "$project" ] || 
+if [ ! -d "$tests" ] ||
+    [ ! -d "$out" ] ||
+    [ ! -d "$project" ] ||
     [ ! -d "$examples" ]; then
     echo 'missing directory'
     exit 1
 fi
-[ -d "$out" ] || mkdir "$out"
 
 lasim() {
     "$tests/../lasim" $@ || exit $?

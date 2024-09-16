@@ -21,16 +21,18 @@ watch:
 	@reflex --decoration=none -r 'src/.*|.*\.asm' -s -- zsh -c \
 		'clear; sleep 0.2; $(MAKE) --no-print-directory run'
 
-test: $(TARGET) test.cpp
+test: $(TARGET)
+	@if [ -d 'tests/out' ]; \
+		then rm -rf tests/out/*; \
+		else mkdir tests/out; \
+	fi
 	tests/assemble.sh
 	tests/branch.sh
 	tests/jump.sh
 	tests/arith.sh
 	tests/memory.sh
-	tests/test.cpp.sh
-
-test.cpp: $(TARGET)
 	$(CC) $(CFLAGS) tests/test.cpp -o tests/out/test.bin
+	tests/test.cpp.sh
 
 clean:
 	rm -f ./lasim
