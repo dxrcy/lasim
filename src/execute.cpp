@@ -291,11 +291,13 @@ void execute_next_instrution(bool &do_halt, Error &error) {
         case Opcode::STI: {
             const Register src_reg = bits_9_11(instr);
             const SignedWord offset = low_9_bits_signed(instr);
-            const Word pointer = registers.general_purpose[src_reg];
 
-            const Word value = memory_checked(pointer, error);
+            const Word value = registers.general_purpose[src_reg];
+            const Word pointer =
+                memory_checked(registers.program_counter + offset, error);
             OK_OR_RETURN(error);
-            memory_checked(registers.program_counter + offset, error) = value;
+
+            memory_checked(pointer, error) = value;
             OK_OR_RETURN(error);
         }; break;
 
