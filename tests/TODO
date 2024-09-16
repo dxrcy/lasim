@@ -1,0 +1,6 @@
+assemble
+    assemble file with weird syntax
+    try to assemble erroneous files
+
+execute
+    condition code
