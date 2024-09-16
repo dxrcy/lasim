@@ -23,6 +23,7 @@ watch:
 
 test: $(TARGET)
 	tests/assemble.sh
+	tests/branch.sh
 
 clean:
 	rm -f ./lasim

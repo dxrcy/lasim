@@ -1,4 +1,5 @@
 /lasim
 
-/examples/*.obj
-/examples/*.sym
+**/*.obj
+**/*.sym
+

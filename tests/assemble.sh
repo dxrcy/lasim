@@ -13,15 +13,15 @@ for asm in "$examples"/*.asm; do
     printf 'ASSEMBLE    %-18s' "$filename"
 
     lc3as "$asm" >/dev/null
-    if [ "$?" -ne 0 ]; then
+    if [ $? -ne 0 ]; then
         echo 'Bad assembly file. Skipping.'
         continue
     fi
 
     lasim -a "$asm" -o "$obj_actual"
-    if [ "$?" -eq 0 ];
-        then echo 'pass'
-        else echo 'FAIL'
+    if [ $? -eq 0 ];
+        then printf '\x1b[32mpass\x1b[0m\n'
+        else printf '\x1b[31mFAIL\x1b[0m\n'
     fi
 done
 
@@ -38,9 +38,9 @@ for obj_actual in "$examples"/*.a.obj; do
     fi
 
     diff "$obj_expected" "$obj_actual" >/dev/null
-    if [ "$?" -eq 0 ];
-        then echo 'pass'
-        else echo 'FAIL'
+    if [ $? -eq 0 ];
+        then printf '\x1b[32mpass\x1b[0m\n'
+        else printf '\x1b[31mFAIL\x1b[0m\n'
     fi
 done
 #
