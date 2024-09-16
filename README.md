@@ -35,6 +35,7 @@ lasim -x examples/checkerboard.obj
 - `char_count`: Counts the amount of times each letter was inputted
 - `checkerboard`: Prints an ASCII checkerboard
 - `count_bits`: Counts the '1' bits of an inputted number from 0-9
+- `encrypt`: Encrypt/decrypt a message using a Caesar cipher
 - `fibonacci`: Caclulates the n-th fibonacci number (no output)
 - `hello_world`: Take a wild guess...
 - `store_number`: Reads a 5-digit number and stores it in memory (no output)
