@@ -367,6 +367,7 @@ void execute_trap_instruction(const Word instr, bool &do_halt, Error &error) {
 
         case TrapVector::OUT: {
             const Word word = registers.general_purpose[0];
+            // TODO(correctness): Should it be low 8-bits instead ?
             const char ch = static_cast<char>(word & BITMASK_LOW_7);
             print_char(ch);
         }; break;
