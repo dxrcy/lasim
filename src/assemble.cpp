@@ -568,7 +568,7 @@ void parse_instruction(Word &word, const char *&line,
                 operands |= token.value.integer.value & BITMASK_LOW_9;
             } else if (token.kind == TokenKind::LABEL) {
                 add_label_reference(label_references, token.value.label,
-                                    line_number, word_count, false);
+                                    word_count, line_number, false);
             } else {
                 print_invalid_operand("integer or label", token.kind,
                                       instruction);
@@ -609,7 +609,7 @@ void parse_instruction(Word &word, const char *&line,
                     operands |= token.value.integer.value & BITMASK_LOW_11;
                 } else if (token.kind == TokenKind::LABEL) {
                     add_label_reference(label_references, token.value.label,
-                                        line_number, word_count, false);
+                                        word_count, line_number, false);
                 } else {
                     fprintf(stderr, "Invalid operand\n");
                     failed = true;
