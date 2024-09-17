@@ -60,4 +60,5 @@ This project only uses the following C++ features (to keep it simple):
 
 - [ ] Add debugger mode
 - [ ] Make error messages nicer
+- [ ] Assemble and run without intermediate write
 

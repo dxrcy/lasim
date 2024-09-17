@@ -174,8 +174,11 @@ bool find_label_definition(const LabelString &target,
                            const vector<LabelDefinition> &definitions,
                            SignedWord &index);
 char escape_character(const char ch, bool &failed);
+
 bool does_integer_fit_size(const InitialSignWord integer,
                            const uint8_t size_bits);
+bool does_integer_fit_size_inner(const SignedWord integer,
+                                 const uint8_t size_bits);
 
 // Note: 'take' here means increment the line pointer and return a token
 void take_next_token(const char *&line, Token &token, bool &failed);
@@ -303,8 +306,19 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words,
             continue;
         }
 
-        const SignedWord pc_offset = index - ref.index - 1;
-        const Word mask = (1U << (ref.is_offset11 ? 11 : 9)) - 1;
+        const uint8_t size = (ref.is_offset11 ? 11 : 9);
+        const Word mask = (1U << size) - 1;
+
+        const SignedWord pc_offset =
+            index - static_cast<SignedWord>(ref.index) - 1;
+        if (!does_integer_fit_size_inner(pc_offset, size)) {
+            fprintf(stderr, "Label '%s' is too far away to be referenced\n",
+                    ref.name);
+            fprintf(stderr, "\tLine %d\n", ref.line_number);
+            SET_ERROR(error, ASSEMBLE);
+            continue;
+        }
+
         words[ref.index] |= pc_offset & mask;
     }
 
@@ -926,19 +940,36 @@ char escape_character(const char ch, bool &failed) {
     }
 }
 
+bool does_negative_integer_fit_size(const SignedWord integer,
+                                    const uint8_t size_bits) {
+    // Flip sign and check against largest allowed negative value
+    // Eg. size = 5
+    //     Largest positive value: 0000'1111
+    //     Largest negative value: 0001'0000 = max
+    const Word max = 1 << (size_bits - 1);
+    return (Word)(-integer) <= max;
+}
+bool does_positive_integer_fit_size(const Word integer,
+                                    const uint8_t size_bits) {
+    // Check if any bits above --and including-- sign bit are set
+    return integer >> (size_bits - 1) == 0;
+}
+
 bool does_integer_fit_size(const InitialSignWord integer,
                            const uint8_t size_bits) {
-    // TODO(rewrite): There has to be a better way to do this...
     if (integer.is_signed) {
-        // Flip sign and check against largest allowed negative value
-        // Eg. size = 5
-        //     Largest positive value: 0000'1111
-        //     Largest negative value: 0001'0000 = max
-        const Word max = 1 << (size_bits - 1);
-        return (Word)(-integer.value) <= max;
+        return does_negative_integer_fit_size(integer.value, size_bits);
     }
-    // Check if any bits above --and including-- sign bit are set
-    return integer.value >> (size_bits - 1) == 0;
+    return does_positive_integer_fit_size(integer.value, size_bits);
+}
+
+// TODO(refactor): Rename these functions PLEASE !!!
+bool does_integer_fit_size_inner(const SignedWord integer,
+                                 const uint8_t size_bits) {
+    if (integer < 0) {
+        return does_negative_integer_fit_size(integer, size_bits);
+    }
+    return does_positive_integer_fit_size(integer, size_bits);
 }
 
 void print_invalid_token(const char *const &line) {

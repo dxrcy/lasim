@@ -8,15 +8,6 @@
 
 .orig x3000 ; Starting point of the program.
 
-BR start  ; Branch to the start routine.
-
-newln  .stringz "\n"
-msg1   .stringz "If you want to encrypt your message, type: E\nIf you want to decrypt your message, type: D\n"
-msg2   .stringz "Enter the key you wish to use (single digit from 1 to 9).\n"
-msg3   .stringz "You may now enter a message of no more than 20 lower case characters; when done press Enter.\n"
-
-; Prints out the instructions to the user and reads some user input.
-start
     lea r0, msg1  ; Load address of message1 into R0.
     puts          ; Print message1.
 
@@ -159,6 +150,11 @@ neg48  .fill	#-48  ; Constant for converting numbers from ASCII to decimal.
 neg69  .fill	#-69  ; Constant for the inverse of 'E'.
 neg68  .fill	#-68  ; Constant for the inverse of' D'.
 pos20  .fill	#20   ; Constant used as loop counter.
+
+newln  .stringz "\n"
+msg1   .stringz "If you want to encrypt your message, type: E\nIf you want to decrypt your message, type: D\n"
+msg2   .stringz "Enter the key you wish to use (single digit from 1 to 9).\n"
+msg3   .stringz "You may now enter a message of no more than 20 lower case characters; when done press Enter.\n"
 
 .end
 
