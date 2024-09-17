@@ -13,8 +13,6 @@
 
 using std::vector;
 
-// TODO(fix): Check for multiple labels with same index
-
 // This can be large as it is never aggregated
 #define MAX_LINE 512  // Includes '\0'
 #define MAX_LABEL 32  // Includes '\0'
@@ -24,6 +22,7 @@ using std::vector;
         return;
 
 // Must be a copied string, as `line` is overwritten
+// Case is preserved, but must be ignoring when comparing labels
 typedef char LabelString[MAX_LABEL];
 
 typedef struct LabelDefinition {
@@ -127,6 +126,7 @@ typedef struct Token {
         // Sign depends on if `-` character is present in asm file
         InitialSignWord integer;
         // `StringSlice`s are only valid for lifetime of `line`
+        // Length should be checked on construction of token
         StringSlice string;  // Gets copied on push to words vector
         StringSlice label;   // Gets copied on push to a labels vector
     } value;
@@ -365,14 +365,22 @@ void parse_line(vector<Word> &words, const char *&line,
 
     if (token.kind == TokenKind::LABEL) {
         const StringSlice &name = token.value.label;
+        const size_t index = words.size();
+
         for (size_t i = 0; i < label_definitions.size(); ++i) {
-            if (!strncmp(label_definitions[i].name, name.pointer,
-                         name.length)) {
+            if (string_equals_slice(label_definitions[i].name, name)) {
                 fprintf(stderr, "Multiple labels are defined with the name '");
                 print_string_slice(stderr, name);
                 fprintf(stderr, "'\n");
                 failed = true;
                 return;
+            }
+            if (label_definitions[i].index == index) {
+                fprintf(stderr, "Label defined on already-labelled line '");
+                print_string_slice(stderr, name);
+                fprintf(stderr, "'\n");
+                failed = true;
+                // Don't return, so that label still gets defined
             }
         }
 
@@ -380,7 +388,7 @@ void parse_line(vector<Word> &words, const char *&line,
         LabelDefinition &def = label_definitions.back();
         // Label length has already been checked
         copy_string_slice_to_string(def.name, name);
-        def.index = words.size();
+        def.index = index;
 
         // Continue to instruction/directive after label
         take_next_token(line, token, failed);
@@ -916,8 +924,9 @@ bool find_label_definition(const LabelString &target,
                            SignedWord &index) {
     for (size_t j = 0; j < definitions.size(); ++j) {
         const LabelDefinition candidate = definitions[j];
-        // Use `strcmp` as both arguments are null-terminated and unknown length
-        if (!strcmp(candidate.name, target)) {
+        // Use `strcasecmp` as both arguments are null-terminated and unknown
+        //     length, and comparison is case-insensitive
+        if (!strcasecmp(candidate.name, target)) {
             index = candidate.index;
             return true;
         }
