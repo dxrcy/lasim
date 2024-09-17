@@ -156,9 +156,15 @@ void execute_next_instrution(bool &do_halt, Error &error) {
             const ConditionCode condition = bits_9_11(instr);
             const SignedWord offset = low_9_bits_sext(instr);
 
+            // `BR` compiles to 0b111 just like `BRnzp`
+            if (condition == 0b000) {
+                fprintf(stderr,
+                        "Invalid condition code 0b000 for BR* instruction\n");
+                SET_ERROR(error, EXECUTE);
+                return;
+            }
+
             // If any bits of the condition codes match
-            // Instruction `BR` is equivalent to `BRnzp`, but 0b000 is checked
-            //     here for completeness (as if 0b111)
             if (condition == 0b000 ||
                 (condition & registers.condition) != 0b000) {
                 registers.program_counter += offset;
