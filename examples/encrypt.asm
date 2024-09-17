@@ -84,7 +84,6 @@ encrypt
 ;  lea r5, pos20   ; Load address of pos20 into R5.
 ;  ldr r5, r5, #0  ; Load contents of pos20 into R5 (used as counter).
 
-; TODO: skip character if it's whitespace
 encryptLoop
     ldr r0, r4, #0  ; Load contents at array index into R0.
     jsr flipBit     ; Jump to flip bit routine and jump back when done.
@@ -108,7 +107,6 @@ decrypt
 ;  lea r5, pos20   ; Load address of pos20 into R5.
 ;  ldr r5, r5, #0  ; Load contents of pos20 into R5 (used as counter)
 
-; TODO: skip character if it's whitespace
 decryptLoop
     ldr r0, r4, #0  ; Load contents at array index into R0.
     not r2, r2      ; Invert key.

@@ -369,6 +369,7 @@ void execute_trap_instruction(const Word instr, bool &do_halt, Error &error) {
             // TODO(correctness): Should it be low 8-bits instead ?
             const char ch = static_cast<char>(word & BITMASK_LOW_7);
             print_char(ch);
+            fflush(stdout);
         }; break;
 
         case TrapVector::PUTS: {
@@ -382,6 +383,7 @@ void execute_trap_instruction(const Word instr, bool &do_halt, Error &error) {
                 const char ch = static_cast<char>(word & BITMASK_LOW_8);
                 print_char(ch);
             }
+            fflush(stdout);
         } break;
 
         case TrapVector::PUTSP: {
@@ -401,6 +403,7 @@ void execute_trap_instruction(const Word instr, bool &do_halt, Error &error) {
                     break;
                 print_char(low);
             }
+            fflush(stdout);
         }; break;
 
         case TrapVector::HALT:
