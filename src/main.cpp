@@ -26,37 +26,34 @@ int main(const int argc, const char *const *const argv) {
 
 Error try_run(Options &options) {
     Error error = Error::OK;
-
-    const char *assemble_filename = nullptr;  // Assemble if !nullptr
-    const char *execute_filename = nullptr;   // Execute if !nullptr
+    ObjectFile object;
 
     switch (options.mode) {
-        case Mode::ASSEMBLE_ONLY:
-            assemble_filename = options.in_filename;
-            break;
-        case Mode::EXECUTE_ONLY:
-            execute_filename = options.in_filename;
-            break;
-        case Mode::ASSEMBLE_EXECUTE:
-            assemble_filename = options.in_filename;
-            execute_filename = options.out_filename;
-            break;
-    }
+        case Mode::ASSEMBLE_ONLY: {
+            object.kind = ObjectFile::FILE;
+            object.filename = options.in_filename;
+            assemble(options.in_filename, object, error);
+            if (error != Error::OK)
+                return error;
+        }; break;
 
-    // Sanity check
-    if (assemble_filename == nullptr && execute_filename == nullptr)
-        UNREACHABLE();
+        case Mode::EXECUTE_ONLY: {
+            object.kind = ObjectFile::FILE;
+            object.filename = options.in_filename;
+            execute(object, error);
+            if (error != Error::OK)
+                return error;
+        }; break;
 
-    if (assemble_filename != nullptr) {
-        assemble(assemble_filename, options.out_filename, error);
-        if (error != Error::OK)
-            return error;
-    }
-
-    if (execute_filename != nullptr) {
-        execute(execute_filename, error);
-        if (error != Error::OK)
-            return error;
+        case Mode::ASSEMBLE_EXECUTE: {
+            object.kind = ObjectFile::MEMORY;
+            assemble(options.in_filename, object, error);
+            if (error != Error::OK)
+                return error;
+            execute(object, error);
+            if (error != Error::OK)
+                return error;
+        }; break;
     }
 
     return Error::OK;

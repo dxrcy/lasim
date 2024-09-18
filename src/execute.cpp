@@ -22,7 +22,7 @@
 
 // TODO(refactor): Re-order functions
 
-void execute(const char *const obj_filename, Error &error);
+void execute(const ObjectFile &input, Error &error);
 void execute_next_instrution(bool &do_halt, Error &error);
 void execute_trap_instruction(const Word instr, bool &do_halt, Error &error);
 
@@ -38,9 +38,11 @@ static char *halfbyte_string(const Word word);
 void print_registers(void);
 char condition_char(ConditionCode condition);
 
-void execute(const char *const obj_filename, Error &error) {
-    read_obj_filename_to_memory(obj_filename, error);
-    OK_OR_RETURN(error);
+void execute(const ObjectFile &input, Error &error) {
+    if (input.kind == ObjectFile::FILE) {
+        read_obj_filename_to_memory(input.filename, error);
+        OK_OR_RETURN(error);
+    }
 
     // GP and condition registers are already initialized to 0
     registers.program_counter = memory_file_bounds.start;

@@ -8,6 +8,7 @@
 
 #include "bitmasks.hpp"
 #include "error.hpp"
+#include "globals.hpp"
 #include "slice.cpp"
 #include "types.hpp"
 
@@ -136,7 +137,7 @@ typedef struct Token {
 // TODO(chore): Move all function doc comments to prototypes ?
 // TODO(refactor): Change some out-params to be return values
 
-void assemble(const char *const asm_filename, const char *const obj_filename,
+void assemble(const char *const asm_filename, const ObjectFile &output,
               Error &error);
 // Used by `assemble`
 void write_obj_file(const char *const filename, const vector<Word> &words,
@@ -208,13 +209,23 @@ static const char *token_kind_to_string(const TokenKind token_kind);
 // Debugging
 void _print_token(const Token &token);
 
-void assemble(const char *const asm_filename, const char *const obj_filename,
+void assemble(const char *const asm_filename, const ObjectFile &output,
               Error &error) {
     vector<Word> words;
     assemble_file_to_words(asm_filename, words, error);
     OK_OR_RETURN(error);
-    write_obj_file(obj_filename, words, error);
-    OK_OR_RETURN(error);
+
+    if (output.kind == ObjectFile::FILE) {
+        write_obj_file(output.filename, words, error);
+        OK_OR_RETURN(error);
+    } else {
+        // TODO(refactor): Write to memory in `assemble_file_to_words`
+        //      Saves a redundant copy of the array
+        const Word origin = words[0];
+        for (size_t i = 1; i < words.size(); ++i) {
+            memory[origin + i] = words[i];
+        }
+    }
 }
 
 void write_obj_file(const char *const filename, const vector<Word> &words,

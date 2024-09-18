@@ -73,4 +73,12 @@ enum class TrapVector {
     REG = 0x27,
 };
 
+typedef union ObjectFile {
+    enum {
+        FILE,
+        MEMORY,
+    } kind;
+    const char *filename;
+} ObjectFile;
+
 #endif
