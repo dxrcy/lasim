@@ -223,8 +223,10 @@ void assemble(const char *const asm_filename, const ObjectFile &output,
         //      Saves a redundant copy of the array
         const Word origin = words[0];
         for (size_t i = 1; i < words.size(); ++i) {
-            memory[origin + i] = words[i];
+            memory[origin + i - 1] = words[i];
         }
+        memory_file_bounds.start = origin;
+        memory_file_bounds.end = origin + words.size() - 1;
     }
 }
 
