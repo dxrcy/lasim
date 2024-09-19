@@ -73,7 +73,7 @@ enum class TrapVector {
     REG = 0x27,
 };
 
-typedef union ObjectFile {
+typedef struct ObjectFile {
     enum {
         FILE,
         MEMORY,
