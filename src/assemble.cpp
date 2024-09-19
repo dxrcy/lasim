@@ -133,6 +133,81 @@ typedef struct Token {
     } value;
 } Token;
 
+struct Output {
+    enum { GLOBAL, TEMP } kind = GLOBAL;
+    vector<Word> temp_memory;
+    size_t global_size = 0;
+    size_t global_origin = -1;
+
+    Output(const ObjectFile &obj_file) {
+        if (obj_file.kind == ObjectFile::FILE) {
+            this->kind = TEMP;
+        } else {
+            this->kind = GLOBAL;
+        }
+    }
+
+    void set_origin(Word origin) {
+        if (this->kind == TEMP) {
+            if (this->temp_memory.size() > 0)
+                PANIC("tried to set origin twice");
+            this->temp_memory.push_back(origin);
+        } else {
+            if (this->global_origin != -1)
+                PANIC("tried to set origin twice");
+            this->global_origin = origin;
+        }
+    }
+
+    bool has_origin() {
+        if (this->kind == TEMP) {
+            return this->temp_memory.size() > 0;
+        } else {
+            return this->global_origin != -1;
+        }
+    }
+
+    size_t get_origin() {
+        if (this->kind == TEMP) {
+            if (this->temp_memory.size() > 0)
+                PANIC("tried to access origin before it was set");
+            return this->temp_memory[0];
+        } else {
+            if (this->global_origin == -1)
+                PANIC("tried to access origin before it was set");
+            return this->global_origin;
+        }
+    }
+
+    void push_back(Word word) {
+        if (this->kind == TEMP) {
+            this->temp_memory.push_back(word);
+        } else {
+            if (this->global_origin == -1)
+                PANIC("tried to push to memory before origin was set");
+            // TODO(fix): Check bounds
+            memory[this->global_origin + this->global_size] = word;
+            ++this->global_size;
+        }
+    }
+
+    size_t size() {
+        if (this->kind == TEMP) {
+            return this->temp_memory.size();
+        } else {
+            return this->global_size;
+        }
+    }
+
+    Word &operator[](size_t index) {
+        if (this->kind == TEMP) {
+            return this->temp_memory[index];
+        } else {
+            return memory[this->global_origin + this->global_size];
+        }
+    }
+};
+
 // TODO(chore): Document functions
 // TODO(chore): Move all function doc comments to prototypes ?
 // TODO(refactor): Change some out-params to be return values
@@ -142,15 +217,15 @@ void assemble(const char *const asm_filename, const ObjectFile &output,
 // Used by `assemble`
 void write_obj_file(const char *const filename, const vector<Word> &words,
                     Error &error);
-void assemble_file_to_words(const char *const filename, vector<Word> &words,
+void assemble_file_to_words(const char *const filename, Output &words,
                             Error &error);
 
 // Used by `assemble_file_to_words`
-void parse_line(vector<Word> &words, const char *&line,
+void parse_line(Output &words, const char *&line,
                 vector<LabelDefinition> &label_definitions,
                 vector<LabelReference> &label_references, int line_number,
                 bool &is_end, bool &failed);
-void parse_directive(vector<Word> &words, const char *&line,
+void parse_directive(Output &words, const char *&line,
                      const Directive directive, bool &is_end, bool &failed);
 void parse_instruction(Word &word, const char *&line,
                        const Instruction &instruction, const size_t word_index,
@@ -209,23 +284,25 @@ static const char *token_kind_to_string(const TokenKind token_kind);
 // Debugging
 void _print_token(const Token &token);
 
+// TODO(rename): output param
 void assemble(const char *const asm_filename, const ObjectFile &output,
               Error &error) {
-    vector<Word> words;
+    // TODO(rename): words
+    Output words(output);
+
     assemble_file_to_words(asm_filename, words, error);
     OK_OR_RETURN(error);
 
     if (output.kind == ObjectFile::FILE) {
-        write_obj_file(output.filename, words, error);
+        if (words.kind != Output::TEMP)
+            PANIC("tried to write file with global memory")
+        write_obj_file(output.filename, words.temp_memory, error);
         OK_OR_RETURN(error);
-    } else {
-        // TODO(refactor): Write to memory in `assemble_file_to_words`
-        //      Saves a redundant copy of the array
-        const Word origin = words[0];
-        for (size_t i = 1; i < words.size(); ++i) {
-            memory[origin + i] = words[i];
-        }
     }
+
+    // TODO(fix): set `memory_file_bounds` to origin
+    // TODO(refactor): move origin to `ObjectFile`
+    memory_file_bounds.start = words.get_origin();
 }
 
 void write_obj_file(const char *const filename, const vector<Word> &words,
@@ -256,7 +333,7 @@ void write_obj_file(const char *const filename, const vector<Word> &words,
     fclose(obj_file);
 }
 
-void assemble_file_to_words(const char *const filename, vector<Word> &words,
+void assemble_file_to_words(const char *const filename, Output &words,
                             Error &error) {
     // File errors are fatal to assembly process, all other errors can be
     // 'ignored' to allow parsing to continue to following lines. However, if
@@ -338,7 +415,7 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words,
     fclose(asm_file);
 }
 
-void parse_line(vector<Word> &words, const char *&line,
+void parse_line(Output &words, const char *&line,
                 vector<LabelDefinition> &label_definitions,
                 vector<LabelReference> &label_references, int line_number,
                 bool &is_end, bool &failed) {
@@ -350,13 +427,13 @@ void parse_line(vector<Word> &words, const char *&line,
     if (token.kind == TokenKind::EOL)
         return;
 
-    if (words.size() == 0) {
+    if (!words.has_origin()) {
         if (token.kind != TokenKind::DIRECTIVE) {
             fprintf(stderr, "First line must be `.ORIG` directive\n");
             failed = true;
             // Silence this error message for following lines
             // Compilation will not succeed regardless
-            words.push_back(0x0000);
+            words.set_origin(0x0000);
             return;
         }
         take_next_token(line, token, failed);
@@ -370,7 +447,7 @@ void parse_line(vector<Word> &words, const char *&line,
         }
         expect_line_eol(line, failed);
         RETURN_IF_FAILED(failed);
-        words.push_back(token.value.integer.value);
+        words.set_origin(token.value.integer.value);
         return;
     }
 
@@ -440,7 +517,7 @@ void parse_line(vector<Word> &words, const char *&line,
     words.push_back(word);
 }
 
-void parse_directive(vector<Word> &words, const char *&line,
+void parse_directive(Output &words, const char *&line,
                      const Directive directive, bool &is_end, bool &failed) {
     Token token;
 

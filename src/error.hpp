@@ -11,6 +11,11 @@
         fprintf(stderr, "Unreachable code reached. Uh oh!\n"); \
         exit(static_cast<int>(Error::UNREACHABLE));            \
     }
+#define PANIC(_msg)                                 \
+    {                                               \
+        fprintf(stderr, "Panic: " _msg "\n");       \
+        exit(static_cast<int>(Error::UNREACHABLE)); \
+    }
 
 #define OK_OR_RETURN(error)     \
     {                           \

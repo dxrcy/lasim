@@ -73,6 +73,7 @@ enum class TrapVector {
     REG = 0x27,
 };
 
+// TODO(rename): FILE and MEMORY
 typedef union ObjectFile {
     enum {
         FILE,
