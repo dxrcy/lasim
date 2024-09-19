@@ -31,7 +31,7 @@ Error try_run(Options &options) {
     switch (options.mode) {
         case Mode::ASSEMBLE_ONLY: {
             object.kind = ObjectFile::FILE;
-            object.filename = options.in_filename;
+            object.filename = options.out_filename;
             assemble(options.in_filename, object, error);
             if (error != Error::OK)
                 return error;
