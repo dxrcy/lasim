@@ -74,7 +74,7 @@ enum class TrapVector {
 };
 
 // TODO(rename): FILE and MEMORY
-typedef union ObjectFile {
+typedef struct ObjectFile {
     enum {
         FILE,
         MEMORY,

@@ -45,6 +45,8 @@ void parse_options(Options &options, const int argc,
     bool in_file_set = false;
     bool out_file_set = false;
 
+    // TODO(feat/ax): Write output file iff `-o` specified
+
     for (int i = 1; i < argc; ++i) {
         const char *arg = argv[i];
 
