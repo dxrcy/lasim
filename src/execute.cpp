@@ -55,37 +55,54 @@ enum class DebuggerAction {
     QUIT,
 };
 
-#define MAX_DEBUG_COMMAND 4
+#define MAX_DEBUG_COMMAND 4  // Includes '\0'
 
 // TODO(lint): Use `void` param for prototypes of these functions
 
+bool read_line(char *buffer, size_t max_size) {
+    int ch;
+    // Read characters until EOL or EOF
+    size_t len = 0;
+    for (; len < max_size - 1; ++len) {
+        ch = getchar();
+        if (ch == EOF)
+            return false;
+        if (ch == '\n')
+            break;
+        if (ch == '\r')
+            continue;
+        buffer[len] = ch;
+    }
+    if (len >= max_size - 1) {
+        // Flush trailing characters until end of line
+        for (; (ch = getchar(), ch != '\n' && ch != EOF);)
+            ;
+    }
+    buffer[len] = '\0';
+    return true;
+}
+
 DebuggerAction ask_debugger_command() {
-    dprintf("Command: ");
+    char command[MAX_DEBUG_COMMAND];
 
-    int command;
-
-    tty_nobuffer_noecho();
     while (true) {
-        command = getchar();
-        if (command == EOF) {
-            tty_restore();
+        fprintf(stderr, "\x1b[1m");
+        dprintf("Command: ");
+        if (!read_line(command, MAX_DEBUG_COMMAND))
             return DebuggerAction::NONE;
-        }
-        if (command >= '0' && command <= '~')
+        if (command[0] != '\0')
             break;
     }
-    tty_restore();
 
-    printf("%c", command);
-    printf("\n");
-
-    switch (command) {
+    switch (command[0]) {
         case 'h':
             dprintf(
                 "    h   Print usage\n"
                 "    r   Print registers\n"
                 "    s   Step next instruction\n"
                 "    c   Continue execution\n"
+                "    ms  Set value at memory location\n"
+                "    mg  Print value at memory address\n"
                 "    q   Quit all execution\n"
                 "");
             break;
@@ -98,8 +115,13 @@ DebuggerAction ask_debugger_command() {
             return DebuggerAction::CONTINUE;
         case 'q':
             return DebuggerAction::QUIT;
+        case 'm':
+            dprintf("(Unimplemented...)\n");
+            break;
         default:
-            dprintf("Unknown command\n");
+            dprintf(
+                "Unknown command. Use `h` to show usage.\n"
+                "");
     }
 
     return DebuggerAction::NONE;
@@ -148,6 +170,8 @@ void execute(const ObjectFile &input, bool debugger, Error &error) {
                 if (do_halt)
                     break;
             }
+            fprintf(stderr, "\x1b[2m");
+            dprintf("-------------\n");
         }
 
         execute_next_instrution(do_halt, error);
