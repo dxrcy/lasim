@@ -28,6 +28,7 @@ struct Options {
     // Empty string (file[0]=='\0') refers to stdin/stdout respectively
     char in_filename[FILENAME_MAX];
     char out_filename[FILENAME_MAX];
+    bool debugger;
 };
 
 void parse_options(Options &options, const int argc,
@@ -41,6 +42,7 @@ void copy_filename_with_extension(char *const dest, const char *const src);
 void parse_options(Options &options, const int argc,
                    const char *const *const argv) {
     options.mode = Mode::ASSEMBLE_EXECUTE;
+    options.debugger = false;
 
     bool in_file_set = false;
     bool out_file_set = false;
@@ -49,6 +51,8 @@ void parse_options(Options &options, const int argc,
 
     for (int i = 1; i < argc; ++i) {
         const char *arg = argv[i];
+
+        // TODO(feat): Parse arguments raw after `--`
 
         if (arg[0] == '\0') {
             fprintf(stderr, "Argument cannot be empty\n");
@@ -90,6 +94,11 @@ void parse_options(Options &options, const int argc,
 
                 // Output file
                 case 'o': {
+                    if (out_file_set) {
+                        fprintf(stderr, "Cannot specify `-o` more than once\n");
+                        print_usage_hint();
+                        exit(static_cast<int>(Error::CLI));
+                    }
                     out_file_set = true;
                     if (i + 1 >= argc) {
                         fprintf(stderr, "Expected argument for `-o`\n");
@@ -112,31 +121,55 @@ void parse_options(Options &options, const int argc,
                 }; break;
 
                 // Assemble
-                case 'a': {
-                    if (options.mode == Mode::ASSEMBLE_EXECUTE) {
-                        options.mode = Mode::ASSEMBLE_ONLY;
-                    } else {
-                        fprintf(
-                            stderr,
-                            "Cannot specify `-a` with `-x`. Omit both options "
-                            "for default (assemble+execute) mode.\n");
-                        print_usage_hint();
-                        exit(static_cast<int>(Error::CLI));
-                    }
-                }; break;
+                case 'a':
+                    switch (options.mode) {
+                        case Mode::ASSEMBLE_EXECUTE:
+                            options.mode = Mode::ASSEMBLE_ONLY;
+                            break;
+                        case Mode::ASSEMBLE_ONLY:
+                            fprintf(stderr,
+                                    "Cannot specify `-a` more than once\n");
+                            print_usage_hint();
+                            exit(static_cast<int>(Error::CLI));
+                        default:
+                            fprintf(stderr,
+                                    "Cannot specify `-a` with `-x`. Omit both "
+                                    "options "
+                                    "for default (assemble+execute) mode.\n");
+                            print_usage_hint();
+                            exit(static_cast<int>(Error::CLI));
+                    };
+                    break;
 
                 // Execute
                 case 'x': {
-                    if (options.mode == Mode::ASSEMBLE_EXECUTE) {
-                        options.mode = Mode::EXECUTE_ONLY;
-                    } else {
-                        fprintf(
-                            stderr,
-                            "Cannot specify `-x` with `-a`. Omit both options "
-                            "for default (assemble+execute) mode.\n");
+                    switch (options.mode) {
+                        case Mode::ASSEMBLE_EXECUTE:
+                            options.mode = Mode::EXECUTE_ONLY;
+                            break;
+                        case Mode::EXECUTE_ONLY:
+                            fprintf(stderr,
+                                    "Cannot specify `-x` more than once\n");
+                            print_usage_hint();
+                            exit(static_cast<int>(Error::CLI));
+                        default:
+                            fprintf(stderr,
+                                    "Cannot specify `-x` with `-a`. Omit both "
+                                    "options "
+                                    "for default (assemble+execute) mode.\n");
+                            print_usage_hint();
+                            exit(static_cast<int>(Error::CLI));
+                    };
+                }; break;
+
+                // Debugger
+                case 'd': {
+                    if (options.debugger) {
+                        fprintf(stderr, "Cannot specify `-d` more than once\n");
                         print_usage_hint();
                         exit(static_cast<int>(Error::CLI));
                     }
+                    options.debugger = true;
                 }; break;
 
                 default:
@@ -150,6 +183,12 @@ void parse_options(Options &options, const int argc,
 
     if (!in_file_set) {
         fprintf(stderr, "No input file specified\n");
+        print_usage_hint();
+        exit(static_cast<int>(Error::CLI));
+    }
+
+    if (options.debugger && options.mode == Mode::ASSEMBLE_ONLY) {
+        fprintf(stderr, "Cannot use debugger in assemble-only mode\n");
         print_usage_hint();
         exit(static_cast<int>(Error::CLI));
     }
@@ -197,6 +236,7 @@ void print_usage() {
             "                   Use '-' to read input from stdin\n"
             "    -o [OUTPUT]    Output filename\n"
             "                   Use '-' to write output to stdout (with -a)\n"
+            "    -d             Debug program execution\n"
             "OPTIONS:\n"
             "    -h             Print usage\n"
             "");
