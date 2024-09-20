@@ -22,7 +22,7 @@
 
 // TODO(refactor): Re-order functions
 
-void execute(const ObjectFile &input, Error &error);
+void execute(const ObjectFile &input, bool debugger, Error &error);
 void execute_next_instrution(bool &do_halt, Error &error);
 void execute_trap_instruction(const Word instr, bool &do_halt, Error &error);
 
@@ -38,24 +38,127 @@ static char *halfbyte_string(const Word word);
 void print_registers(void);
 char condition_char(ConditionCode condition);
 
-void execute(const ObjectFile &input, Error &error) {
+// Debugger message
+#define dprintf(...)                  \
+    {                                 \
+        fprintf(stderr, "\x1b[33m");  \
+        fprintf(stderr, __VA_ARGS__); \
+        fprintf(stderr, "\x1b[0m");   \
+        fflush(stderr);               \
+    }
+
+// Only for debugger commands which affect program control flow
+enum class DebuggerAction {
+    NONE,
+    STEP,
+    CONTINUE,
+    QUIT,
+};
+
+#define MAX_DEBUG_COMMAND 4
+
+// TODO(lint): Use `void` param for prototypes of these functions
+
+DebuggerAction ask_debugger_command() {
+    dprintf("Command: ");
+
+    int command;
+
+    tty_nobuffer_noecho();
+    while (true) {
+        command = getchar();
+        if (command == EOF) {
+            tty_restore();
+            return DebuggerAction::NONE;
+        }
+        if (command >= '0' && command <= '~')
+            break;
+    }
+    tty_restore();
+
+    printf("%c", command);
+    printf("\n");
+
+    switch (command) {
+        case 'h':
+            dprintf(
+                "    h   Print usage\n"
+                "    r   Print registers\n"
+                "    s   Step next instruction\n"
+                "    c   Continue execution\n"
+                "    q   Quit all execution\n"
+                "");
+            break;
+        case 'r':
+            print_registers();
+            break;
+        case 's':
+            return DebuggerAction::STEP;
+        case 'c':
+            return DebuggerAction::CONTINUE;
+        case 'q':
+            return DebuggerAction::QUIT;
+        default:
+            dprintf("Unknown command\n");
+    }
+
+    return DebuggerAction::NONE;
+}
+
+void run_all_debugger_commands(bool &do_halt, bool &do_prompt) {
+    while (true) {
+        switch (ask_debugger_command()) {
+            case DebuggerAction::QUIT:
+                do_halt = true;
+                return;
+
+            case DebuggerAction::STEP:
+                return;
+
+            case DebuggerAction::CONTINUE:
+                do_prompt = false;
+                return;
+
+            case DebuggerAction::NONE:
+                break;
+        }
+    }
+}
+
+void execute(const ObjectFile &input, bool debugger, Error &error) {
     if (input.kind == ObjectFile::FILE) {
         read_obj_filename_to_memory(input.filename, error);
         OK_OR_RETURN(error);
     }
+
+    // TODO(feat/debugger): Loop the whole program
 
     // GP and condition registers are already initialized to 0
     registers.program_counter = memory_file_bounds.start;
 
     // Loop until `true` is returned, indicating a HALT (TRAP 0x25)
     bool do_halt = false;
+    bool do_debugger_prompt = true;
     while (!do_halt) {
+        if (debugger) {
+            dprintf("\n");
+            dprintf("PC: 0x%04hx\n", registers.program_counter);
+            if (do_debugger_prompt) {
+                run_all_debugger_commands(do_halt, do_debugger_prompt);
+                if (do_halt)
+                    break;
+            }
+        }
+
         execute_next_instrution(do_halt, error);
         OK_OR_RETURN(error);
     }
 
     if (!stdout_on_new_line)
         printf("\n");
+
+    if (debugger)
+        dprintf("\nProgram completed\n")
 }
 
 // `true` return value indicates that program should end
@@ -106,7 +209,8 @@ void execute_next_instrution(bool &do_halt, Error &error) {
             const Register dest_reg = bits_9_11(instr);
             const Register src_reg_a = bits_6_8(instr);
 
-            // TODO: These maybe should be `Word` ? Shouldn't matter I think...
+            // TODO: These maybe should be `Word` ? Shouldn't matter I
+            // think...
             const SignedWord value_a = registers.general_purpose[src_reg_a];
             SignedWord value_b;
 
@@ -554,6 +658,7 @@ static char *halfbyte_string(const Word word) {
     return str;
 }
 
+// TODO(fix): Maybe specify file to print to ? for debugger
 void print_registers() {
     const int width = 27;
     const char *const box_h = "─";
