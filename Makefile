@@ -36,6 +36,6 @@ test: $(TARGET)
 
 clean:
 	rm -f ./lasim
-	rm -f examples/*.{obj,sym}
+	rm -f examples/*.{obj,sym,lc3}
 	rm -rf tests/out/*
 

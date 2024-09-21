@@ -71,6 +71,7 @@ enum class TrapVector {
     HALT = 0x25,
     // Extension
     REG = 0x27,
+    // TODO(feat/debugger): Add debugger breakpoint trap
 };
 
 typedef struct ObjectFile {
