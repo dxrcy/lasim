@@ -53,7 +53,7 @@ void expect_integer_fits_size(InitialSignWord integer, size_t size_bits,
                               bool &failed);
 void expect_line_eol(const char *line, bool &failed);
 
-ConditionCode get_branch_condition_code(const Instruction instruction);
+uint8_t get_branch_condition_code(const Instruction instruction);
 TrapVector get_trap_vector(const Instruction instruction);
 void add_label_reference(vector<LabelReference> &references,
                          const StringSlice &name, const Word index,
@@ -455,8 +455,7 @@ void parse_instruction(Word &word, const char *&line,
         case Instruction::BRNP:
         case Instruction::BRNZP: {
             opcode = Opcode::BR;
-            const ConditionCode condition =
-                get_branch_condition_code(instruction);
+            const uint8_t condition = get_branch_condition_code(instruction);
             operands |= condition << 9;
 
             expect_next_token(line, token, failed);
@@ -736,7 +735,7 @@ void expect_line_eol(const char *line, bool &failed) {
 }
 
 // Must ONLY be called with a BR* instruction
-ConditionCode get_branch_condition_code(const Instruction instruction) {
+uint8_t get_branch_condition_code(const Instruction instruction) {
     switch (instruction) {
         case Instruction::BRN:
             return 0b100;

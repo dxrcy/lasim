@@ -9,10 +9,7 @@
 
 #define GP_REGISTER_COUNT 8  // Amount of general purpose registers
 
-#define CONDITION_NEGATIVE 0b100
-#define CONDITION_ZERO 0b010
-#define CONDITION_POSITIVE 0b001
-#define CONDITION_DEFAULT CONDITION_ZERO  // Value on program start
+#define CONDITION_DEFAULT ConditionCode::ZERO  // Value on program start
 
 #define WORD_SIZE sizeof(Word)
 // All 1's for sizeof(Word)
@@ -24,8 +21,13 @@
 typedef uint16_t Word;       // 2 bytes
 typedef int16_t SignedWord;  // 2 bytes
 
-typedef uint8_t Register;       // 3 bits
-typedef uint8_t ConditionCode;  // 3 bits
+typedef uint8_t Register;  // 3 bits
+
+enum class ConditionCode {
+    NEGATIVE = 0b100,
+    ZERO = 0b010,
+    POSITIVE = 0b001,
+};
 
 typedef struct Registers {
     // As long as there are 8 GP registers, and a register operand is defined

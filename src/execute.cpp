@@ -32,7 +32,7 @@ void read_obj_filename_to_memory(const char *const obj_filename, Error &error);
 Word &memory_checked(Word addr, Error &error);
 
 SignedWord sign_extend(SignedWord value, const size_t size);
-void set_condition_codes(const Word result);
+void set_condition_codes(const SignedWord result);
 void print_char(char ch);
 void print_on_new_line(void);
 
@@ -175,10 +175,7 @@ void execute_next_instrution(bool &do_halt, Error &error) {
             if (instr == 0x0000)
                 break;
 
-            const ConditionCode condition = bits_9_11(instr);
-            const SignedWord offset = low_9_bits_sext(instr);
-
-            // `BR` compiles to 0b111 just like `BRnzp`
+            const uint8_t condition = bits_9_11(instr);
             if (condition == 0b000) {
                 fprintf(stderr,
                         "Invalid condition code 0b000 for BR* instruction\n");
@@ -186,9 +183,11 @@ void execute_next_instrution(bool &do_halt, Error &error) {
                 return;
             }
 
+            const SignedWord offset = low_9_bits_sext(instr);
+
             // If any bits of the condition codes match
-            if (condition == 0b000 ||
-                (condition & registers.condition) != 0b000) {
+            if ((static_cast<uint8_t>(condition) &
+                 static_cast<uint8_t>(registers.condition)) != 0b000) {
                 registers.program_counter += offset;
             }
         }; break;
@@ -542,12 +541,14 @@ SignedWord sign_extend(SignedWord value, const size_t size) {
     return value;
 }
 
-void set_condition_codes(const Word result) {
-    const bool is_negative = bit_15(result) == 0b1;
-    const bool is_zero = result == 0;
-    const bool is_positive = !is_negative && !is_zero;
-    // Set low 3 bits as N,Z,P
-    registers.condition = (is_negative << 2) | (is_zero << 1) | is_positive;
+void set_condition_codes(const SignedWord result) {
+    if (result < 0) {
+        registers.condition = ConditionCode::NEGATIVE;
+    } else if (result == 0) {
+        registers.condition = ConditionCode::ZERO;
+    } else {
+        registers.condition = ConditionCode::POSITIVE;
+    }
 }
 
 void print_char(char ch) {

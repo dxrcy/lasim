@@ -241,11 +241,11 @@ void print_registers() {
 
 char condition_char(ConditionCode condition) {
     switch (condition) {
-        case 0b100:
+        case ConditionCode::NEGATIVE:
             return 'N';
-        case 0b010:
+        case ConditionCode::ZERO:
             return 'Z';
-        case 0b001:
+        case ConditionCode::POSITIVE:
             return 'P';
         default:
             return '?';
