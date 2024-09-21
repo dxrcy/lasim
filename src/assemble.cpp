@@ -218,7 +218,6 @@ void parse_line(vector<Word> &words, const char *&line,
             // Silence this error message for following lines
             // Compilation will not succeed regardless
 
-#define MAX_DEBUG_COMMAND 20  // Includes '\0'
             words.push_back(0x0000);
             return;
         }
