@@ -16,6 +16,7 @@ bool string_equals_slice(const char *const target, const StringSlice candidate);
 void copy_string_slice_to_string(char *dest, const StringSlice src);
 void print_string_slice(FILE *const &file, const StringSlice &slice);
 
+// TODO(refactor): Rename to `slice_equals[_string]`
 bool string_equals_slice(const char *const target,
                          const StringSlice candidate) {
     size_t i = 0;
@@ -28,6 +29,22 @@ bool string_equals_slice(const char *const target,
     }
     // Target string is longer than candidate
     if (target[i] != '\0')
+        return false;
+    return true;
+}
+
+bool slice_starts_with(const char *const prefix, const StringSlice candidate) {
+    size_t i = 0;
+    for (; i < candidate.length; ++i) {
+        // Prefix has ended. Must have matched
+        if (prefix[i] == '\0')
+            return true;
+        // Will return false if any character mismatches
+        if (tolower(candidate.pointer[i]) != tolower(prefix[i]))
+            return false;
+    }
+    // Target string is longer than candidate
+    if (prefix[i] != '\0')
         return false;
     return true;
 }
