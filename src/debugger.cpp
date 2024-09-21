@@ -1,9 +1,19 @@
+#ifndef DEBUGGER_CPP
+#define DEBUGGER_CPP
+
 #include <cstdio>  // fprintf, getchar
 
+#include "globals.hpp"
 #include "slice.cpp"
+#include "token.cpp"
+#include "types.hpp"
 
 // TODO(refactor): Create header file for execute.cpp or extract functions
+void print_on_new_line(void);
+static char *halfbyte_string(const Word word);
+
 void print_registers(void);
+char condition_char(ConditionCode condition);
 
 #define MAX_DEBUG_COMMAND 20  // Includes '\0'
 
@@ -52,17 +62,63 @@ bool read_line(char *buffer, size_t max_size) {
     return true;
 }
 
-void take_command(const char *&line, StringSlice &command) {
+void take_whitespace(const char *&line) {
     // Ignore leading spaces
     while (isspace(line[0]))
         ++line;
+}
 
+void take_command(const char *&line, StringSlice &command) {
+    take_whitespace(line);
     command.pointer = line;
     for (char ch; (ch = line[0]) != '\0'; ++line) {
         if (isspace(ch))
             break;
     }
     command.length = line - command.pointer;
+}
+
+bool expect_address(const char *&line, Word &addr) {
+    take_whitespace(line);
+    InitialSignWord integer;
+    if (take_integer(line, integer) != 1 || integer.is_signed) {
+        dprintf("Expected address argument\n");
+        return false;
+    }
+    addr = integer.value;
+    // Reflects `memory_checked`
+    // TODO(fix): Messages should be different
+    if (addr < memory_file_bounds.start) {
+        dprintf("Cannot access non-user memory (before user memory)\n");
+        return false;
+    }
+    if (addr > MEMORY_USER_MAX) {
+        dprintf("Cannot access non-user memory (after user memory)\n");
+        return false;
+    }
+    return true;
+}
+
+bool expect_integer(const char *&line, Word &value) {
+    take_whitespace(line);
+    InitialSignWord integer;
+    if (take_integer(line, integer) != 1) {
+        dprintf("Expected integer argument\n");
+        return false;
+    }
+    value = integer.value;
+    // TODO(fix): This won't check range correctly
+    if (integer.is_signed)
+        value = static_cast<Word>(-value);
+    return true;
+}
+
+void print_integer_value(Word value) {
+    // TODO(refactor): Combine functionality with `print_registers`
+    // TODO(feat): Show ascii repr. if applicable
+    // TODO(feat): Show instruction name/opcode repr. if applicable
+    dprintf("       HEX    UINT    INT\n");
+    dprintf("    0x%04hx  %6hd  %5hu\n", value, value, value);
 }
 
 DebuggerAction ask_debugger_command() {
@@ -82,30 +138,41 @@ DebuggerAction ask_debugger_command() {
     StringSlice command;
     take_command(line, command);
 
-    if (slice_starts_with("h", command)) {
+    if (string_equals_slice("r", command)) {
+        print_registers();
+    } else if (string_equals_slice("s", command)) {
+        return DebuggerAction::STEP;
+    } else if (string_equals_slice("c", command)) {
+        return DebuggerAction::CONTINUE;
+    } else if (string_equals_slice("q", command)) {
+        return DebuggerAction::QUIT;
+    } else if (string_equals_slice("mg", command)) {
+        Word addr;
+        if (!expect_address(line, addr))
+            return DebuggerAction::NONE;
+        Word value = memory[addr];
+        dprintf("Value at address 0x%04hx:\n", addr);
+        print_integer_value(value);
+    } else if (string_equals_slice("ms", command)) {
+        Word addr, value;
+        if (!expect_address(line, addr))
+            return DebuggerAction::NONE;
+        if (!expect_integer(line, value))
+            return DebuggerAction::NONE;
+        memory[addr] = value;
+        dprintf("Modified value at address 0x%04hx\n", addr);
+    } else {
         dprintf(
             "    h   Print usage\n"
             "    r   Print registers\n"
             "    s   Step next instruction\n"
             "    c   Continue execution until HALT\n"
-            "    ms  Set value at memory location\n"
             "    mg  Print value at memory address\n"
+            "    ms  Set value at memory location\n"
+            /* "    rg  Print value of a register\n" */
+            /* "    rs  Set value of a register\n" */
             "    q   Quit all execution\n"
             "");
-    } else if (slice_starts_with("r", command)) {
-        print_registers();
-    } else if (slice_starts_with("s", command)) {
-        return DebuggerAction::STEP;
-    } else if (slice_starts_with("c", command)) {
-        return DebuggerAction::CONTINUE;
-    } else if (slice_starts_with("q", command)) {
-        return DebuggerAction::QUIT;
-    } else if (slice_starts_with("m", command)) {
-        dprintf("(Unimplemented...)\n");
-    } else {
-        dprintf("Unknown command ");
-        print_string_slice(stddbg, command);
-        dprintf(". Use `h` to show usage.\n");
     }
 
     return DebuggerAction::NONE;
@@ -130,3 +197,59 @@ void run_all_debugger_commands(bool &do_halt, bool &do_prompt) {
         }
     }
 }
+
+// TODO(fix): Maybe specify file to print to ? for debugger
+void print_registers() {
+    const int width = 27;
+    const char *const box_h = "─";
+    const char *const box_v = "│";
+    const char *const box_tl = "╭";
+    const char *const box_tr = "╮";
+    const char *const box_bl = "╰";
+    const char *const box_br = "╯";
+
+    print_on_new_line();
+
+    printf("  %s", box_tl);
+    for (size_t i = 0; i < width; ++i)
+        printf("%s", box_h);
+    printf("%s\n", box_tr);
+
+    printf("  %s ", box_v);
+    printf("pc: 0x%04hx          cc: %c", registers.program_counter,
+           condition_char(registers.condition));
+    printf(" %s\n", box_v);
+
+    printf("  %s ", box_v);
+    printf("       HEX    UINT    INT");
+    printf(" %s\n", box_v);
+
+    for (int reg = 0; reg < GP_REGISTER_COUNT; ++reg) {
+        const Word value = registers.general_purpose[reg];
+        printf("  %s ", box_v);
+        printf("r%d  0x%04hx  %6hd  %5hu", reg, value, value, value);
+        printf(" %s\n", box_v);
+    }
+
+    printf("  %s", box_bl);
+    for (size_t i = 0; i < width; ++i)
+        printf("%s", box_h);
+    printf("%s\n", box_br);
+
+    stdout_on_new_line = true;
+}
+
+char condition_char(ConditionCode condition) {
+    switch (condition) {
+        case 0b100:
+            return 'N';
+        case 0b010:
+            return 'Z';
+        case 0b001:
+            return 'P';
+        default:
+            return '?';
+    }
+}
+
+#endif

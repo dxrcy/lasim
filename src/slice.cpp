@@ -33,6 +33,7 @@ bool string_equals_slice(const char *const target,
     return true;
 }
 
+// TODO(lint): this is unused so can be removed
 bool slice_starts_with(const char *const prefix, const StringSlice candidate) {
     size_t i = 0;
     for (; i < candidate.length; ++i) {

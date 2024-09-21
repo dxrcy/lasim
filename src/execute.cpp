@@ -35,9 +35,8 @@ SignedWord sign_extend(SignedWord value, const size_t size);
 void set_condition_codes(const Word result);
 void print_char(char ch);
 void print_on_new_line(void);
+
 static char *halfbyte_string(const Word word);
-void print_registers(void);
-char condition_char(ConditionCode condition);
 
 void execute(const ObjectFile &input, bool debugger, Error &error) {
     if (input.kind == ObjectFile::FILE) {
@@ -55,15 +54,15 @@ void execute(const ObjectFile &input, bool debugger, Error &error) {
     bool do_debugger_prompt = true;
     while (!do_halt) {
         if (debugger) {
-            dprintf("\n");
-            dprintf("PC: 0x%04hx\n", registers.program_counter);
             if (do_debugger_prompt) {
+                dprintf("\n");
+                dprintf("PC: 0x%04hx\n", registers.program_counter);
                 run_all_debugger_commands(do_halt, do_debugger_prompt);
                 if (do_halt)
                     break;
+                fprintf(stddbg, "\x1b[2m");
+                dprintf("-------------\n");
             }
-            fprintf(stddbg, "\x1b[2m");
-            dprintf("-------------\n");
         }
 
         execute_next_instrution(do_halt, error);
@@ -572,60 +571,6 @@ static char *halfbyte_string(const Word word) {
     }
     str[4] = '\0';
     return str;
-}
-
-// TODO(fix): Maybe specify file to print to ? for debugger
-void print_registers() {
-    const int width = 27;
-    const char *const box_h = "─";
-    const char *const box_v = "│";
-    const char *const box_tl = "╭";
-    const char *const box_tr = "╮";
-    const char *const box_bl = "╰";
-    const char *const box_br = "╯";
-
-    print_on_new_line();
-
-    printf("  %s", box_tl);
-    for (size_t i = 0; i < width; ++i)
-        printf("%s", box_h);
-    printf("%s\n", box_tr);
-
-    printf("  %s ", box_v);
-    printf("pc: 0x%04hx          cc: %c", registers.program_counter,
-           condition_char(registers.condition));
-    printf(" %s\n", box_v);
-
-    printf("  %s ", box_v);
-    printf("       HEX    UINT    INT");
-    printf(" %s\n", box_v);
-
-    for (int reg = 0; reg < GP_REGISTER_COUNT; ++reg) {
-        const Word value = registers.general_purpose[reg];
-        printf("  %s ", box_v);
-        printf("r%d  0x%04hx  %6hd  %5hu", reg, value, value, value);
-        printf(" %s\n", box_v);
-    }
-
-    printf("  %s", box_bl);
-    for (size_t i = 0; i < width; ++i)
-        printf("%s", box_h);
-    printf("%s\n", box_br);
-
-    stdout_on_new_line = true;
-}
-
-char condition_char(ConditionCode condition) {
-    switch (condition) {
-        case 0b100:
-            return 'N';
-        case 0b010:
-            return 'Z';
-        case 0b001:
-            return 'P';
-        default:
-            return '?';
-    }
 }
 
 #endif
