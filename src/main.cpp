@@ -40,7 +40,7 @@ Error try_run(Options &options) {
         case Mode::EXECUTE_ONLY: {
             object.kind = ObjectFile::FILE;
             object.filename = options.in_filename;
-            execute(object, error);
+            execute(object, options.debugger, error);
             if (error != Error::OK)
                 return error;
         }; break;
@@ -50,7 +50,7 @@ Error try_run(Options &options) {
             assemble(options.in_filename, object, error);
             if (error != Error::OK)
                 return error;
-            execute(object, error);
+            execute(object, options.debugger, error);
             if (error != Error::OK)
                 return error;
         }; break;
