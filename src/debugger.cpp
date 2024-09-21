@@ -1,17 +1,21 @@
 #include <cstdio>  // fprintf, getchar
 
+#include "slice.cpp"
+
 // TODO(refactor): Create header file for execute.cpp or extract functions
 void print_registers(void);
 
 #define MAX_DEBUG_COMMAND 20  // Includes '\0'
 
+#define stddbg stderr
+
 // Debugger message
 #define dprintf(...)                  \
     {                                 \
-        fprintf(stderr, "\x1b[36m");  \
-        fprintf(stderr, __VA_ARGS__); \
-        fprintf(stderr, "\x1b[0m");   \
-        fflush(stderr);               \
+        fprintf(stddbg, "\x1b[36m");  \
+        fprintf(stddbg, __VA_ARGS__); \
+        fprintf(stddbg, "\x1b[0m");   \
+        fflush(stddbg);               \
     }
 
 // Only for debugger commands which affect program control flow
@@ -48,48 +52,60 @@ bool read_line(char *buffer, size_t max_size) {
     return true;
 }
 
+void take_command(const char *&line, StringSlice &command) {
+    // Ignore leading spaces
+    while (isspace(line[0]))
+        ++line;
+
+    command.pointer = line;
+    for (char ch; (ch = line[0]) != '\0'; ++line) {
+        if (isspace(ch))
+            break;
+    }
+    command.length = line - command.pointer;
+}
+
 DebuggerAction ask_debugger_command() {
-    const char *command = nullptr;
+    const char *line = nullptr;
 
     while (true) {
-        char command_buf[MAX_DEBUG_COMMAND];
-        command = command_buf;
-        fprintf(stderr, "\x1b[1m");
+        char line_buf[MAX_DEBUG_COMMAND];
+        line = line_buf;
+        fprintf(stddbg, "\x1b[1m");
         dprintf("Command: ");
-        if (!read_line(command_buf, MAX_DEBUG_COMMAND))
+        if (!read_line(line_buf, MAX_DEBUG_COMMAND))
             return DebuggerAction::NONE;
-        if (command_buf[0] != '\0')
+        if (line_buf[0] != '\0')
             break;
     }
 
-    switch (command[0]) {
-        case 'h':
-            dprintf(
-                "    h   Print usage\n"
-                "    r   Print registers\n"
-                "    s   Step next instruction\n"
-                "    c   Continue execution\n"
-                "    ms  Set value at memory location\n"
-                "    mg  Print value at memory address\n"
-                "    q   Quit all execution\n"
-                "");
-            break;
-        case 'r':
-            print_registers();
-            break;
-        case 's':
-            return DebuggerAction::STEP;
-        case 'c':
-            return DebuggerAction::CONTINUE;
-        case 'q':
-            return DebuggerAction::QUIT;
-        case 'm':
-            dprintf("(Unimplemented...)\n");
-            break;
-        default:
-            dprintf(
-                "Unknown command. Use `h` to show usage.\n"
-                "");
+    StringSlice command;
+    take_command(line, command);
+
+    if (slice_starts_with("h", command)) {
+        dprintf(
+            "    h   Print usage\n"
+            "    r   Print registers\n"
+            "    s   Step next instruction\n"
+            "    c   Continue execution until HALT\n"
+            "    ms  Set value at memory location\n"
+            "    mg  Print value at memory address\n"
+            "    q   Quit all execution\n"
+            "");
+    } else if (slice_starts_with("r", command)) {
+        print_registers();
+    } else if (slice_starts_with("s", command)) {
+        return DebuggerAction::STEP;
+    } else if (slice_starts_with("c", command)) {
+        return DebuggerAction::CONTINUE;
+    } else if (slice_starts_with("q", command)) {
+        return DebuggerAction::QUIT;
+    } else if (slice_starts_with("m", command)) {
+        dprintf("(Unimplemented...)\n");
+    } else {
+        dprintf("Unknown command ");
+        print_string_slice(stddbg, command);
+        dprintf(". Use `h` to show usage.\n");
     }
 
     return DebuggerAction::NONE;

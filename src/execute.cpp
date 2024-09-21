@@ -62,7 +62,7 @@ void execute(const ObjectFile &input, bool debugger, Error &error) {
                 if (do_halt)
                     break;
             }
-            fprintf(stderr, "\x1b[2m");
+            fprintf(stddbg, "\x1b[2m");
             dprintf("-------------\n");
         }
 
