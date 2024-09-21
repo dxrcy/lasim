@@ -132,8 +132,9 @@ void take_next_token(const char *&line, Token &token, bool &failed);
 void take_literal_string(const char *&line, Token &token, bool &failed);
 void take_directive(const char *&line, Token &token, bool &failed);
 void take_register(const char *&line, Token &token);
-void take_integer_hex(const char *&line, Token &token, bool &failed);
-void take_integer_decimal(const char *&line, Token &token, bool &failed);
+void take_integer(const char *&line, Token &token, bool &failed);
+bool take_integer_hex(const char *&line, InitialSignWord &number);
+bool take_integer_decimal(const char *&line, InitialSignWord &number);
 int8_t parse_hex_digit(const char ch);
 bool append_decimal_digit_checked(Word &number, uint8_t digit,
                                   bool is_negative);
@@ -193,14 +194,8 @@ void take_next_token(const char *&line, Token &token, bool &failed) {
     if (token.kind != TokenKind::EOL)
         return;  // Tried to parse, but failed
 
-    // Hex literal
-    take_integer_hex(line, token, failed);
-    RETURN_IF_FAILED(failed);
-    if (token.kind != TokenKind::EOL)
-        return;  // Tried to parse, but failed
-
-    // Decimal literal
-    take_integer_decimal(line, token, failed);
+    // Hex/decimal literal
+    take_integer(line, token, failed);
     RETURN_IF_FAILED(failed);
     if (token.kind != TokenKind::EOL)
         return;  // Tried to parse, but failed
@@ -295,7 +290,8 @@ void take_register(const char *&line, Token &token) {
     return;
 }
 
-void take_integer_hex(const char *&line, Token &token, bool &failed) {
+// TODO(refactor): Change `int` return to `ParseResult` enum
+int take_integer_hex_inner(const char *&line, InitialSignWord &integer) {
     const char *new_line = line;
 
     bool is_signed = false;
@@ -308,7 +304,7 @@ void take_integer_hex(const char *&line, Token &token, bool &failed) {
         ++new_line;
     // Must have prefix
     if (new_line[0] != 'x' && new_line[0] != 'X') {
-        return;
+        return 0;
     }
     ++new_line;
 
@@ -316,9 +312,7 @@ void take_integer_hex(const char *&line, Token &token, bool &failed) {
         ++new_line;
         // Don't allow `-x-`
         if (is_signed) {
-            print_invalid_token(line);
-            failed = true;
-            return;
+            return -1;
         }
         is_signed = true;
     }
@@ -328,11 +322,10 @@ void take_integer_hex(const char *&line, Token &token, bool &failed) {
     // Not an integer
     // Continue to next token
     if (parse_hex_digit(new_line[0]) < 0)
-        return;
+        return 0;
 
     line = new_line;  // Skip [x0-] which was just checked
-    token.kind = TokenKind::INTEGER;
-    token.value.integer.is_signed = is_signed;
+    integer.is_signed = is_signed;
 
     Word number = 0;
     for (size_t i = 0;; ++i) {
@@ -342,9 +335,7 @@ void take_integer_hex(const char *&line, Token &token, bool &failed) {
             // Checks if number is immediately followed by identifier character
             //     (like a suffix), which is invalid
             if (ch != '\0' && is_char_valid_in_identifier(ch)) {
-                print_invalid_token(new_line);  // Start of token
-                failed = true;
-                return;
+                return -1;
             }
             break;
         }
@@ -352,10 +343,8 @@ void take_integer_hex(const char *&line, Token &token, bool &failed) {
         // Leading zeros have already been skipped
         // Ignore sign
         if (i >= 4) {
-            fprintf(stderr,
-                    "Integer literal is too large for this instruction\n");
-            failed = true;
-            return;
+            fprintf(stderr, "Integer literal is too large for a word\n");
+            return -1;
         }
         number <<= 4;
         number += digit;
@@ -364,10 +353,11 @@ void take_integer_hex(const char *&line, Token &token, bool &failed) {
 
     if (is_signed)
         number *= -1;  // Store negative number in unsigned word
-    token.value.integer.value = number;
+    integer.value = number;
+    return 1;
 }
 
-void take_integer_decimal(const char *&line, Token &token, bool &failed) {
+int take_integer_decimal_inner(const char *&line, InitialSignWord &integer) {
     const char *new_line = line;
 
     bool is_signed = false;
@@ -382,9 +372,7 @@ void take_integer_decimal(const char *&line, Token &token, bool &failed) {
         ++new_line;
         // Don't allow `-#-`
         if (is_signed) {
-            print_invalid_token(line);
-            failed = true;
-            return;
+            return -1;
         }
         is_signed = true;
     }
@@ -394,11 +382,10 @@ void take_integer_decimal(const char *&line, Token &token, bool &failed) {
     // Not an integer
     // Continue to next token
     if (!isdigit(new_line[0]))
-        return;
+        return 0;
 
     line = new_line;  // Skip [#0-] which was just checked
-    token.kind = TokenKind::INTEGER;
-    token.value.integer.is_signed = is_signed;
+    integer.is_signed = is_signed;
 
     Word number = 0;
     while (true) {
@@ -407,24 +394,46 @@ void take_integer_decimal(const char *&line, Token &token, bool &failed) {
             // Checks if number is immediately followed by identifier character
             //     (like a suffix), which is invalid
             if (ch != '\0' && is_char_valid_in_identifier(ch)) {
-                print_invalid_token(new_line);  // Start of token
-                failed = true;
-                return;
+                return -1;
             }
             break;
         }
         if (!append_decimal_digit_checked(number, ch - '0', is_signed)) {
-            fprintf(stderr,
-                    "Integer literal is too large for this instruction\n");
-            failed = true;
-            return;
+            fprintf(stderr, "Integer literal is too large for a word\n");
+            return -1;
         }
         ++line;
     }
 
     if (is_signed)
         number *= -1;  // Store negative number in unsigned word
-    token.value.integer.value = number;
+    integer.value = number;
+    return 1;
+}
+
+void take_integer(const char *&line, Token &token, bool &failed) {
+    const char *const line_start = line;
+    int result;
+
+    result = take_integer_hex_inner(line, token.value.integer);
+    if (result == -1) {
+        print_invalid_token(line_start);
+        failed = true;
+        return;
+    }
+    if (result != 0) {
+        token.kind = TokenKind::INTEGER;
+        return;
+    }
+    result = take_integer_decimal_inner(line, token.value.integer);
+    if (result == -1) {
+        print_invalid_token(line_start);
+        failed = true;
+        return;
+    }
+    if (result != 0) {
+        token.kind = TokenKind::INTEGER;
+    }
 }
 
 // Returns -1 if not a valid hex digit
