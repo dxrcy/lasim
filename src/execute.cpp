@@ -5,6 +5,7 @@
 #include <cstring>  // memset
 
 #include "bitmasks.hpp"
+#include "debugger.cpp"
 #include "error.hpp"
 #include "globals.hpp"
 #include "tty.cpp"
@@ -22,7 +23,7 @@
 
 // TODO(refactor): Re-order functions
 
-void execute(const ObjectFile &input, Error &error);
+void execute(const ObjectFile &input, bool debugger, Error &error);
 void execute_next_instrution(bool &do_halt, Error &error);
 void execute_trap_instruction(const Word instr, bool &do_halt, Error &error);
 
@@ -34,28 +35,46 @@ SignedWord sign_extend(SignedWord value, const size_t size);
 void set_condition_codes(const Word result);
 void print_char(char ch);
 void print_on_new_line(void);
-static char *halfbyte_string(const Word word);
-void print_registers(void);
-char condition_char(ConditionCode condition);
 
-void execute(const ObjectFile &input, Error &error) {
+static char *halfbyte_string(const Word word);
+
+void execute(const ObjectFile &input, bool debugger, Error &error) {
     if (input.kind == ObjectFile::FILE) {
         read_obj_filename_to_memory(input.filename, error);
         OK_OR_RETURN(error);
     }
+
+    // TODO(feat/debugger): Loop the whole program
 
     // GP and condition registers are already initialized to 0
     registers.program_counter = memory_file_bounds.start;
 
     // Loop until `true` is returned, indicating a HALT (TRAP 0x25)
     bool do_halt = false;
+    bool do_debugger_prompt = true;
     while (!do_halt) {
+        if (debugger) {
+            if (do_debugger_prompt) {
+                // TODO(feat): Print value at PC with `print_integer_value`
+                dprintf("\n");
+                dprintf("PC: 0x%04hx\n", registers.program_counter);
+                run_all_debugger_commands(do_halt, do_debugger_prompt);
+                if (do_halt)
+                    break;
+                fprintf(stddbg, "\x1b[2m");
+                dprintf("-------------\n");
+            }
+        }
+
         execute_next_instrution(do_halt, error);
         OK_OR_RETURN(error);
     }
 
     if (!stdout_on_new_line)
         printf("\n");
+
+    if (debugger)
+        dprintf("\nProgram completed\n")
 }
 
 // `true` return value indicates that program should end
@@ -106,7 +125,8 @@ void execute_next_instrution(bool &do_halt, Error &error) {
             const Register dest_reg = bits_9_11(instr);
             const Register src_reg_a = bits_6_8(instr);
 
-            // TODO: These maybe should be `Word` ? Shouldn't matter I think...
+            // TODO: These maybe should be `Word` ? Shouldn't matter I
+            // think...
             const SignedWord value_a = registers.general_purpose[src_reg_a];
             SignedWord value_b;
 
@@ -552,59 +572,6 @@ static char *halfbyte_string(const Word word) {
     }
     str[4] = '\0';
     return str;
-}
-
-void print_registers() {
-    const int width = 27;
-    const char *const box_h = "─";
-    const char *const box_v = "│";
-    const char *const box_tl = "╭";
-    const char *const box_tr = "╮";
-    const char *const box_bl = "╰";
-    const char *const box_br = "╯";
-
-    print_on_new_line();
-
-    printf("  %s", box_tl);
-    for (size_t i = 0; i < width; ++i)
-        printf("%s", box_h);
-    printf("%s\n", box_tr);
-
-    printf("  %s ", box_v);
-    printf("pc: 0x%04hx          cc: %c", registers.program_counter,
-           condition_char(registers.condition));
-    printf(" %s\n", box_v);
-
-    printf("  %s ", box_v);
-    printf("       HEX    UINT    INT");
-    printf(" %s\n", box_v);
-
-    for (int reg = 0; reg < GP_REGISTER_COUNT; ++reg) {
-        const Word value = registers.general_purpose[reg];
-        printf("  %s ", box_v);
-        printf("r%d  0x%04hx  %6hd  %5hu", reg, value, value, value);
-        printf(" %s\n", box_v);
-    }
-
-    printf("  %s", box_bl);
-    for (size_t i = 0; i < width; ++i)
-        printf("%s", box_h);
-    printf("%s\n", box_br);
-
-    stdout_on_new_line = true;
-}
-
-char condition_char(ConditionCode condition) {
-    switch (condition) {
-        case 0b100:
-            return 'N';
-        case 0b010:
-            return 'Z';
-        case 0b001:
-            return 'P';
-        default:
-            return '?';
-    }
 }
 
 #endif
