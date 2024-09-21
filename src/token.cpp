@@ -132,9 +132,10 @@ void take_next_token(const char *&line, Token &token, bool &failed);
 void take_literal_string(const char *&line, Token &token, bool &failed);
 void take_directive(const char *&line, Token &token, bool &failed);
 void take_register(const char *&line, Token &token);
-void take_integer(const char *&line, Token &token, bool &failed);
-bool take_integer_hex(const char *&line, InitialSignWord &number);
-bool take_integer_decimal(const char *&line, InitialSignWord &number);
+void take_integer_token(const char *&line, Token &token, bool &failed);
+int take_integer(const char *&line, InitialSignWord &number);
+int take_integer_hex(const char *&line, InitialSignWord &number);
+int take_integer_decimal(const char *&line, InitialSignWord &number);
 int8_t parse_hex_digit(const char ch);
 bool append_decimal_digit_checked(Word &number, uint8_t digit,
                                   bool is_negative);
@@ -195,7 +196,7 @@ void take_next_token(const char *&line, Token &token, bool &failed) {
         return;  // Tried to parse, but failed
 
     // Hex/decimal literal
-    take_integer(line, token, failed);
+    take_integer_token(line, token, failed);
     RETURN_IF_FAILED(failed);
     if (token.kind != TokenKind::EOL)
         return;  // Tried to parse, but failed
@@ -291,7 +292,7 @@ void take_register(const char *&line, Token &token) {
 }
 
 // TODO(refactor): Change `int` return to `ParseResult` enum
-int take_integer_hex_inner(const char *&line, InitialSignWord &integer) {
+int take_integer_hex(const char *&line, InitialSignWord &integer) {
     const char *new_line = line;
 
     bool is_signed = false;
@@ -357,7 +358,7 @@ int take_integer_hex_inner(const char *&line, InitialSignWord &integer) {
     return 1;
 }
 
-int take_integer_decimal_inner(const char *&line, InitialSignWord &integer) {
+int take_integer_decimal(const char *&line, InitialSignWord &integer) {
     const char *new_line = line;
 
     bool is_signed = false;
@@ -411,29 +412,28 @@ int take_integer_decimal_inner(const char *&line, InitialSignWord &integer) {
     return 1;
 }
 
-void take_integer(const char *&line, Token &token, bool &failed) {
-    const char *const line_start = line;
+int take_integer(const char *&line, InitialSignWord &integer) {
     int result;
+    result = take_integer_hex(line, integer);
+    if (result != 0)
+        return result;
+    result = take_integer_decimal(line, integer);
+    if (result != 0)
+        return result;
+    return 0;
+}
 
-    result = take_integer_hex_inner(line, token.value.integer);
+void take_integer_token(const char *&line, Token &token, bool &failed) {
+    const char *const line_start = line;
+    int result = take_integer(line, token.value.integer);
     if (result == -1) {
         print_invalid_token(line_start);
         failed = true;
         return;
     }
-    if (result != 0) {
-        token.kind = TokenKind::INTEGER;
+    if (result == 0)
         return;
-    }
-    result = take_integer_decimal_inner(line, token.value.integer);
-    if (result == -1) {
-        print_invalid_token(line_start);
-        failed = true;
-        return;
-    }
-    if (result != 0) {
-        token.kind = TokenKind::INTEGER;
-    }
+    token.kind = TokenKind::INTEGER;
 }
 
 // Returns -1 if not a valid hex digit
