@@ -219,9 +219,7 @@ bool expect_integer(const char *&line, Word &value) {
         return false;
     }
     value = integer.value;
-    // TODO(fix): This won't check range correctly
-    if (integer.is_signed)
-        value = static_cast<Word>(-value);
+    // TODO(fix): Check range correctly
     return true;
 }
 
