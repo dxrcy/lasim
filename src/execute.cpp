@@ -67,7 +67,10 @@ void execute(const ObjectFile &input, bool debugger, Error &error) {
         }
 
         execute_next_instrution(do_halt, error);
-        OK_OR_RETURN(error);
+        if (error != Error::OK) {
+            fprintf(stderr, "Execution failed.\n");
+            return;
+        }
     }
 
     if (!stdout_on_new_line)
