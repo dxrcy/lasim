@@ -9,12 +9,33 @@
 #include "tty.cpp"
 #include "types.hpp"
 
+// TODO(feat): Overhaul debugger commands:
+// Not all have to be added
+//    reg           show all registers
+//    get r         get a register value
+//    set r v       set a register value
+//    load a        set memory at address/label
+//    store a v     show memory at address/label
+//    list          list memory/instrs at PC/adress/label (readable)
+//    dump          dump memory/instrs at PC/adress/label (hex)
+//    reload        re-read file, resetting registers and memory
+//    trap t        simulate trap
+//    halt          simulate HALT
+//    step n        execute next instruction
+//    next          execute next instruction or subroutine
+//    continue      continue till next HALT
+//    finish        execute to end of current subroutine
+//    quit          quit debugger, continue execution
+//    exit          quit debugger and executor
+// TODO(feat): How would these debugger commands work?
+//    break?     set/remove breakpoint
+
+// TODO(feat): Keep track of labels for debugger
+//     Maybe make label_definitions list global/static
+
 // TODO(refactor): Create header file for execute.cpp or extract functions
 void print_on_new_line(void);
 static char *halfbyte_string(const Word word);
-
-void print_registers(void);
-char condition_char(ConditionCode condition);
 
 #define MAX_DEBUGGER_COMMAND 20  // Includes '\0'
 #define MAX_DEBUGGER_HISTORY 4
@@ -86,6 +107,9 @@ enum class DebuggerCommand {
 // TODO(lint): Use `void` param for prototypes of these functions
 // TODO(refactor): Rename functions
 // TODO(refactor): Use namespace ?
+
+void print_registers(void);
+char condition_char(ConditionCode condition);
 
 void push_history(const char *const buffer) {
     if (history.length >= MAX_DEBUGGER_HISTORY) {
@@ -207,7 +231,6 @@ DebuggerCommand take_command(const char *&line) {
     }
     command.length = line - command.pointer;
 
-    //  TODO(feat): Rename `stop` and maybe `quit` commands
     // These comparisons are CASE-INSENSITIVE!
     if (string_equals_slice("r", command) ||
         string_equals_slice("reg", command) ||
