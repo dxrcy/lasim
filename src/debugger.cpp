@@ -59,6 +59,7 @@ enum class DebuggerAction {
 };
 
 // TODO(refactor/opt): Use string type with length
+// TODO(rename): `Command` maybe `RawCommand` ?
 typedef char Command[MAX_DEBUGGER_COMMAND];
 
 // TODO(opt): Use ring buffer
@@ -69,6 +70,17 @@ typedef struct CommandHistory {
 } CommandHistory;
 
 static CommandHistory history;
+
+enum class DebuggerCommand {
+    UNKNOWN,
+    REGISTERS,
+    STEP,
+    CONTINUE,
+    MEMORY_GET,
+    MEMORY_SET,
+    QUIT,
+    STOP,
+};
 
 // TODO(refactor): Create function prototypes
 // TODO(lint): Use `void` param for prototypes of these functions
@@ -185,7 +197,8 @@ void take_whitespace(const char *&line) {
         ++line;
 }
 
-void take_command(const char *&line, StringSlice &command) {
+DebuggerCommand take_command(const char *&line) {
+    StringSlice command;
     take_whitespace(line);
     command.pointer = line;
     for (char ch; (ch = line[0]) != '\0'; ++line) {
@@ -193,6 +206,45 @@ void take_command(const char *&line, StringSlice &command) {
             break;
     }
     command.length = line - command.pointer;
+
+    //  TODO(feat): Rename `stop` and maybe `quit` commands
+    // These comparisons are CASE-INSENSITIVE!
+    if (string_equals_slice("r", command) ||
+        string_equals_slice("reg", command) ||
+        string_equals_slice("registers", command)) {
+        return DebuggerCommand::REGISTERS;
+    }
+    if (string_equals_slice("s", command) ||
+        string_equals_slice("step", command)) {
+        return DebuggerCommand::STEP;
+    }
+    if (string_equals_slice("c", command) ||
+        string_equals_slice("cont", command) ||
+        string_equals_slice("continue", command)) {
+        return DebuggerCommand::CONTINUE;
+    }
+    if (string_equals_slice("mg", command) ||
+        string_equals_slice("memg", command) ||
+        string_equals_slice("mget", command) ||
+        string_equals_slice("memget", command) ||
+        string_equals_slice("memoryget", command)) {
+        return DebuggerCommand::MEMORY_GET;
+    }
+    if (string_equals_slice("ms", command) ||
+        string_equals_slice("mems", command) ||
+        string_equals_slice("mset", command) ||
+        string_equals_slice("memset", command) ||
+        string_equals_slice("memoryset", command)) {
+        return DebuggerCommand::MEMORY_SET;
+    }
+    if (string_equals_slice("q", command) ||
+        string_equals_slice("quit", command)) {
+        return DebuggerCommand::QUIT;
+    }
+    if (string_equals_slice("stop", command)) {
+        return DebuggerCommand::STOP;
+    }
+    return DebuggerCommand::UNKNOWN;
 }
 
 bool expect_address(const char *&line, Word &addr) {
@@ -248,54 +300,58 @@ DebuggerAction ask_debugger_command() {
             break;
     }
 
-    StringSlice command;
-    take_command(line, command);
+    DebuggerCommand command = take_command(line);
 
     // TODO(feat): Check for trailing operands
 
-    // These comparisons are CASE-INSENSITIVE!
-    // TODO(feat): Add command aliases (r/reg/register)
-    if (string_equals_slice("r", command)) {
-        if (!debugger_quiet) {
-            print_registers();
-        }
-    } else if (string_equals_slice("s", command)) {
-        return DebuggerAction::STEP;
-    } else if (string_equals_slice("c", command)) {
-        return DebuggerAction::CONTINUE;
-    } else if (string_equals_slice("mg", command)) {
-        Word addr;
-        if (!expect_address(line, addr))
-            return DebuggerAction::NONE;
-        Word value = memory[addr];
-        dprintfc("Value at address 0x%04hx:\n", addr);
-        print_integer_value(value);
-    } else if (string_equals_slice("ms", command)) {
-        Word addr, value;
-        if (!expect_address(line, addr))
-            return DebuggerAction::NONE;
-        if (!expect_integer(line, value))
-            return DebuggerAction::NONE;
-        memory[addr] = value;
-        dprintfc("Modified value at address 0x%04hx\n", addr);
-    } else if (string_equals_slice("q", command)) {
-        return DebuggerAction::QUIT;
-    } else if (string_equals_slice("stop", command)) {
-        return DebuggerAction::STOP;
-    } else {
-        dprintfc(
-            "    h      Print usage\n"
-            "    r      Print registers\n"
-            "    s      Execute next instruction\n"
-            "    c      Continue execution until breakpoint or HALT\n"
-            "    mg     Print value at memory address\n"
-            "    ms     Set value at memory location\n"
-            /* "    rg     Print value of a register\n" */
-            /* "    rs     Set value of a register\n" */
-            "    q      Quit all execution\n"
-            "    stop   Stop debugger, continue execution\n"
-            ""
-        );
+    switch (command) {
+        case DebuggerCommand::REGISTERS: {
+            if (!debugger_quiet) {
+                print_registers();
+            }
+        }; break;
+        case DebuggerCommand::MEMORY_GET: {
+            Word addr;
+            if (!expect_address(line, addr))
+                return DebuggerAction::NONE;
+            Word value = memory[addr];
+            dprintfc("Value at address 0x%04hx:\n", addr);
+            print_integer_value(value);
+        }; break;
+        case DebuggerCommand::MEMORY_SET: {
+            Word addr, value;
+            if (!expect_address(line, addr))
+                return DebuggerAction::NONE;
+            if (!expect_integer(line, value))
+                return DebuggerAction::NONE;
+            memory[addr] = value;
+            dprintfc("Modified value at address 0x%04hx\n", addr);
+        }; break;
+        case DebuggerCommand::STEP:
+            return DebuggerAction::STEP;
+            break;
+        case DebuggerCommand::CONTINUE:
+            return DebuggerAction::CONTINUE;
+            break;
+        case DebuggerCommand::QUIT:
+            return DebuggerAction::QUIT;
+            break;
+        case DebuggerCommand::STOP:
+            return DebuggerAction::STOP;
+        default:
+            dprintfc(
+                "    h      Print usage\n"
+                "    r      Print registers\n"
+                "    s      Execute next instruction\n"
+                "    c      Continue execution until breakpoint or HALT\n"
+                "    mg     Print value at memory address\n"
+                "    ms     Set value at memory location\n"
+                /* "    rg     Print value of a register\n" */
+                /* "    rs     Set value of a register\n" */
+                "    q      Quit all execution\n"
+                "    stop   Stop debugger, continue execution\n"
+                ""
+            );
     }
 
     return DebuggerAction::NONE;
