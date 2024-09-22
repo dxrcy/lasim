@@ -6,6 +6,7 @@
 #include "globals.hpp"
 #include "slice.cpp"
 #include "token.cpp"
+#include "tty.cpp"
 #include "types.hpp"
 
 // TODO(refactor): Create header file for execute.cpp or extract functions
@@ -15,12 +16,18 @@ static char *halfbyte_string(const Word word);
 void print_registers(void);
 char condition_char(ConditionCode condition);
 
-#define MAX_DEBUG_COMMAND 20  // Includes '\0'
+#define MAX_DEBUGGER_COMMAND 20  // Includes '\0'
+#define MAX_DEBUGGER_HISTORY 4
 
 #define stddbg stderr
 
 // Debugger message
 #define dprintf(...)                  \
+    {                                 \
+        fprintf(stddbg, __VA_ARGS__); \
+        fflush(stddbg);               \
+    }
+#define dprintfc(...)                 \
     {                                 \
         fprintf(stddbg, "\x1b[36m");  \
         fprintf(stddbg, __VA_ARGS__); \
@@ -36,29 +43,112 @@ enum class DebuggerAction {
     QUIT,
 };
 
+// TODO(refactor/opt): Use string type with length
+typedef char Command[MAX_DEBUGGER_COMMAND];
+
+// TODO(opt): Use ring buffer
+typedef struct CommandHistory {
+    Command list[MAX_DEBUGGER_HISTORY];
+    size_t length = 0;
+    size_t cursor = 0;
+} CommandHistory;
+
+static CommandHistory history;
+
 // TODO(refactor): Create function prototypes
 // TODO(lint): Use `void` param for prototypes of these functions
+// TODO(refactor): Rename functions
+// TODO(refactor): Use namespace ?
 
-bool read_line(char *buffer, size_t max_size) {
-    int ch;
-    // Read characters until EOL or EOF
-    size_t len = 0;
-    for (; len < max_size - 1; ++len) {
-        ch = getchar();
-        if (ch == EOF)
+void push_history(const char *const buffer) {
+    if (history.length >= MAX_DEBUGGER_HISTORY) {
+        for (size_t i = 0; i < history.length - 1; ++i) {
+            strcpy(history.list[i], history.list[i + 1]);
+        }
+    } else {
+        ++history.length;
+    }
+    strcpy(history.list[history.length - 1], buffer);
+    history.cursor = history.length;
+}
+
+void print_command_prompt() {
+    dprintf("\r\x1b[K");
+    dprintf("\x1b[1m");
+    dprintfc("Command: ");
+}
+
+bool read_line(char *const buffer) {
+    size_t length = 0;
+    // TODO(feat): Add line cursor
+
+    tty_nobuffer_noecho();
+    while (true) {
+        /* printf("buffer:  %lu\n", length); */
+        /* printf("history: %lu\n", history.length); */
+        /* printf("cursor:  %lu\n", history.cursor); */
+        print_command_prompt();
+        for (size_t i = 0; i < length; ++i) {
+            dprintf("%c", buffer[i]);
+        }
+
+        int ch = getchar();
+
+        if (ch == EOF) {
+            tty_restore();
             return false;
+        }
+
         if (ch == '\n')
             break;
         if (ch == '\r')
             continue;
-        buffer[len] = ch;
+
+        if (ch == '\x7f' || ch == '\x08') {
+            if (length > 0)
+                --length;
+        } else if (ch == '\x1b') {
+            ch = getchar();
+            if (ch != '[')
+                continue;
+
+            ch = getchar();
+            switch (ch) {
+                case 'A':
+                    if (history.cursor > 0) {
+                        --history.cursor;
+                        strcpy(buffer, history.list[history.cursor]);
+                        length = strlen(buffer);
+                    }
+                    break;
+                case 'B':
+                    if (history.cursor < history.length) {
+                        ++history.cursor;
+                        if (history.cursor == history.length) {
+                            length = 0;
+                        } else {
+                            strcpy(buffer, history.list[history.cursor]);
+                            length = strlen(buffer);
+                        }
+                    }
+                    break;
+                default:
+                    break;
+            }
+        } else {
+            if (length < MAX_DEBUGGER_COMMAND - 1) {
+                buffer[length] = ch;
+                ++length;
+            }
+        }
     }
-    if (len >= max_size - 1) {
-        // Flush trailing characters until end of line
-        for (; (ch = getchar(), ch != '\n' && ch != EOF);)
-            ;
+    tty_restore();
+    fprintf(stddbg, "\n");
+
+    buffer[length] = '\0';
+    if (length > 0) {
+        push_history(buffer);
     }
-    buffer[len] = '\0';
     return true;
 }
 
@@ -82,18 +172,13 @@ bool expect_address(const char *&line, Word &addr) {
     take_whitespace(line);
     InitialSignWord integer;
     if (take_integer(line, integer) != 1 || integer.is_signed) {
-        dprintf("Expected address argument\n");
+        dprintfc("Expected address argument\n");
         return false;
     }
     addr = integer.value;
     // Reflects `memory_checked`
-    // TODO(fix): Messages should be different
-    if (addr < memory_file_bounds.start) {
-        dprintf("Cannot access non-user memory (before user memory)\n");
-        return false;
-    }
-    if (addr > MEMORY_USER_MAX) {
-        dprintf("Cannot access non-user memory (after user memory)\n");
+    if (addr < memory_file_bounds.start || addr > MEMORY_USER_MAX) {
+        dprintfc("Memory address is out of bounds\n");
         return false;
     }
     return true;
@@ -103,7 +188,7 @@ bool expect_integer(const char *&line, Word &value) {
     take_whitespace(line);
     InitialSignWord integer;
     if (take_integer(line, integer) != 1) {
-        dprintf("Expected integer argument\n");
+        dprintfc("Expected integer argument\n");
         return false;
     }
     value = integer.value;
@@ -117,19 +202,17 @@ void print_integer_value(Word value) {
     // TODO(refactor): Combine functionality with `print_registers`
     // TODO(feat): Show ascii repr. if applicable
     // TODO(feat): Show instruction name/opcode repr. if applicable
-    dprintf("       HEX    UINT    INT\n");
-    dprintf("    0x%04hx  %6hd  %5hu\n", value, value, value);
+    dprintfc("       HEX    UINT    INT\n");
+    dprintfc("    0x%04hx  %6hd  %5hu\n", value, value, value);
 }
 
 DebuggerAction ask_debugger_command() {
     const char *line = nullptr;
 
     while (true) {
-        char line_buf[MAX_DEBUG_COMMAND];
+        Command line_buf;
         line = line_buf;
-        fprintf(stddbg, "\x1b[1m");
-        dprintf("Command: ");
-        if (!read_line(line_buf, MAX_DEBUG_COMMAND))
+        if (!read_line(line_buf))
             return DebuggerAction::NONE;
         if (line_buf[0] != '\0')
             break;
@@ -151,7 +234,7 @@ DebuggerAction ask_debugger_command() {
         if (!expect_address(line, addr))
             return DebuggerAction::NONE;
         Word value = memory[addr];
-        dprintf("Value at address 0x%04hx:\n", addr);
+        dprintfc("Value at address 0x%04hx:\n", addr);
         print_integer_value(value);
     } else if (string_equals_slice("ms", command)) {
         Word addr, value;
@@ -160,9 +243,9 @@ DebuggerAction ask_debugger_command() {
         if (!expect_integer(line, value))
             return DebuggerAction::NONE;
         memory[addr] = value;
-        dprintf("Modified value at address 0x%04hx\n", addr);
+        dprintfc("Modified value at address 0x%04hx\n", addr);
     } else {
-        dprintf(
+        dprintfc(
             "    h   Print usage\n"
             "    r   Print registers\n"
             "    s   Step next instruction\n"

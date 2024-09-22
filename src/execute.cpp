@@ -57,12 +57,12 @@ void execute(const ObjectFile &input, bool debugger, Error &error) {
             if (do_debugger_prompt) {
                 // TODO(feat): Print value at PC with `print_integer_value`
                 dprintf("\n");
-                dprintf("PC: 0x%04hx\n", registers.program_counter);
+                dprintfc("PC: 0x%04hx\n", registers.program_counter);
                 run_all_debugger_commands(do_halt, do_debugger_prompt);
                 if (do_halt)
                     break;
-                fprintf(stddbg, "\x1b[2m");
-                dprintf("-------------\n");
+                dprintf("\x1b[2m");
+                dprintfc("···············\n");
             }
         }
 
