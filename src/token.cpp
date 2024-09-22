@@ -43,7 +43,11 @@ enum class Directive {
 
 // MUST match order of `Directive` enum
 static const char *const DIRECTIVE_NAMES[] = {
-    "ORIG", "END", "FILL", "BLKW", "STRINGZ",
+    "ORIG",
+    "END",
+    "FILL",
+    "BLKW",
+    "STRINGZ",
 };
 
 enum class Instruction {
@@ -77,7 +81,7 @@ enum class Instruction {
     PUTSP,
     HALT,
     REG,  // Extension trap
-    RTI,  // Only used in 'supervisor' mode
+    RTI   // Only used in 'supervisor' mode
 };
 
 // MUST match order of `Instruction` enum
@@ -137,8 +141,9 @@ int take_integer(const char *&line, InitialSignWord &number);
 int take_integer_hex(const char *&line, InitialSignWord &number);
 int take_integer_decimal(const char *&line, InitialSignWord &number);
 int8_t parse_hex_digit(const char ch);
-bool append_decimal_digit_checked(Word &number, uint8_t digit,
-                                  bool is_negative);
+bool append_decimal_digit_checked(
+    Word &number, uint8_t digit, bool is_negative
+);
 bool is_char_eol(const char ch);
 bool is_char_valid_in_identifier(const char ch);
 bool is_char_valid_identifier_start(const char ch);
@@ -149,8 +154,9 @@ void print_invalid_token(const char *const &line);
 static const char *directive_to_string(const Directive directive);
 bool directive_from_string(Token &token, const StringSlice directive);
 static const char *instruction_to_string(const Instruction instruction);
-bool instruction_from_string_slice(Token &token,
-                                   const StringSlice &instruction);
+bool instruction_from_string_slice(
+    Token &token, const StringSlice &instruction
+);
 static const char *token_kind_to_string(const TokenKind token_kind);
 
 // Debugging
@@ -448,8 +454,9 @@ int8_t parse_hex_digit(const char ch) {
     return -1;
 }
 
-bool append_decimal_digit_checked(Word &number, uint8_t digit,
-                                  bool is_negative) {
+bool append_decimal_digit_checked(
+    Word &number, uint8_t digit, bool is_negative
+) {
     if (number > WORD_MAX_UNSIGNED / 10)
         return false;
     number *= 10;
@@ -504,8 +511,9 @@ bool directive_from_string(Token &token, const StringSlice directive) {
 static const char *instruction_to_string(const Instruction instruction) {
     return INSTRUCTION_NAMES[static_cast<size_t>(instruction)];
 }
-bool instruction_from_string_slice(Token &token,
-                                   const StringSlice &instruction) {
+bool instruction_from_string_slice(
+    Token &token, const StringSlice &instruction
+) {
     const size_t count =
         sizeof(INSTRUCTION_NAMES) / sizeof(INSTRUCTION_NAMES[0]);
     for (size_t i = 0; i < count; ++i) {
@@ -546,23 +554,32 @@ void _print_token(const Token &token) {
     printf("Token: ");
     switch (token.kind) {
         case TokenKind::INSTRUCTION:
-            printf("Instruction: %s\n",
-                   instruction_to_string(token.value.instruction));
+            printf(
+                "Instruction: %s\n",
+                instruction_to_string(token.value.instruction)
+            );
             break;
         case TokenKind::DIRECTIVE:
-            printf("Directive: %s\n",
-                   directive_to_string(token.value.directive));
+            printf(
+                "Directive: %s\n", directive_to_string(token.value.directive)
+            );
             break;
         case TokenKind::REGISTER:
             printf("Register: R%d\n", token.value.register_);
             break;
         case TokenKind::INTEGER:
             if (token.value.integer.is_signed) {
-                printf("Integer: 0x%04hx #%hd\n", token.value.integer.value,
-                       token.value.integer.value);
+                printf(
+                    "Integer: 0x%04hx #%hd\n",
+                    token.value.integer.value,
+                    token.value.integer.value
+                );
             } else {
-                printf("Integer: 0x%04hx #+%hu\n", token.value.integer.value,
-                       token.value.integer.value);
+                printf(
+                    "Integer: 0x%04hx #+%hu\n",
+                    token.value.integer.value,
+                    token.value.integer.value
+                );
             }
             break;
         case TokenKind::STRING:

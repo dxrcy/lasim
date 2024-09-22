@@ -103,14 +103,16 @@ void execute_next_instrution(bool &do_halt, Error &error) {
                 // 2 bits padding
                 const uint8_t padding = bits_3_4(instr);
                 if (padding != 0b00) {
-                    fprintf(stderr,
-                            "Expected padding 0b00 for ADD instruction\n");
+                    fprintf(
+                        stderr, "Expected padding 0b00 for ADD instruction\n"
+                    );
                     SET_ERROR(error, EXECUTE);
                     return;
                 }
                 const Register src_reg_b = bits_0_2(instr);
-                value_b = static_cast<SignedWord>(
-                    registers.general_purpose[src_reg_b]);
+                value_b =
+                    static_cast<SignedWord>(registers.general_purpose[src_reg_b]
+                    );
             } else {
                 value_b = low_5_bits_sext(instr);
             }
@@ -134,8 +136,9 @@ void execute_next_instrution(bool &do_halt, Error &error) {
                 // 2 bits padding
                 const uint8_t padding = bits_3_4(instr);
                 if (padding != 0b00) {
-                    fprintf(stderr,
-                            "Expected padding 0b00 for AND instruction\n");
+                    fprintf(
+                        stderr, "Expected padding 0b00 for AND instruction\n"
+                    );
                     SET_ERROR(error, EXECUTE);
                     return;
                 }
@@ -158,8 +161,9 @@ void execute_next_instrution(bool &do_halt, Error &error) {
             // 4 bits ONEs padding
             const uint8_t padding = bits_0_5(instr);
             if (padding != BITMASK_LOW_5) {
-                fprintf(stderr,
-                        "Expected padding 0x11111 for NOT instruction\n");
+                fprintf(
+                    stderr, "Expected padding 0x11111 for NOT instruction\n"
+                );
                 SET_ERROR(error, EXECUTE);
                 return;
             }
@@ -177,8 +181,9 @@ void execute_next_instrution(bool &do_halt, Error &error) {
 
             const uint8_t condition = bits_9_11(instr);
             if (condition == 0b000) {
-                fprintf(stderr,
-                        "Invalid condition code 0b000 for BR* instruction\n");
+                fprintf(
+                    stderr, "Invalid condition code 0b000 for BR* instruction\n"
+                );
                 SET_ERROR(error, EXECUTE);
                 return;
             }
@@ -197,8 +202,9 @@ void execute_next_instrution(bool &do_halt, Error &error) {
             // 3 bits padding
             const uint8_t padding_1 = bits_9_11(instr);
             if (padding_1 != 0b000) {
-                fprintf(stderr,
-                        "Expected padding 0b000 for JMP/RET instruction\n");
+                fprintf(
+                    stderr, "Expected padding 0b000 for JMP/RET instruction\n"
+                );
                 SET_ERROR(error, EXECUTE);
                 return;
             }
@@ -206,8 +212,10 @@ void execute_next_instrution(bool &do_halt, Error &error) {
             // After base register
             const uint8_t padding_2 = bits_0_6(instr);
             if (padding_2 != 0b000000) {
-                fprintf(stderr,
-                        "Expected padding 0b000000 for JMP/RET instruction\n");
+                fprintf(
+                    stderr,
+                    "Expected padding 0b000000 for JMP/RET instruction\n"
+                );
                 SET_ERROR(error, EXECUTE);
                 return;
             }
@@ -233,8 +241,9 @@ void execute_next_instrution(bool &do_halt, Error &error) {
                 // 2 bits padding
                 const uint8_t padding = bits_9_10(instr);
                 if (padding != 0b00) {
-                    fprintf(stderr,
-                            "Expected padding 0b00 for JSRR instruction\n");
+                    fprintf(
+                        stderr, "Expected padding 0b00 for JSRR instruction\n"
+                    );
                     SET_ERROR(error, EXECUTE);
                     return;
                 }
@@ -341,18 +350,23 @@ void execute_next_instrution(bool &do_halt, Error &error) {
 
         // RTI (supervisor-only)
         case Opcode::RTI:
-            fprintf(stderr,
-                    "Invalid use of RTI opcode: 0b%s in non-supervisor mode\n",
-                    halfbyte_string(static_cast<Word>(opcode)));
+            fprintf(
+                stderr,
+                "Invalid use of RTI opcode: 0b%s in non-supervisor mode\n",
+                halfbyte_string(static_cast<Word>(opcode))
+            );
             SET_ERROR(error, EXECUTE);
             return;
             break;
 
         // Invalid enum variant
         default:
-            fprintf(stderr, "Invalid opcode: 0b%s (0x%04x)\n",
-                    halfbyte_string(static_cast<Word>(opcode)),
-                    static_cast<Word>(opcode));
+            fprintf(
+                stderr,
+                "Invalid opcode: 0b%s (0x%04x)\n",
+                halfbyte_string(static_cast<Word>(opcode)),
+                static_cast<Word>(opcode)
+            );
             SET_ERROR(error, EXECUTE);
             return;
     }
@@ -443,8 +457,11 @@ void execute_trap_instruction(const Word instr, bool &do_halt, Error &error) {
             break;
 
         default:
-            fprintf(stderr, "Invalid trap vector 0x%02x\n",
-                    static_cast<Word>(trap_vector));
+            fprintf(
+                stderr,
+                "Invalid trap vector 0x%02x\n",
+                static_cast<Word>(trap_vector)
+            );
             SET_ERROR(error, EXECUTE);
             return;
     }

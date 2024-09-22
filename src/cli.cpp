@@ -31,16 +31,19 @@ struct Options {
     bool debugger;
 };
 
-void parse_options(Options &options, const int argc,
-                   const char *const *const argv);
+void parse_options(
+    Options &options, const int argc, const char *const *const argv
+);
 void print_usage_hint(void);
 void print_usage(void);
-void strcpy_max_size(char *const dest, const char *const src,
-                     const size_t max_size);
+void strcpy_max_size(
+    char *const dest, const char *const src, const size_t max_size
+);
 void copy_filename_with_extension(char *const dest, const char *const src);
 
-void parse_options(Options &options, const int argc,
-                   const char *const *const argv) {
+void parse_options(
+    Options &options, const int argc, const char *const *const argv
+) {
     options.mode = Mode::ASSEMBLE_EXECUTE;
     options.debugger = false;
 
@@ -115,8 +118,9 @@ void parse_options(Options &options, const int argc,
                         }
                         options.out_filename[0] = '\0';
                     } else {
-                        strcpy_max_size(options.out_filename, next_arg,
-                                        FILENAME_MAX - 1);
+                        strcpy_max_size(
+                            options.out_filename, next_arg, FILENAME_MAX - 1
+                        );
                     }
                 }; break;
 
@@ -127,15 +131,18 @@ void parse_options(Options &options, const int argc,
                             options.mode = Mode::ASSEMBLE_ONLY;
                             break;
                         case Mode::ASSEMBLE_ONLY:
-                            fprintf(stderr,
-                                    "Cannot specify `-a` more than once\n");
+                            fprintf(
+                                stderr, "Cannot specify `-a` more than once\n"
+                            );
                             print_usage_hint();
                             exit(static_cast<int>(Error::CLI));
                         default:
-                            fprintf(stderr,
-                                    "Cannot specify `-a` with `-x`. Omit both "
-                                    "options "
-                                    "for default (assemble+execute) mode.\n");
+                            fprintf(
+                                stderr,
+                                "Cannot specify `-a` with `-x`. Omit both "
+                                "options "
+                                "for default (assemble+execute) mode.\n"
+                            );
                             print_usage_hint();
                             exit(static_cast<int>(Error::CLI));
                     };
@@ -148,15 +155,18 @@ void parse_options(Options &options, const int argc,
                             options.mode = Mode::EXECUTE_ONLY;
                             break;
                         case Mode::EXECUTE_ONLY:
-                            fprintf(stderr,
-                                    "Cannot specify `-x` more than once\n");
+                            fprintf(
+                                stderr, "Cannot specify `-x` more than once\n"
+                            );
                             print_usage_hint();
                             exit(static_cast<int>(Error::CLI));
                         default:
-                            fprintf(stderr,
-                                    "Cannot specify `-x` with `-a`. Omit both "
-                                    "options "
-                                    "for default (assemble+execute) mode.\n");
+                            fprintf(
+                                stderr,
+                                "Cannot specify `-x` with `-a`. Omit both "
+                                "options "
+                                "for default (assemble+execute) mode.\n"
+                            );
                             print_usage_hint();
                             exit(static_cast<int>(Error::CLI));
                     };
@@ -208,9 +218,11 @@ void parse_options(Options &options, const int argc,
         // Mode is ax, but output file was set as stdout (using `-`)
         // An intermediate file is required
         // Cannot use `-o -` in ax|x mode (x mode checked above)
-        fprintf(stderr,
-                "Cannot write output to stdout in default "
-                "(assemble+execute) mode\n");
+        fprintf(
+            stderr,
+            "Cannot write output to stdout in default "
+            "(assemble+execute) mode\n"
+        );
         print_usage_hint();
         exit(static_cast<int>(Error::CLI));
     }
@@ -221,31 +233,34 @@ void print_usage_hint() {
 }
 
 void print_usage() {
-    fprintf(stderr,
-            "LASIM: LC-3 Assembler & Simulator\n"
-            "\n"
-            "USAGE:\n"
-            "    " PROGRAM_NAME
-            " -h [-ax] [INPUT] [-o OUTPUT]\n"
-            "MODE:\n"
-            "    (default)      Assemble + Execute\n"
-            "    -a             Assembly only\n"
-            "    -x             Execute only\n"
-            "ARGUMENTS:\n"
-            "        [INPUT]    Input filename (.asm, or .obj for -x)\n"
-            "                   Use '-' to read input from stdin\n"
-            "    -o [OUTPUT]    Output filename\n"
-            "                   Use '-' to write output to stdout (with -a)\n"
-            "    -d             Debug program execution\n"
-            "OPTIONS:\n"
-            "    -h             Print usage\n"
-            "");
+    fprintf(
+        stderr,
+        "LASIM: LC-3 Assembler & Simulator\n"
+        "\n"
+        "USAGE:\n"
+        "    " PROGRAM_NAME
+        " -h [-ax] [INPUT] [-o OUTPUT]\n"
+        "MODE:\n"
+        "    (default)      Assemble + Execute\n"
+        "    -a             Assembly only\n"
+        "    -x             Execute only\n"
+        "ARGUMENTS:\n"
+        "        [INPUT]    Input filename (.asm, or .obj for -x)\n"
+        "                   Use '-' to read input from stdin\n"
+        "    -o [OUTPUT]    Output filename\n"
+        "                   Use '-' to write output to stdout (with -a)\n"
+        "    -d             Debug program execution\n"
+        "OPTIONS:\n"
+        "    -h             Print usage\n"
+        ""
+    );
 }
 
 // Like `strncpy`, but ALWAYS null-terminate destination string
 // `max_length` does NOT include NUL byte
-void strcpy_max_size(char *const dest, const char *const src,
-                     const size_t max_length) {
+void strcpy_max_size(
+    char *const dest, const char *const src, const size_t max_length
+) {
     size_t i = 0;
     for (; i < max_length; ++i) {
         if (src[i] == '\0')

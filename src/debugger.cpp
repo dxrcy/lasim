@@ -255,7 +255,8 @@ DebuggerAction ask_debugger_command() {
             /* "    rg  Print value of a register\n" */
             /* "    rs  Set value of a register\n" */
             "    q   Quit all execution\n"
-            "");
+            ""
+        );
     }
 
     return DebuggerAction::NONE;
@@ -299,8 +300,11 @@ void print_registers() {
     printf("%s\n", box_tr);
 
     printf("  %s ", box_v);
-    printf("pc: 0x%04hx          cc: %c", registers.program_counter,
-           condition_char(registers.condition));
+    printf(
+        "pc: 0x%04hx          cc: %c",
+        registers.program_counter,
+        condition_char(registers.condition)
+    );
     printf(" %s\n", box_v);
 
     printf("  %s ", box_v);

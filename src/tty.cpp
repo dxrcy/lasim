@@ -6,7 +6,9 @@
 
 static struct termios stdin_tty;
 
-void tty_get() { tcgetattr(STDIN_FILENO, &stdin_tty); }
+void tty_get() {
+    tcgetattr(STDIN_FILENO, &stdin_tty);
+}
 
 void tty_nobuffer_noecho() {
     tty_get();

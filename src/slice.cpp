@@ -17,8 +17,9 @@ void copy_string_slice_to_string(char *dest, const StringSlice src);
 void print_string_slice(FILE *const &file, const StringSlice &slice);
 
 // TODO(refactor): Rename to `slice_equals[_string]`
-bool string_equals_slice(const char *const target,
-                         const StringSlice candidate) {
+bool string_equals_slice(
+    const char *const target, const StringSlice candidate
+) {
     size_t i = 0;
     for (; i < candidate.length; ++i) {
         // Will return false if any character mismatches

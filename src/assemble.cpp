@@ -22,54 +22,87 @@ using std::vector;
 // TODO(chore): Move all function doc comments to prototypes ?
 // TODO(refactor): Change some out-params to be return values
 
-void assemble(const char *const asm_filename, const ObjectFile &output,
-              Error &error);
+void assemble(
+    const char *const asm_filename, const ObjectFile &output, Error &error
+);
 // Used by `assemble`
-void write_obj_file(const char *const filename, const vector<Word> &words,
-                    Error &error);
-void assemble_file_to_words(const char *const filename, vector<Word> &words,
-                            Error &error);
+void write_obj_file(
+    const char *const filename, const vector<Word> &words, Error &error
+);
+void assemble_file_to_words(
+    const char *const filename, vector<Word> &words, Error &error
+);
 
 // Used by `assemble_file_to_words`
-void parse_line(vector<Word> &words, const char *&line,
-                vector<LabelDefinition> &label_definitions,
-                vector<LabelReference> &label_references, int line_number,
-                bool &is_end, bool &failed);
-void parse_directive(vector<Word> &words, const char *&line,
-                     const Directive directive, bool &is_end, bool &failed);
-void parse_instruction(Word &word, const char *&line,
-                       const Instruction &instruction, const size_t word_index,
-                       vector<LabelReference> &label_references,
-                       const int line_number, bool &failed);
+void parse_line(
+    vector<Word> &words,
+    const char *&line,
+    vector<LabelDefinition> &label_definitions,
+    vector<LabelReference> &label_references,
+    int line_number,
+    bool &is_end,
+    bool &failed
+);
+void parse_directive(
+    vector<Word> &words,
+    const char *&line,
+    const Directive directive,
+    bool &is_end,
+    bool &failed
+);
+void parse_instruction(
+    Word &word,
+    const char *&line,
+    const Instruction &instruction,
+    const size_t word_index,
+    vector<LabelReference> &label_references,
+    const int line_number,
+    bool &failed
+);
 
-void print_invalid_operand(const char *const expected,
-                           const TokenKind token_kind, Instruction instruction);
+void print_invalid_operand(
+    const char *const expected,
+    const TokenKind token_kind,
+    Instruction instruction
+);
 void expect_next_token(const char *&line, Token &token, bool &failed);
-void expect_next_token_after_comma(const char *&line, Token &token,
-                                   bool &failed);
-void expect_token_is_kind(const Token &token, const enum TokenKind kind,
-                          bool &failed);
-void expect_integer_fits_size(InitialSignWord integer, size_t size_bits,
-                              bool &failed);
+void expect_next_token_after_comma(
+    const char *&line, Token &token, bool &failed
+);
+void expect_token_is_kind(
+    const Token &token, const enum TokenKind kind, bool &failed
+);
+void expect_integer_fits_size(
+    InitialSignWord integer, size_t size_bits, bool &failed
+);
 void expect_line_eol(const char *line, bool &failed);
 
 uint8_t get_branch_condition_code(const Instruction instruction);
 TrapVector get_trap_vector(const Instruction instruction);
-void add_label_reference(vector<LabelReference> &references,
-                         const StringSlice &name, const Word index,
-                         const int line_number, const bool is_offset11);
-bool find_label_definition(const LabelString &target,
-                           const vector<LabelDefinition> &definitions,
-                           SignedWord &index);
+void add_label_reference(
+    vector<LabelReference> &references,
+    const StringSlice &name,
+    const Word index,
+    const int line_number,
+    const bool is_offset11
+);
+bool find_label_definition(
+    const LabelString &target,
+    const vector<LabelDefinition> &definitions,
+    SignedWord &index
+);
 char escape_character(const char ch, bool &failed);
 
-bool does_integer_fit_size(const InitialSignWord integer,
-                           const uint8_t size_bits);
-bool does_integer_fit_size_inner(const SignedWord integer,
-                                 const uint8_t size_bits);
+bool does_integer_fit_size(
+    const InitialSignWord integer, const uint8_t size_bits
+);
+bool does_integer_fit_size_inner(
+    const SignedWord integer, const uint8_t size_bits
+);
 
-void assemble(const char *const asm_filename, const ObjectFile &output,
-              Error &error) {
+void assemble(
+    const char *const asm_filename, const ObjectFile &output, Error &error
+) {
     vector<Word> words;
     assemble_file_to_words(asm_filename, words, error);
     OK_OR_RETURN(error);
@@ -89,8 +122,9 @@ void assemble(const char *const asm_filename, const ObjectFile &output,
     }
 }
 
-void write_obj_file(const char *const filename, const vector<Word> &words,
-                    Error &error) {
+void write_obj_file(
+    const char *const filename, const vector<Word> &words, Error &error
+) {
     FILE *obj_file;
     if (filename[0] == '\0') {
         // Already checked erroneous stdout-output in assemble+execute mode
@@ -98,8 +132,9 @@ void write_obj_file(const char *const filename, const vector<Word> &words,
     } else {
         obj_file = fopen(filename, "wb");
         if (obj_file == nullptr) {
-            fprintf(stderr, "Failed to open output file for writing: %s\n",
-                    filename);
+            fprintf(
+                stderr, "Failed to open output file for writing: %s\n", filename
+            );
             SET_ERROR(error, FILE);
             return;
         }
@@ -117,8 +152,9 @@ void write_obj_file(const char *const filename, const vector<Word> &words,
     fclose(obj_file);
 }
 
-void assemble_file_to_words(const char *const filename, vector<Word> &words,
-                            Error &error) {
+void assemble_file_to_words(
+    const char *const filename, vector<Word> &words, Error &error
+) {
     // File errors are fatal to assembly process, all other errors can be
     // 'ignored' to allow parsing to continue to following lines. However, if
     // any error occurs, the program will stop after parsing, and not write the
@@ -130,8 +166,11 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words,
     } else {
         asm_file = fopen(filename, "r");
         if (asm_file == nullptr) {
-            fprintf(stderr, "Failed to open assembly file for reading: %s\n",
-                    filename);
+            fprintf(
+                stderr,
+                "Failed to open assembly file for reading: %s\n",
+                filename
+            );
             SET_ERROR(error, FILE);
             return;
         }
@@ -154,8 +193,15 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words,
         }
 
         bool failed = false;
-        parse_line(words, line, label_definitions, label_references,
-                   line_number, is_end, failed);
+        parse_line(
+            words,
+            line,
+            label_definitions,
+            label_references,
+            line_number,
+            is_end,
+            failed
+        );
 
         if (failed) {
             fprintf(stderr, "\tLine %d\n", line_number);
@@ -186,8 +232,11 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words,
         const SignedWord pc_offset =
             index - static_cast<SignedWord>(ref.index) - 1;
         if (!does_integer_fit_size_inner(pc_offset, size)) {
-            fprintf(stderr, "Label '%s' is too far away to be referenced\n",
-                    ref.name);
+            fprintf(
+                stderr,
+                "Label '%s' is too far away to be referenced\n",
+                ref.name
+            );
             fprintf(stderr, "\tLine %d\n", ref.line_number);
             SET_ERROR(error, ASSEMBLE);
             continue;
@@ -199,10 +248,15 @@ void assemble_file_to_words(const char *const filename, vector<Word> &words,
     fclose(asm_file);
 }
 
-void parse_line(vector<Word> &words, const char *&line,
-                vector<LabelDefinition> &label_definitions,
-                vector<LabelReference> &label_references, int line_number,
-                bool &is_end, bool &failed) {
+void parse_line(
+    vector<Word> &words,
+    const char *&line,
+    vector<LabelDefinition> &label_definitions,
+    vector<LabelReference> &label_references,
+    int line_number,
+    bool &is_end,
+    bool &failed
+) {
     Token token;
     take_next_token(line, token, failed);
     RETURN_IF_FAILED(failed);
@@ -225,8 +279,9 @@ void parse_line(vector<Word> &words, const char *&line,
         RETURN_IF_FAILED(failed);
         // Must be unsigned
         if (token.kind != TokenKind::INTEGER || token.value.integer.is_signed) {
-            fprintf(stderr,
-                    "Positive integer literal required after `.ORIG`\n");
+            fprintf(
+                stderr, "Positive integer literal required after `.ORIG`\n"
+            );
             failed = true;
             return;
         }
@@ -286,24 +341,39 @@ void parse_line(vector<Word> &words, const char *&line,
         return;
 
     if (token.kind != TokenKind::INSTRUCTION) {
-        fprintf(stderr, "Unexpected %s. Expected instruction or end of line\n",
-                token_kind_to_string(token.kind));
+        fprintf(
+            stderr,
+            "Unexpected %s. Expected instruction or end of line\n",
+            token_kind_to_string(token.kind)
+        );
         failed = true;
         return;
     }
 
     const Instruction instruction = token.value.instruction;
     Word word;
-    parse_instruction(word, line, instruction, words.size(), label_references,
-                      line_number, failed);
+    parse_instruction(
+        word,
+        line,
+        instruction,
+        words.size(),
+        label_references,
+        line_number,
+        failed
+    );
     RETURN_IF_FAILED(failed);
     expect_line_eol(line, failed);
     RETURN_IF_FAILED(failed);
     words.push_back(word);
 }
 
-void parse_directive(vector<Word> &words, const char *&line,
-                     const Directive directive, bool &is_end, bool &failed) {
+void parse_directive(
+    vector<Word> &words,
+    const char *&line,
+    const Directive directive,
+    bool &is_end,
+    bool &failed
+) {
     Token token;
 
     switch (directive) {
@@ -333,9 +403,11 @@ void parse_directive(vector<Word> &words, const char *&line,
             RETURN_IF_FAILED(failed);
             if (token.kind != TokenKind::INTEGER ||
                 token.value.integer.is_signed) {
-                fprintf(stderr,
-                        "Positive integer literal required after `.BLKW` "
-                        "directive\n");
+                fprintf(
+                    stderr,
+                    "Positive integer literal required after `.BLKW` "
+                    "directive\n"
+                );
                 failed = true;
                 return;
             }
@@ -350,8 +422,10 @@ void parse_directive(vector<Word> &words, const char *&line,
             take_next_token(line, token, failed);
             RETURN_IF_FAILED(failed);
             if (token.kind != TokenKind::STRING) {
-                fprintf(stderr,
-                        "String literal required after `.STRINGZ` directive\n");
+                fprintf(
+                    stderr,
+                    "String literal required after `.STRINGZ` directive\n"
+                );
                 failed = true;
                 return;
             }
@@ -376,10 +450,15 @@ void parse_directive(vector<Word> &words, const char *&line,
     }
 }
 
-void parse_instruction(Word &word, const char *&line,
-                       const Instruction &instruction, const size_t word_index,
-                       vector<LabelReference> &label_references,
-                       const int line_number, bool &failed) {
+void parse_instruction(
+    Word &word,
+    const char *&line,
+    const Instruction &instruction,
+    const size_t word_index,
+    vector<LabelReference> &label_references,
+    const int line_number,
+    bool &failed
+) {
     Token token;
     Opcode opcode;
     Word operands = 0x0000;
@@ -419,8 +498,9 @@ void parse_instruction(Word &word, const char *&line,
                 operands |= 1 << 5;  // Flag
                 operands |= immediate.value & BITMASK_LOW_5;
             } else {
-                print_invalid_operand("integer or label", token.kind,
-                                      instruction);
+                print_invalid_operand(
+                    "integer or label", token.kind, instruction
+                );
                 failed = true;
                 return;
             }
@@ -466,11 +546,17 @@ void parse_instruction(Word &word, const char *&line,
                 RETURN_IF_FAILED(failed);
                 operands |= token.value.integer.value & BITMASK_LOW_9;
             } else if (token.kind == TokenKind::LABEL) {
-                add_label_reference(label_references, token.value.label,
-                                    word_index, line_number, false);
+                add_label_reference(
+                    label_references,
+                    token.value.label,
+                    word_index,
+                    line_number,
+                    false
+                );
             } else {
-                print_invalid_operand("integer or label", token.kind,
-                                      instruction);
+                print_invalid_operand(
+                    "integer or label", token.kind, instruction
+                );
                 failed = true;
                 return;
             }
@@ -507,8 +593,13 @@ void parse_instruction(Word &word, const char *&line,
                     RETURN_IF_FAILED(failed);
                     operands |= token.value.integer.value & BITMASK_LOW_11;
                 } else if (token.kind == TokenKind::LABEL) {
-                    add_label_reference(label_references, token.value.label,
-                                        word_index, line_number, true);
+                    add_label_reference(
+                        label_references,
+                        token.value.label,
+                        word_index,
+                        line_number,
+                        true
+                    );
                 } else {
                     fprintf(stderr, "Invalid operand\n");
                     failed = true;
@@ -560,8 +651,13 @@ void parse_instruction(Word &word, const char *&line,
                 RETURN_IF_FAILED(failed);
                 operands |= token.value.integer.value & BITMASK_LOW_9;
             } else if (token.kind == TokenKind::LABEL) {
-                add_label_reference(label_references, token.value.label,
-                                    word_index, line_number, false);
+                add_label_reference(
+                    label_references,
+                    token.value.label,
+                    word_index,
+                    line_number,
+                    false
+                );
             } else {
                 fprintf(stderr, "Invalid operand\n");
                 failed = true;
@@ -618,8 +714,13 @@ void parse_instruction(Word &word, const char *&line,
                 RETURN_IF_FAILED(failed);
                 operands |= token.value.integer.value & BITMASK_LOW_9;
             } else if (token.kind == TokenKind::LABEL) {
-                add_label_reference(label_references, token.value.label,
-                                    word_index, line_number, false);
+                add_label_reference(
+                    label_references,
+                    token.value.label,
+                    word_index,
+                    line_number,
+                    false
+                );
             } else {
                 fprintf(stderr, "Invalid operand\n");
                 failed = true;
@@ -646,9 +747,11 @@ void parse_instruction(Word &word, const char *&line,
                     // Don't allow explicit sign
                     if (token.kind != TokenKind::INTEGER ||
                         token.value.integer.is_signed) {
-                        fprintf(stderr,
-                                "Positive integer literal required after "
-                                "`TRAP` instruction\n");
+                        fprintf(
+                            stderr,
+                            "Positive integer literal required after "
+                            "`TRAP` instruction\n"
+                        );
                         failed = true;
                         return;
                     }
@@ -675,12 +778,18 @@ void parse_instruction(Word &word, const char *&line,
     word = static_cast<Word>(opcode) << 12 | operands;
 }
 
-void print_invalid_operand(const char *const expected,
-                           const TokenKind token_kind,
-                           Instruction instruction) {
-    fprintf(stderr, "Unexpected %s. Expected %s operand for `%s` instruction\n",
-            token_kind_to_string(token_kind), expected,
-            instruction_to_string(instruction));
+void print_invalid_operand(
+    const char *const expected,
+    const TokenKind token_kind,
+    Instruction instruction
+) {
+    fprintf(
+        stderr,
+        "Unexpected %s. Expected %s operand for `%s` instruction\n",
+        token_kind_to_string(token_kind),
+        expected,
+        instruction_to_string(instruction)
+    );
 }
 
 void expect_next_token(const char *&line, Token &token, bool &failed) {
@@ -692,8 +801,9 @@ void expect_next_token(const char *&line, Token &token, bool &failed) {
     }
 }
 
-void expect_next_token_after_comma(const char *&line, Token &token,
-                                   bool &failed) {
+void expect_next_token_after_comma(
+    const char *&line, Token &token, bool &failed
+) {
     take_next_token(line, token, failed);
     RETURN_IF_FAILED(failed);
     if (token.kind == TokenKind::COMMA) {
@@ -708,16 +818,18 @@ void expect_next_token_after_comma(const char *&line, Token &token,
 
 // TODO(refactor): Remove these wrapper functions when error handling is good
 
-void expect_token_is_kind(const Token &token, const enum TokenKind kind,
-                          bool &failed) {
+void expect_token_is_kind(
+    const Token &token, const enum TokenKind kind, bool &failed
+) {
     if (token.kind != kind) {
         fprintf(stderr, "Invalid operand\n");
         failed = true;
     }
 }
 
-void expect_integer_fits_size(InitialSignWord integer, size_t size_bits,
-                              bool &failed) {
+void expect_integer_fits_size(
+    InitialSignWord integer, size_t size_bits, bool &failed
+) {
     if (!does_integer_fit_size(integer, size_bits)) {
         fprintf(stderr, "Immediate too large\n");
         failed = true;
@@ -779,9 +891,13 @@ TrapVector get_trap_vector(const Instruction instruction) {
     }
 }
 
-void add_label_reference(vector<LabelReference> &references,
-                         const StringSlice &name, const Word index,
-                         const int line_number, const bool is_offset11) {
+void add_label_reference(
+    vector<LabelReference> &references,
+    const StringSlice &name,
+    const Word index,
+    const int line_number,
+    const bool is_offset11
+) {
     references.push_back({});
     LabelReference &ref = references.back();
     // Label length has already been checked
@@ -791,9 +907,11 @@ void add_label_reference(vector<LabelReference> &references,
     ref.is_offset11 = is_offset11;
 }
 
-bool find_label_definition(const LabelString &target,
-                           const vector<LabelDefinition> &definitions,
-                           SignedWord &index) {
+bool find_label_definition(
+    const LabelString &target,
+    const vector<LabelDefinition> &definitions,
+    SignedWord &index
+) {
     for (size_t j = 0; j < definitions.size(); ++j) {
         const LabelDefinition candidate = definitions[j];
         // Use `strcasecmp` as both arguments are null-terminated and unknown
@@ -823,8 +941,9 @@ char escape_character(const char ch, bool &failed) {
     }
 }
 
-bool does_negative_integer_fit_size(const SignedWord integer,
-                                    const uint8_t size_bits) {
+bool does_negative_integer_fit_size(
+    const SignedWord integer, const uint8_t size_bits
+) {
     // Flip sign and check against largest allowed negative value
     // Eg. size = 5
     //     Largest positive value: 0000'1111
@@ -832,14 +951,16 @@ bool does_negative_integer_fit_size(const SignedWord integer,
     const Word max = 1 << (size_bits - 1);
     return (Word)(-integer) <= max;
 }
-bool does_positive_integer_fit_size(const Word integer,
-                                    const uint8_t size_bits) {
+bool does_positive_integer_fit_size(
+    const Word integer, const uint8_t size_bits
+) {
     // Check if any bits above --and including-- sign bit are set
     return integer >> (size_bits - 1) == 0;
 }
 
-bool does_integer_fit_size(const InitialSignWord integer,
-                           const uint8_t size_bits) {
+bool does_integer_fit_size(
+    const InitialSignWord integer, const uint8_t size_bits
+) {
     if (integer.is_signed) {
         return does_negative_integer_fit_size(integer.value, size_bits);
     }
@@ -847,8 +968,9 @@ bool does_integer_fit_size(const InitialSignWord integer,
 }
 
 // TODO(refactor): Rename these functions PLEASE !!!
-bool does_integer_fit_size_inner(const SignedWord integer,
-                                 const uint8_t size_bits) {
+bool does_integer_fit_size_inner(
+    const SignedWord integer, const uint8_t size_bits
+) {
     if (integer < 0) {
         return does_negative_integer_fit_size(integer, size_bits);
     }
