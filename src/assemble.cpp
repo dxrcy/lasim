@@ -738,7 +738,7 @@ void parse_instruction(
         case Instruction::REG: {
             opcode = Opcode::TRAP;
 
-            TrapVector trap_vector;
+            uint8_t trap_vector;
             switch (instruction) {
                 // Trap instruction with explicit code
                 case Instruction::TRAP: {
@@ -761,11 +761,12 @@ void parse_instruction(
                     expect_integer_fits_size(immediate, 8, failed);
                     RETURN_IF_FAILED(failed);
                     // TODO(correctness): What happens if cast fails?
-                    trap_vector = static_cast<TrapVector>(immediate.value);
+                    trap_vector = immediate.value;
                 }; break;
 
                 default:
-                    trap_vector = get_trap_vector(instruction);
+                    trap_vector =
+                        static_cast<uint8_t>(get_trap_vector(instruction));
             }
             operands = static_cast<Word>(trap_vector);
         }; break;
