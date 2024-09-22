@@ -51,9 +51,11 @@ static const char *const DIRECTIVE_NAMES[] = {
 };
 
 enum class Instruction {
+    // Arithmetic
     ADD,
     AND,
     NOT,
+    // Branch / jump
     BR,
     BRN,
     BRZ,
@@ -66,6 +68,7 @@ enum class Instruction {
     RET,
     JSR,
     JSRR,
+    // Load / store
     LD,
     ST,
     LDI,
@@ -73,6 +76,7 @@ enum class Instruction {
     LDR,
     STR,
     LEA,
+    // Traps
     TRAP,
     GETC,
     OUT,
@@ -80,17 +84,20 @@ enum class Instruction {
     IN,
     PUTSP,
     HALT,
-    REG,  // Extension trap
-    RTI   // Only used in 'supervisor' mode
+    // Extension traps
+    REG,
+    DEBUG,
+    // Only used in 'supervisor' mode
+    RTI,
 };
 
 // MUST match order of `Instruction` enum
 // Note the case of BR* instructions
 static const char *const INSTRUCTION_NAMES[] = {
-    "ADD",  "AND",  "NOT",   "BR",    "BRn",  "BRz", "BRp",  "BRnz",
-    "BRzp", "BRnp", "BRNzp", "JMP",   "RET",  "JSR", "JSRR", "LD",
-    "ST",   "LDI",  "STI",   "LDR",   "STR",  "LEA", "TRAP", "GETC",
-    "OUT",  "PUTS", "IN",    "PUTSP", "HALT", "REG", "RTI",
+    "ADD",  "AND",  "NOT",   "BR",    "BRn",  "BRz", "BRp",   "BRnz",
+    "BRzp", "BRnp", "BRNzp", "JMP",   "RET",  "JSR", "JSRR",  "LD",
+    "ST",   "LDI",  "STI",   "LDR",   "STR",  "LEA", "TRAP",  "GETC",
+    "OUT",  "PUTS", "IN",    "PUTSP", "HALT", "REG", "DEBUG", "RTI",
 };
 
 // Can be signed or unsigned

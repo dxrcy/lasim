@@ -39,7 +39,7 @@ char condition_char(ConditionCode condition);
 enum class DebuggerAction {
     NONE,      // No control-flow action taken
     STEP,      // Execute next instruction
-    CONTINUE,  // Continue until end of program
+    CONTINUE,  // Continue until breakpoint or HALT
     QUIT,      // Quit debugger and simulator
     STOP,      // Stop debugger, continue simulator
 };
@@ -96,14 +96,25 @@ bool read_line(char *const buffer) {
         int ch = getchar();
 
         if (ch == EOF) {
-            tty_restore();
-            fprintf(stddbg, "\n");
-            return false;
+            if (length > 0) {
+                // Defer `STOP` action for next command read
+                // Treat as if input ended in a newline
+                break;
+            } else {
+                tty_restore();
+                fprintf(stddbg, "\n");
+                return false;
+            }
         }
 
         if (ch == '\n' || ch == ',')
             break;
         if (ch == '\r')
+            continue;
+
+        // Ignore leading whitespace
+        // Useful when stdin is piped: don't echo leading whitespace
+        if (isspace(ch) && length == 0)
             continue;
 
         if (ch == '\x7f' || ch == '\x08') {
@@ -257,8 +268,8 @@ DebuggerAction ask_debugger_command() {
         dprintfc(
             "    h      Print usage\n"
             "    r      Print registers\n"
-            "    s      Step next instruction\n"
-            "    c      Continue execution until HALT\n"
+            "    s      Execute next instruction\n"
+            "    c      Continue execution until breakpoint or HALT\n"
             "    mg     Print value at memory address\n"
             "    ms     Set value at memory location\n"
             /* "    rg     Print value of a register\n" */

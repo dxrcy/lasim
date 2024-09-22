@@ -24,8 +24,10 @@
 // TODO(refactor): Re-order functions
 
 void execute(const ObjectFile &input, bool debugger, Error &error);
-void execute_next_instrution(bool &do_halt, Error &error);
-void execute_trap_instruction(const Word instr, bool &do_halt, Error &error);
+void execute_next_instrution(bool &do_halt, bool &do_breakpoint, Error &error);
+void execute_trap_instruction(
+    const Word instr, bool &do_halt, bool &do_breakpoint, Error &error
+);
 
 void read_obj_filename_to_memory(const char *const obj_filename, Error &error);
 
@@ -38,13 +40,15 @@ void print_on_new_line(void);
 
 static char *halfbyte_string(const Word word);
 
+// TODO(refactor): Change the `do_*` params to a state type
+
 void execute(const ObjectFile &input, bool debugger, Error &error) {
     if (input.kind == ObjectFile::FILE) {
         read_obj_filename_to_memory(input.filename, error);
         OK_OR_RETURN(error);
     }
 
-    // TODO(feat/debugger): Loop the whole program
+    // TODO(feat/debugger): Loop the whole program until debugger quit
 
     // GP and condition registers are already initialized to 0
     registers.program_counter = memory_file_bounds.start;
@@ -69,10 +73,24 @@ void execute(const ObjectFile &input, bool debugger, Error &error) {
             }
         }
 
-        execute_next_instrution(do_halt, error);
+        bool do_breakpoint = false;
+        execute_next_instrution(do_halt, do_breakpoint, error);
         if (error != Error::OK) {
             fprintf(stderr, "Execution failed.\n");
             return;
+        }
+
+        if (do_breakpoint) {
+            // Ignore if not debugging
+            if (debugger) {
+                if (do_debugger_prompt) {
+                    dprintfc("(Passing breakpoint trap)\n");
+                } else {
+                    dprintfc("\n");
+                    dprintfc("Breakpoint encountered. Suspending execution.\n");
+                    do_debugger_prompt = true;
+                }
+            }
         }
     }
 
@@ -84,7 +102,7 @@ void execute(const ObjectFile &input, bool debugger, Error &error) {
 }
 
 // `true` return value indicates that program should end
-void execute_next_instrution(bool &do_halt, Error &error) {
+void execute_next_instrution(bool &do_halt, bool &do_breakpoint, Error &error) {
     memory_checked(registers.program_counter, error);
     OK_OR_RETURN(error);
 
@@ -350,7 +368,7 @@ void execute_next_instrution(bool &do_halt, Error &error) {
 
         // TRAP
         case Opcode::TRAP: {
-            execute_trap_instruction(instr, do_halt, error);
+            execute_trap_instruction(instr, do_halt, do_breakpoint, error);
             OK_OR_RETURN(error);
         }; break;
 
@@ -378,7 +396,9 @@ void execute_next_instrution(bool &do_halt, Error &error) {
     }
 }
 
-void execute_trap_instruction(const Word instr, bool &do_halt, Error &error) {
+void execute_trap_instruction(
+    const Word instr, bool &do_halt, bool &do_breakpoint, Error &error
+) {
     // 4 bits padding
     const uint8_t padding = bits_8_12(instr);
     if (padding != 0b0000) {
@@ -456,11 +476,14 @@ void execute_trap_instruction(const Word instr, bool &do_halt, Error &error) {
         case TrapVector::HALT:
             do_halt = true;
             return;
-            break;
 
         case TrapVector::REG:
             print_registers();
             break;
+
+        case TrapVector::DEBUG:
+            do_breakpoint = true;
+            return;
 
         default:
             fprintf(

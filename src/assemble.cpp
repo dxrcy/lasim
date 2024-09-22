@@ -735,7 +735,8 @@ void parse_instruction(
         case Instruction::IN:
         case Instruction::PUTSP:
         case Instruction::HALT:
-        case Instruction::REG: {
+        case Instruction::REG:
+        case Instruction::DEBUG: {
             opcode = Opcode::TRAP;
 
             uint8_t trap_vector;
@@ -887,6 +888,8 @@ TrapVector get_trap_vector(const Instruction instruction) {
             return TrapVector::HALT;
         case Instruction::REG:
             return TrapVector::REG;
+        case Instruction::DEBUG:
+            return TrapVector::DEBUG;
         default:
             UNREACHABLE();
     }
