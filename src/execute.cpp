@@ -58,7 +58,10 @@ void execute(const ObjectFile &input, bool debugger, Error &error) {
                 // TODO(feat): Print value at PC with `print_integer_value`
                 dprintf("\n");
                 dprintfc("PC: 0x%04hx\n", registers.program_counter);
-                run_all_debugger_commands(do_halt, do_debugger_prompt);
+                // TODO(refactor): Probably inline this (switch statement)
+                run_all_debugger_commands(
+                    do_halt, do_debugger_prompt, debugger
+                );
                 if (do_halt)
                     break;
                 dprintf("\x1b[2m");

@@ -35,12 +35,13 @@ char condition_char(ConditionCode condition);
         fflush(stddbg);               \
     }
 
-// Only for debugger commands which affect program control flow
+// Only for debugger commands which affect program control-flow
 enum class DebuggerAction {
-    NONE,
-    STEP,
-    CONTINUE,
-    QUIT,
+    NONE,      // No control-flow action taken
+    STEP,      // Execute next instruction
+    CONTINUE,  // Continue until end of program
+    QUIT,      // Quit debugger and simulator
+    STOP,      // Stop debugger, continue simulator
 };
 
 // TODO(refactor/opt): Use string type with length
@@ -96,10 +97,11 @@ bool read_line(char *const buffer) {
 
         if (ch == EOF) {
             tty_restore();
+            fprintf(stddbg, "\n");
             return false;
         }
 
-        if (ch == '\n')
+        if (ch == '\n' || ch == ',')
             break;
         if (ch == '\r')
             continue;
@@ -214,7 +216,7 @@ DebuggerAction ask_debugger_command() {
         line = line_buf;
         // On EOF, continue without debugger
         if (!read_line(line_buf))
-            return DebuggerAction::CONTINUE;
+            return DebuggerAction::STOP;
         if (line_buf[0] != '\0')
             break;
     }
@@ -222,14 +224,16 @@ DebuggerAction ask_debugger_command() {
     StringSlice command;
     take_command(line, command);
 
+    // TODO(feat): Check for trailing operands
+
+    // These comparisons are CASE-INSENSITIVE!
+    // TODO(feat): Add command aliases (r/reg/register)
     if (string_equals_slice("r", command)) {
         print_registers();
     } else if (string_equals_slice("s", command)) {
         return DebuggerAction::STEP;
     } else if (string_equals_slice("c", command)) {
         return DebuggerAction::CONTINUE;
-    } else if (string_equals_slice("q", command)) {
-        return DebuggerAction::QUIT;
     } else if (string_equals_slice("mg", command)) {
         Word addr;
         if (!expect_address(line, addr))
@@ -245,17 +249,22 @@ DebuggerAction ask_debugger_command() {
             return DebuggerAction::NONE;
         memory[addr] = value;
         dprintfc("Modified value at address 0x%04hx\n", addr);
+    } else if (string_equals_slice("q", command)) {
+        return DebuggerAction::QUIT;
+    } else if (string_equals_slice("stop", command)) {
+        return DebuggerAction::STOP;
     } else {
         dprintfc(
-            "    h   Print usage\n"
-            "    r   Print registers\n"
-            "    s   Step next instruction\n"
-            "    c   Continue execution until HALT\n"
-            "    mg  Print value at memory address\n"
-            "    ms  Set value at memory location\n"
-            /* "    rg  Print value of a register\n" */
-            /* "    rs  Set value of a register\n" */
-            "    q   Quit all execution\n"
+            "    h      Print usage\n"
+            "    r      Print registers\n"
+            "    s      Step next instruction\n"
+            "    c      Continue execution until HALT\n"
+            "    mg     Print value at memory address\n"
+            "    ms     Set value at memory location\n"
+            /* "    rg     Print value of a register\n" */
+            /* "    rs     Set value of a register\n" */
+            "    q      Quit all execution\n"
+            "    stop   Stop debugger, continue execution\n"
             ""
         );
     }
@@ -263,18 +272,24 @@ DebuggerAction ask_debugger_command() {
     return DebuggerAction::NONE;
 }
 
-void run_all_debugger_commands(bool &do_halt, bool &do_prompt) {
+void run_all_debugger_commands(
+    bool &do_halt, bool &do_prompt, bool &do_debugger
+) {
     while (true) {
         switch (ask_debugger_command()) {
-            case DebuggerAction::QUIT:
-                do_halt = true;
-                return;
-
             case DebuggerAction::STEP:
                 return;
 
             case DebuggerAction::CONTINUE:
                 do_prompt = false;
+                return;
+
+            case DebuggerAction::QUIT:
+                do_halt = true;
+                return;
+
+            case DebuggerAction::STOP:
+                do_debugger = false;
                 return;
 
             case DebuggerAction::NONE:
