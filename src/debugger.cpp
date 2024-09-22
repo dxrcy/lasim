@@ -212,8 +212,9 @@ DebuggerAction ask_debugger_command() {
     while (true) {
         Command line_buf;
         line = line_buf;
+        // On EOF, continue without debugger
         if (!read_line(line_buf))
-            return DebuggerAction::NONE;
+            return DebuggerAction::CONTINUE;
         if (line_buf[0] != '\0')
             break;
     }

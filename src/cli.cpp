@@ -23,6 +23,8 @@ enum class Mode {
     EXECUTE_ONLY,      // -x
 };
 
+// TODO(feat): Verbose mode
+
 struct Options {
     Mode mode;
     // Empty string (file[0]=='\0') refers to stdin/stdout respectively
