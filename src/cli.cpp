@@ -26,11 +26,12 @@ enum class Mode {
 // TODO(feat): Verbose mode
 
 struct Options {
-    Mode mode;
+    Mode mode = Mode::ASSEMBLE_EXECUTE;
     // Empty string (file[0]=='\0') refers to stdin/stdout respectively
     char in_filename[FILENAME_MAX];
     char out_filename[FILENAME_MAX];
-    bool debugger;
+    bool debugger = false;
+    bool debugger_quiet = false;
 };
 
 void parse_options(
@@ -46,9 +47,6 @@ void copy_filename_with_extension(char *const dest, const char *const src);
 void parse_options(
     Options &options, const int argc, const char *const *const argv
 ) {
-    options.mode = Mode::ASSEMBLE_EXECUTE;
-    options.debugger = false;
-
     bool in_file_set = false;
     bool out_file_set = false;
 
@@ -183,6 +181,15 @@ void parse_options(
                     }
                     options.debugger = true;
                 }; break;
+                // Debugger quiet
+                case 'q': {
+                    if (options.debugger_quiet) {
+                        fprintf(stderr, "Cannot specify `-q` more than once\n");
+                        print_usage_hint();
+                        exit(static_cast<int>(Error::CLI));
+                    }
+                    options.debugger_quiet = true;
+                }; break;
 
                 default:
                     fprintf(stderr, "Invalid option: `-%c`\n", option);
@@ -199,10 +206,18 @@ void parse_options(
         exit(static_cast<int>(Error::CLI));
     }
 
-    if (options.debugger && options.mode == Mode::ASSEMBLE_ONLY) {
-        fprintf(stderr, "Cannot use debugger in assemble-only mode\n");
-        print_usage_hint();
-        exit(static_cast<int>(Error::CLI));
+    if (options.debugger) {
+        if (options.mode == Mode::ASSEMBLE_ONLY) {
+            fprintf(stderr, "Cannot use debugger in assemble-only mode\n");
+            print_usage_hint();
+            exit(static_cast<int>(Error::CLI));
+        }
+    } else {
+        if (options.debugger_quiet) {
+            fprintf(stderr, "Cannot specify `-q` without `-d`.\n");
+            print_usage_hint();
+            exit(static_cast<int>(Error::CLI));
+        }
     }
 
     if (options.mode == Mode::EXECUTE_ONLY) {
@@ -252,6 +267,7 @@ void print_usage() {
         "    -o [OUTPUT]    Output filename\n"
         "                   Use '-' to write output to stdout (with -a)\n"
         "    -d             Debug program execution\n"
+        "    -q             Minimize debugger output"
         "OPTIONS:\n"
         "    -h             Print usage\n"
         ""

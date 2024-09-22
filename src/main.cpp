@@ -28,6 +28,10 @@ Error try_run(Options &options) {
     Error error = Error::OK;
     ObjectFile object;
 
+    if (options.debugger_quiet) {
+        debugger_quiet = true;
+    }
+
     switch (options.mode) {
         case Mode::ASSEMBLE_ONLY: {
             object.kind = ObjectFile::FILE;

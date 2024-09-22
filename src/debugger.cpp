@@ -22,18 +22,32 @@ char condition_char(ConditionCode condition);
 #define stddbg stderr
 
 // Debugger message
-#define dprintf(...)                  \
+// TODO(feat): Disable color with cli option
+#define dprintf(...)                      \
+    {                                     \
+        if (!debugger_quiet) {            \
+            fprintf(stddbg, __VA_ARGS__); \
+            fflush(stddbg);               \
+        }                                 \
+    }
+#define dprintfc(...)                     \
+    {                                     \
+        if (!debugger_quiet) {            \
+            fprintf(stddbg, "\x1b[36m");  \
+            fprintf(stddbg, __VA_ARGS__); \
+            fprintf(stddbg, "\x1b[0m");   \
+            fflush(stddbg);               \
+        }                                 \
+    }
+#define dprintfc_always(...)          \
     {                                 \
         fprintf(stddbg, __VA_ARGS__); \
         fflush(stddbg);               \
     }
-#define dprintfc(...)                 \
-    {                                 \
-        fprintf(stddbg, "\x1b[36m");  \
-        fprintf(stddbg, __VA_ARGS__); \
-        fprintf(stddbg, "\x1b[0m");   \
-        fflush(stddbg);               \
-    }
+
+// TODO(refactor): Move to state object, when that's implemented
+// TODO(refactor): Maybe make all debugger state in a separate static object
+static bool debugger_quiet = false;
 
 // Only for debugger commands which affect program control-flow
 enum class DebuggerAction {
@@ -102,7 +116,7 @@ bool read_line(char *const buffer) {
                 break;
             } else {
                 tty_restore();
-                fprintf(stddbg, "\n");
+                dprintf("\n");
                 return false;
             }
         }
@@ -156,7 +170,7 @@ bool read_line(char *const buffer) {
         }
     }
     tty_restore();
-    fprintf(stddbg, "\n");
+    dprintf("\n");
 
     buffer[length] = '\0';
     if (length > 0) {
@@ -215,8 +229,12 @@ void print_integer_value(Word value) {
     // TODO(refactor): Combine functionality with `print_registers`
     // TODO(feat): Show ascii repr. if applicable
     // TODO(feat): Show instruction name/opcode repr. if applicable
-    dprintfc("       HEX    UINT    INT\n");
-    dprintfc("    0x%04hx  %6hd  %5hu\n", value, value, value);
+    if (debugger_quiet) {
+        dprintfc_always("0x%04hx\n", value);
+    } else {
+        dprintfc("       HEX    UINT    INT\n");
+        dprintfc("    0x%04hx  %6hd  %5hu\n", value, value, value);
+    }
 }
 
 DebuggerAction ask_debugger_command() {
@@ -240,7 +258,9 @@ DebuggerAction ask_debugger_command() {
     // These comparisons are CASE-INSENSITIVE!
     // TODO(feat): Add command aliases (r/reg/register)
     if (string_equals_slice("r", command)) {
-        print_registers();
+        if (!debugger_quiet) {
+            print_registers();
+        }
     } else if (string_equals_slice("s", command)) {
         return DebuggerAction::STEP;
     } else if (string_equals_slice("c", command)) {
