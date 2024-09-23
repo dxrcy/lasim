@@ -23,7 +23,7 @@
 //    halt          simulate HALT
 //    step n        execute next instruction
 //    next          execute next instruction or subroutine
-//    continue      continue till next HALT
+//    continue      continue till next HALT or breakpoint
 //    finish        execute to end of current subroutine
 //    quit          quit debugger, continue execution
 //    exit          quit debugger and executor
@@ -32,6 +32,7 @@
 
 // TODO(feat): Keep track of labels for debugger
 //     Maybe make label_definitions list global/static
+//     A symbol table file seems more hassle than it's worth
 
 // TODO(refactor): Create header file for execute.cpp or extract functions
 void print_on_new_line(void);
@@ -42,6 +43,9 @@ static char *halfbyte_string(const Word word);
 
 #define stddbg stderr
 
+// TODO(refactor): Rename, extract other color codes
+#define DEBUGGER_COLOR "\x1b[36m"
+
 // Debugger message
 // TODO(feat): Disable color with cli option
 #define dprintf(...)                      \
@@ -51,14 +55,14 @@ static char *halfbyte_string(const Word word);
             fflush(stddbg);               \
         }                                 \
     }
-#define dprintfc(...)                     \
-    {                                     \
-        if (!debugger_quiet) {            \
-            fprintf(stddbg, "\x1b[36m");  \
-            fprintf(stddbg, __VA_ARGS__); \
-            fprintf(stddbg, "\x1b[0m");   \
-            fflush(stddbg);               \
-        }                                 \
+#define dprintfc(...)                        \
+    {                                        \
+        if (!debugger_quiet) {               \
+            fprintf(stddbg, DEBUGGER_COLOR); \
+            fprintf(stddbg, __VA_ARGS__);    \
+            fprintf(stddbg, "\x1b[0m");      \
+            fflush(stddbg);                  \
+        }                                    \
     }
 #define dprintfc_always(...)          \
     {                                 \
@@ -108,7 +112,7 @@ enum class DebuggerCommand {
 // TODO(refactor): Rename functions
 // TODO(refactor): Use namespace ?
 
-void print_registers(void);
+void print_registers(FILE *const file);
 char condition_char(ConditionCode condition);
 
 void push_history(const char *const buffer) {
@@ -330,7 +334,8 @@ DebuggerAction ask_debugger_command() {
     switch (command) {
         case DebuggerCommand::REGISTERS: {
             if (!debugger_quiet) {
-                print_registers();
+                dprintf(DEBUGGER_COLOR);
+                print_registers(stddbg);
             }
         }; break;
         case DebuggerCommand::MEMORY_GET: {
@@ -407,7 +412,7 @@ void run_all_debugger_commands(
 }
 
 // TODO(fix): Maybe specify file to print to ? for debugger
-void print_registers() {
+void print_registers(FILE *const file) {
     const int width = 27;
     const char *const box_h = "─";
     const char *const box_v = "│";
@@ -418,34 +423,35 @@ void print_registers() {
 
     print_on_new_line();
 
-    printf("  %s", box_tl);
+    fprintf(file, "  %s", box_tl);
     for (size_t i = 0; i < width; ++i)
-        printf("%s", box_h);
-    printf("%s\n", box_tr);
+        fprintf(file, "%s", box_h);
+    fprintf(file, "%s\n", box_tr);
 
-    printf("  %s ", box_v);
-    printf(
+    fprintf(file, "  %s ", box_v);
+    fprintf(
+        file,
         "pc: 0x%04hx          cc: %c",
         registers.program_counter,
         condition_char(registers.condition)
     );
-    printf(" %s\n", box_v);
+    fprintf(file, " %s\n", box_v);
 
-    printf("  %s ", box_v);
-    printf("       HEX    UINT    INT");
-    printf(" %s\n", box_v);
+    fprintf(file, "  %s ", box_v);
+    fprintf(file, "       HEX    UINT    INT");
+    fprintf(file, " %s\n", box_v);
 
     for (int reg = 0; reg < GP_REGISTER_COUNT; ++reg) {
         const Word value = registers.general_purpose[reg];
-        printf("  %s ", box_v);
-        printf("r%d  0x%04hx  %6hd  %5hu", reg, value, value, value);
-        printf(" %s\n", box_v);
+        fprintf(file, "  %s ", box_v);
+        fprintf(file, "r%d  0x%04hx  %6hd  %5hu", reg, value, value, value);
+        fprintf(file, " %s\n", box_v);
     }
 
-    printf("  %s", box_bl);
+    fprintf(file, "  %s", box_bl);
     for (size_t i = 0; i < width; ++i)
-        printf("%s", box_h);
-    printf("%s\n", box_br);
+        fprintf(file, "%s", box_h);
+    fprintf(file, "%s\n", box_br);
 
     stdout_on_new_line = true;
 }

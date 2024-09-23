@@ -94,11 +94,10 @@ void execute(const ObjectFile &input, bool debugger, Error &error) {
         }
     }
 
-    if (!stdout_on_new_line)
-        printf("\n");
+    print_on_new_line();
 
     if (debugger)
-        dprintf("\nProgram completed\n")
+        dprintfc("\nProgram completed\n")
 }
 
 // `true` return value indicates that program should end
@@ -478,7 +477,7 @@ void execute_trap_instruction(
             return;
 
         case TrapVector::REG:
-            print_registers();
+            print_registers(stdout);
             break;
 
         case TrapVector::DEBUG:
