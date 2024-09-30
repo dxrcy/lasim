@@ -19,6 +19,8 @@ FibLoop
     add r1, r1, #-1
     BRp FibLoop
 
+    sti r2, AddrResult
+
     HALT
 
 InputPrompt     .STRINGZ "Input a number: "
