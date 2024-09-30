@@ -15,6 +15,8 @@
 
 using std::vector;
 
+// TODO(feat): Support `.ALIAS`
+
 // This can be large as it is never aggregated
 #define MAX_LINE 512  // Includes '\0'
 

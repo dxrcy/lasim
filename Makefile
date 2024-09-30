@@ -35,7 +35,7 @@ test: $(TARGET)
 	tests/test.cpp.sh
 
 clean:
-	rm -f ./lasim
+	rm -f ./$(TARGET)
 	rm -f examples/*.{obj,sym,lc3}
 	rm -rf tests/out/*
 

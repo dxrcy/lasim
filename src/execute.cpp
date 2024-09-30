@@ -415,7 +415,6 @@ void execute_trap_instruction(
             tty_nobuffer_noecho();                         // Disable echo
             const char input = getchar() & BITMASK_LOW_8;  // Zero high 8 bits
             tty_restore();
-            print_on_new_line();
             registers.general_purpose[0] = input;
         }; break;
 
@@ -439,7 +438,6 @@ void execute_trap_instruction(
         }; break;
 
         case TrapVector::PUTS: {
-            print_on_new_line();
             for (Word i = registers.general_purpose[0];; ++i) {
                 const Word word = memory_checked(i, error);
                 OK_OR_RETURN(error);
@@ -453,7 +451,6 @@ void execute_trap_instruction(
         } break;
 
         case TrapVector::PUTSP: {
-            print_on_new_line();
             // Loop over words, then split into bytes
             // This is done to ensure the memory check is sound
             for (Word i = registers.general_purpose[0];; ++i) {
@@ -529,6 +526,7 @@ void read_obj_filename_to_memory(const char *const obj_filename, Error &error) {
     Word start = swap_endian(origin);
 
     char *const memory_at_file = reinterpret_cast<char *>(memory + start);
+    // TODO(fix): Shouldn't this count be in words ?
     const size_t max_file_bytes = (MEMORY_SIZE - start) * WORD_SIZE;
     words_read = fread(memory_at_file, WORD_SIZE, max_file_bytes, obj_file);
 
